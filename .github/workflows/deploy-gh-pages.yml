@@ -43,19 +43,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Build ADRs
-        run: npm run adr:build
-      
-      - name: Ensure docs directory structure
+      - name: Build site
         run: |
-          # The ADRs are built directly into docs/adr by log4brains
-          echo "ADRs built to docs/adr"
-          ls -la docs/
+          # Build log4brains to a temporary directory
+          npx log4brains build --out .build/adr --basePath /union_square/adr
+          
+          # Copy static docs to build directory
+          mkdir -p .build
+          cp -r docs/* .build/
+          
+          # Ensure ADR site is in the right place
+          ls -la .build/
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/
+          path: .build/
 
   deploy:
     environment:
