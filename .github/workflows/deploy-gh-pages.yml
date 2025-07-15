@@ -6,9 +6,10 @@ on:
       - main
     paths:
       - 'docs/**'
+      - 'adr/**'
       - '.log4brains.yml'
       - 'package.json'
-      - '.github/workflows/publish-adrs.yml'
+      - '.github/workflows/deploy-gh-pages.yml'
   
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
