@@ -109,6 +109,12 @@ body {
     animation: float 3s ease-in-out infinite;
 }
 
+.nav-brand .logo {
+    background-color: var(--ctp-text);
+    border-radius: 8px;
+    padding: 4px;
+}
+
 @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-5px); }
@@ -385,6 +391,15 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-2xl);
     align-items: start;
+    width: 100%;
+}
+
+.architecture-text {
+    min-width: 0; /* Prevent grid blowout */
+}
+
+.architecture-visual {
+    min-width: 0; /* Prevent grid blowout */
 }
 
 .architecture-text h3 {
@@ -445,6 +460,15 @@ body {
     font-size: 0.875rem;
     color: var(--text-primary);
 }
+
+/* Syntax highlighting classes */
+.syntax-keyword { color: var(--ctp-mauve); }
+.syntax-type { color: var(--ctp-yellow); }
+.syntax-function { color: var(--ctp-blue); }
+.syntax-string { color: var(--ctp-green); }
+.syntax-comment { color: var(--ctp-overlay0); }
+.syntax-attribute { color: var(--ctp-peach); }
+.syntax-generic { color: var(--ctp-teal); }
 
 /* Getting Started Section */
 .getting-started {
