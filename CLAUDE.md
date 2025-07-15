@@ -39,7 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-[Project description to be added]
+Union Square is a proxy/wire-tap service for making LLM calls and recording everything that happens in a session for later analysis and test-case extraction.
 
 ## Development Process Rules
 
@@ -116,13 +116,83 @@ For detailed type-driven development guidance, refer to `/home/jwilger/.claude/C
 # Enter development environment (required for all work)
 nix develop
 
-# [Project-specific setup commands to be added]
+# Start PostgreSQL databases
+docker-compose up -d
+
+# Initialize Rust project (if not done)
+cargo init --lib
+
+# Install development tools
+cargo install cargo-nextest --locked  # Fast test runner
+cargo install cargo-llvm-cov --locked # Code coverage
+
+# IMPORTANT: Always check for latest versions before adding dependencies
+# Use: cargo search <crate_name> to find latest version
+
+# Core dependencies (example - adjust based on project needs)
+cargo add tokio --features full
+cargo add async-trait
+cargo add uuid --features v7
+cargo add serde --features derive
+cargo add serde_json
+cargo add sqlx --features runtime-tokio-rustls,postgres,uuid,chrono
+cargo add thiserror
+cargo add tracing
+cargo add tracing-subscriber
+
+# Type safety dependencies
+cargo add nutype --features serde  # For newtype pattern with validation
+cargo add derive_more  # For additional derives on newtypes
+
+# EventCore dependency (since this project uses it)
+cargo add eventcore
+cargo add eventcore-postgres
 ```
 
 ### Development Workflow
 
 ```bash
-# [Project-specific development commands to be added]
+# Format code
+cargo fmt
+
+# Run linter
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Run tests with nextest (recommended - faster and better output)
+cargo nextest run --workspace
+
+# Run tests with cargo test (fallback)
+cargo test --workspace
+
+# Run tests with output
+cargo nextest run --workspace --nocapture
+# Or with cargo test: cargo test --workspace -- --nocapture
+
+# Run a specific test
+cargo nextest run test_name
+# Or with cargo test: cargo test test_name -- --nocapture
+
+# Type check
+cargo check --all-targets
+
+# Build release version
+cargo build --release
+
+# Run benchmarks
+cargo bench
+```
+
+### Database Operations
+
+```bash
+# Connect to main database
+psql -h localhost -p 5432 -U postgres -d union_square
+
+# Connect to test database
+psql -h localhost -p 5433 -U postgres -d union_square_test
+
+# Run database migrations (once implemented)
+sqlx migrate run
 ```
 
 ## Architecture
@@ -139,9 +209,12 @@ nix develop
 
 The project uses pre-commit hooks that automatically run:
 
-[Pre-commit hooks to be configured based on project language and tooling]
+1. `cargo fmt --all && git add -u` - Auto-formats code and stages changes (runs first)
+2. `cargo clippy` - Linting
+3. `cargo test` - All tests
+4. `cargo check` - Type checking
 
-The formatting hook should automatically fix and stage formatting issues instead of failing, saving time during the commit process.
+The formatting hook automatically fixes and stages formatting issues instead of failing, saving time during the commit process.
 
 ## Development Principles
 
