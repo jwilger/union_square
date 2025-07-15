@@ -468,24 +468,26 @@ When addressing PR review feedback:
    - Sign with `-- @claude` to indicate automation
    
 4. **Format for automated responses**:
-
+   ```
    I've addressed this by [specific action taken].
    
    [Optional: Brief explanation of the change]
    
    -- @claude
+   ```
 
 5. **Check for new responses** after posting your reply:
    - Use `mcp__github__get_issue_comments` to see if reviewers responded
    - Continue the conversation until resolved
    
 6. **Example response**:
-
+   ```
    I've consolidated the duplicate PR workflow sections into a single 
    comprehensive section under "Pull Request Workflow". This provides
    clearer guidance for contributors.
    
    -- @claude
+   ```
 
 ### Important Notes
 
