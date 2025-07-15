@@ -1,0 +1,57 @@
+[package]
+name = "union_square"
+version = "0.1.0"
+edition = "2021"
+authors = ["John Wilger <john@johnwilger.com>"]
+description = "A proxy/wire-tap service for making LLM calls and recording everything that happens in a session for later analysis and test-case extraction"
+license = "MIT"
+repository = "https://github.com/jwilger/union_square"
+readme = "README.md"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+uuid = { version = "1.0", features = ["v7", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+eventcore = "0.1"
+eventcore-postgres = "0.1"
+nutype = { version = "0.5", features = ["serde", "new_unchecked"] }
+derive_more = { version = "1.0", features = ["debug", "display", "from", "into"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+config = "0.14"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.0"
+rstest = "0.22"
+proptest = "1.4"
+
+[[bin]]
+name = "union_square"
+path = "src/main.rs"
+
+[lib]
+name = "union_square"
+path = "src/lib.rs"
+
+[profile.dev]
+opt-level = 0
+debug = true
+lto = false
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.test]
+opt-level = 1
+debug = true
