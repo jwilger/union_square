@@ -451,7 +451,7 @@ When addressing PR review feedback:
        pullRequestReviewThreadId: "THREAD_ID",
        body: """Your response here
 
--- @claude"""
+    -- @claude"""
      }) {
        comment { id body }
      }
