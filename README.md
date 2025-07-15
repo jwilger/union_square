@@ -1,21 +1,21 @@
-<div align="center" style="background-color: white;">
-  <table style="background-color: white; border: none;">
-    <tr style="background-color: white;">
-      <td style="background-color: white; border: none; padding: 20px;">
-        <img src="logo.svg" width="200" alt="Union Square Logo">
-      </td>
-      <td style="background-color: white; border: none; padding: 20px;">
-        <h1>Union Square</h1>
-        <p>A transparent, high-performance proxy for LLM API calls</p>
-        <p>
-          <img src="https://img.shields.io/badge/build-not%20yet-lightgrey" alt="Build Status"><br>
-          <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a><br>
-          <img src="https://img.shields.io/badge/Status-Early%20Development-orange" alt="Status: Early Development">
-        </p>
-      </td>
-    </tr>
-  </table>
-</div>
+<table>
+<tr>
+<td width="200" align="center">
+<img src="logo.svg" width="180" alt="Union Square Logo">
+</td>
+<td>
+
+# Union Square
+
+**A transparent, high-performance proxy for LLM API calls**
+
+[![Build Status](https://img.shields.io/badge/build-not%20yet-lightgrey)](https://github.com/jwilger/union_square/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Status: Early Development](https://img.shields.io/badge/Status-Early%20Development-orange)
+
+</td>
+</tr>
+</table>
 
 ---
 
