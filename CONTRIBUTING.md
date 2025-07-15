@@ -257,6 +257,53 @@ When adding new features:
 3. Update API documentation
 4. Document any new headers or parameters
 
+### Architecture Decision Records (ADRs)
+
+We use ADRs to document significant architectural decisions. Contributors should:
+
+#### When to Create an ADR
+
+Create an ADR when:
+- Choosing between multiple technology options
+- Introducing a new architectural pattern
+- Making significant changes to existing architecture
+- Deciding on API design approaches
+- Establishing security or performance strategies
+
+#### How to Create an ADR
+
+1. **Create a new ADR**:
+   ```bash
+   npm run adr:new
+   # Follow the interactive prompts
+   ```
+
+2. **Use the template structure**:
+   - Context and problem statement
+   - Decision drivers (what factors influence the decision)
+   - Considered options with pros/cons
+   - Decision outcome
+   - Consequences (both positive and negative)
+
+3. **Number ADRs sequentially**: The tool handles this automatically
+
+4. **Link related ADRs**: Reference other ADRs when decisions are related
+
+#### ADR Guidelines
+
+- **Be thorough**: Document all viable options considered
+- **Be honest**: Include both positive and negative consequences
+- **Be clear**: Write for future developers who lack current context
+- **Be timely**: Create ADRs when making decisions, not retroactively
+
+#### Reviewing ADRs
+
+When reviewing PRs with ADRs:
+- Ensure all reasonable alternatives are considered
+- Check that decision drivers align with project goals
+- Verify consequences are realistic and complete
+- Confirm the decision follows from the analysis
+
 ## Questions?
 
 - Open a [Discussion](https://github.com/jwilger/union_square/discussions) for questions

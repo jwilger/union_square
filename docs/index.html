@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Union Square - Transparent LLM Proxy</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="nav-brand">
+                    <img src="logo.svg" alt="Union Square Logo" class="logo">
+                    <span class="brand-text">Union Square</span>
+                </div>
+                <div class="nav-links">
+                    <a href="#features" class="nav-link">Features</a>
+                    <a href="#architecture" class="nav-link">Architecture</a>
+                    <a href="#releases" class="nav-link">Releases</a>
+                    <a href="adr/" class="nav-link">ADRs</a>
+                    <a href="https://github.com/jwilger/union_square" class="nav-link github-link">
+                        <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.84 9.49.5.09.68-.22.68-.48 0-.24-.01-.87-.01-1.71-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.93 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.18.58.69.48C19.14 20.16 22 16.42 22 12c0-5.523-4.477-10-10-10z"/>
+                        </svg>
+                        GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        <span class="title-line">Transparent, High-Performance</span>
+                        <span class="title-line gradient-text">LLM API Proxy</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        Comprehensive observability, testing, and optimization for AI-powered applications.
+                        Drop-in replacement with <span class="highlight">&lt; 5ms latency</span>.
+                    </p>
+                    <div class="hero-quote">
+                        <blockquote>
+                            "I don't care what they're talking about. All I want is a nice, fat recording."
+                            <cite>— Harry Caul, The Conversation (1974)</cite>
+                        </blockquote>
+                    </div>
+                    <div class="hero-actions">
+                        <a href="#getting-started" class="btn btn-primary">Get Started</a>
+                        <a href="https://github.com/jwilger/union_square" class="btn btn-secondary">View on GitHub</a>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="floating-card">
+                        <img src="logo.svg" alt="Union Square Logo" class="hero-logo">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>Drop-in Replacement</h3>
+                    <p>No code changes required. Simply replace your LLM API endpoints with Union Square URLs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Low Latency</h3>
+                    <p>Asynchronous recording with less than 5ms overhead. Your users won't notice a difference.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Full Observability</h3>
+                    <p>Capture every interaction for analysis, debugging, and testing. Never lose track of what happened.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧪</div>
+                    <h3>Test Case Extraction</h3>
+                    <p>Convert problematic conversations into automated tests to prevent regressions.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Analytics & Insights</h3>
+                    <p>Track token usage, latency, costs, and performance metrics across all your AI interactions.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Privacy Controls</h3>
+                    <p>Configurable recording rules, PII detection, and self-hosted deployment for complete control.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture" class="architecture">
+        <div class="container">
+            <h2 class="section-title">Architecture</h2>
+            <div class="architecture-content">
+                <div class="architecture-text">
+                    <h3>Type-Driven Development</h3>
+                    <p>Union Square follows strict type-driven development principles with a functional core, imperative shell architecture.</p>
+                    <ul>
+                        <li><strong>Proxy Layer</strong> - Minimal overhead request forwarding</li>
+                        <li><strong>Recording Pipeline</strong> - Asynchronous capture and storage</li>
+                        <li><strong>Analysis Engine</strong> - Test evaluation and metrics calculation</li>
+                        <li><strong>Web Interface</strong> - Leptos-based reactive UI</li>
+                    </ul>
+                    <div class="architecture-links">
+                        <a href="adr/" class="link-card">
+                            <span class="link-icon">📚</span>
+                            <span>View Architecture Decision Records</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="architecture-visual">
+                    <div class="code-block">
+                        <pre><code class="language-rust">// Example: Type-safe session tracking
+#[nutype(
+    validate(not_empty, regex = "^[a-zA-Z0-9-]+$"),
+    derive(Debug, Clone, PartialEq, Eq, Hash)
+)]
+pub struct SessionId(String);
+
+pub async fn proxy_request(
+    session_id: SessionId,
+    request: ProxyRequest,
+) -> Result&lt;ProxyResponse, ProxyError&gt; {
+    // Type safety throughout the pipeline
+    record_request(&session_id, &request).await?;
+    let response = forward_to_provider(request).await?;
+    record_response(&session_id, &response).await?;
+    Ok(response)
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="getting-started" class="getting-started">
+        <div class="container">
+            <h2 class="section-title">Getting Started</h2>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Clone & Build</h3>
+                    <div class="code-snippet">
+                        <pre><code>git clone https://github.com/jwilger/union_square.git
+cd union_square
+nix develop  # or cargo build --release</code></pre>
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Configure</h3>
+                    <div class="code-snippet">
+                        <pre><code># config.toml
+[server]
+port = 8080
+
+[database]
+url = "postgresql://localhost/union_square"</code></pre>
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Replace Endpoints</h3>
+                    <div class="code-snippet">
+                        <pre><code>// Before
+const API = "https://api.openai.com/v1/chat"
+
+// After
+const API = "https://your-proxy.com/openai/v1/chat"</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="releases" class="releases">
+        <div class="container">
+            <h2 class="section-title">Latest Release</h2>
+            <div class="release-card">
+                <div class="release-status">
+                    <span class="status-badge">Early Development</span>
+                    <span class="release-date">Project Status</span>
+                </div>
+                <h3 class="release-title">No releases yet</h3>
+                <p class="release-description">
+                    Union Square is currently in early development. Core functionality is being implemented.
+                    Watch this space for the first release announcement!
+                </p>
+                <div class="release-actions">
+                    <a href="https://github.com/jwilger/union_square/releases" class="btn btn-outline">
+                        View All Releases
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <img src="logo.svg" alt="Union Square Logo" class="footer-logo">
+                    <p>&copy; 2024 Union Square. MIT License.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/jwilger/union_square">GitHub</a>
+                    <a href="adr/">Architecture</a>
+                    <a href="https://github.com/jwilger/union_square/blob/main/CONTRIBUTING.md">Contributing</a>
+                    <a href="https://github.com/jwilger/union_square/security">Security</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+</body>
+</html>

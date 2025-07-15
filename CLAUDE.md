@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **🆕 Starting new work?** → Read [🚨 Critical Rules](#critical-rules---always-apply), [Development Process Rules](#development-process-rules), [GitHub Issues Workflow](#github-issues-workflow)
 - **🔧 Setting up environment?** → Read [Development Commands](#development-commands)
 - **💻 Writing code?** → Read [Architecture](#architecture), [Type-Driven Development](#type-driven-development-philosophy)
+- **🏛️ Making architectural decisions?** → Read [Architecture Decision Records](#architecture-decision-records-adrs)
 - **📤 Making commits?** → Read [Commit Rules](#commit-rules), [Pre-commit Hooks](#pre-commit-hooks)
 - **🔄 Creating/updating PRs?** → Read [Pull Request Workflow](#pull-request-workflow), [🚨 Critical Rules](#critical-rules---always-apply)
 - **💬 Responding to PR feedback?** → Read [Responding to PR Feedback](#responding-to-pr-feedback)
@@ -29,13 +30,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. [Type-Driven Development Philosophy](#type-driven-development-philosophy)
 5. [Development Commands](#development-commands)
 6. [Architecture](#architecture)
-7. [Performance Targets](#performance-targets)
-8. [Pre-commit Hooks](#pre-commit-hooks)
-9. [Development Principles](#development-principles)
-10. [GitHub MCP Integration](#github-mcp-integration)
-11. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
-12. [Pull Request Workflow](#pull-request-workflow)
-13. [Memories](#memories) (Important reminders)
+7. [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
+8. [Performance Targets](#performance-targets)
+9. [Pre-commit Hooks](#pre-commit-hooks)
+10. [Development Principles](#development-principles)
+11. [GitHub MCP Integration](#github-mcp-integration)
+12. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
+13. [Pull Request Workflow](#pull-request-workflow)
+14. [Memories](#memories) (Important reminders)
 
 ## Project Overview
 
@@ -198,6 +200,55 @@ sqlx migrate run
 ## Architecture
 
 [Project architecture to be defined]
+
+## Architecture Decision Records (ADRs)
+
+This project uses Architecture Decision Records (ADRs) to document all significant architectural decisions. ADRs help future developers understand not just what decisions were made, but why they were made and what alternatives were considered.
+
+### Using ADRs in Development
+
+When working on this project:
+
+1. **Review existing ADRs** before making architectural changes:
+   ```bash
+   npm run adr:preview   # View ADRs in browser
+   # Or browse docs/adr/ directory
+   ```
+
+2. **Create a new ADR** when making significant decisions:
+   ```bash
+   npm run adr:new       # Interactive ADR creation
+   ```
+
+3. **Update or supersede ADRs** when decisions change:
+   - Mark old ADRs as "superseded by [new ADR]"
+   - Create new ADR explaining the change
+
+### What Requires an ADR?
+
+Create an ADR for:
+- Technology choices (databases, frameworks, libraries)
+- Architectural patterns (event sourcing, CQRS, etc.)
+- API design decisions
+- Security approaches
+- Performance optimization strategies
+- Testing strategies
+- Deployment and infrastructure decisions
+
+### ADR Format
+
+ADRs follow the template in `docs/adr/template.md` which includes:
+- Context and problem statement
+- Decision drivers
+- Considered options with pros/cons
+- Decision outcome
+- Consequences (positive and negative)
+
+### Publishing ADRs
+
+ADRs are automatically published to GitHub Pages when merged to main:
+- View at: https://jwilger.github.io/union_square/adr/
+- Updated via GitHub Actions workflow
 
 ## Performance Targets
 
