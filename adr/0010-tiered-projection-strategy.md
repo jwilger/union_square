@@ -59,24 +59,35 @@ We will implement a three-tier projection strategy, where each tier is optimized
 **Key Tables**:
 ```sql
 -- Optimized for session queries
-sessions (
-    id, app_id, timestamp, status, metadata,
-    PRIMARY KEY (id),
+CREATE TABLE sessions (
+    id UUID PRIMARY KEY,
+    app_id UUID NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL,
+    metadata JSONB,
     INDEX idx_app_time (app_id, timestamp DESC)
-)
+);
 
 -- Optimized for test queries  
-test_executions (
-    id, test_id, timestamp, status, duration,
-    PRIMARY KEY (id),
+CREATE TABLE test_executions (
+    id UUID PRIMARY KEY,
+    test_id UUID NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL,
+    duration INT NOT NULL,
     INDEX idx_test_time (test_id, timestamp DESC)
-)
+);
 
 -- Pre-aggregated metrics
-metrics_hourly (
-    app_id, hour, requests, errors, p50_latency, p99_latency,
+CREATE TABLE metrics_hourly (
+    app_id UUID NOT NULL,
+    hour TIMESTAMPTZ NOT NULL,
+    requests BIGINT NOT NULL,
+    errors BIGINT NOT NULL,
+    p50_latency INT NOT NULL,
+    p99_latency INT NOT NULL,
     PRIMARY KEY (app_id, hour)
-)
+);
 ```
 
 ### Tier 3: Elasticsearch Projections (Analytical) - Post-MVP

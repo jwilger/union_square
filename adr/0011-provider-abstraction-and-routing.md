@@ -84,7 +84,8 @@ impl Provider for OpenAIProvider {
     
     fn transform_url(&self, url: &Url) -> Result<Url, ProviderError> {
         // Remove /openai prefix and forward to api.openai.com
-        let path = url.path().strip_prefix("/openai").unwrap();
+        let path = url.path().strip_prefix("/openai")
+            .ok_or_else(|| ProviderError::InvalidPath("Missing /openai prefix".to_string()))?;
         self.base_url.join(path).map_err(Into::into)
     }
     

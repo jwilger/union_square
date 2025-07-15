@@ -90,7 +90,27 @@ impl SessionContext {
             })
             .collect();
             
-        // ... extract other fields
+        // Extract other fields and construct SessionContext
+        SessionContext {
+            session_id,
+            parent_id: headers
+                .get("x-unionsquare-parent-id")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string()),
+            user_id: headers
+                .get("x-unionsquare-user-id")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string()),
+            metadata,
+            application_context: headers
+                .get("x-unionsquare-application-context")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| serde_json::from_str(s).ok()),
+            request_id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            source_ip: "127.0.0.1".parse().unwrap(), // Should be extracted from request
+            application_id: auth.application_id.clone(),
+        }
     }
 }
 ```

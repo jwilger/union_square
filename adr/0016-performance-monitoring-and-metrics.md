@@ -67,6 +67,10 @@ impl HotPathMetrics {
 
 ```rust
 struct MetricsAggregator {
+    // Add fields as needed for metrics aggregation
+}
+
+impl MetricsAggregator {
     /// Processes rich metrics from ring buffer data
     async fn process_metrics(&self, event: &AuditEvent) {
         // Extract detailed metrics
@@ -200,13 +204,25 @@ struct FScoreCalculator {
         let false_positives = results.iter().filter(|r| !r.expected && r.actual).count();
         let false_negatives = results.iter().filter(|r| r.expected && !r.actual).count();
         
-        let precision = true_positives as f64 / (true_positives + false_positives) as f64;
-        let recall = true_positives as f64 / (true_positives + false_negatives) as f64;
+        let precision = if true_positives + false_positives == 0 {
+            0.0
+        } else {
+            true_positives as f64 / (true_positives + false_positives) as f64
+        };
+        let recall = if true_positives + false_negatives == 0 {
+            0.0
+        } else {
+            true_positives as f64 / (true_positives + false_negatives) as f64
+        };
         
         FScore {
             precision,
             recall,
-            f1: 2.0 * (precision * recall) / (precision + recall),
+            f1: if (precision + recall) == 0.0 {
+                0.0
+            } else {
+                2.0 * (precision * recall) / (precision + recall)
+            },
             timestamp: Utc::now(),
         }
     }

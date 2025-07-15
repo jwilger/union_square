@@ -129,7 +129,7 @@ struct TestExecutor {
 }
 
 impl TestExecutor {
-    async fn execute_test(&self, test_case: &TestCase) -> TestResult {
+    async fn execute_test(&self, test_case: &TestCase) -> Result<TestResult, TestError> {
         // 1. Prepare request from test case
         let request = self.prepare_request(&test_case.source_request);
         
@@ -162,7 +162,7 @@ impl TestExecutor {
         };
         
         self.result_store.store(&test_result).await?;
-        test_result
+        Ok(test_result)
     }
 }
 ```

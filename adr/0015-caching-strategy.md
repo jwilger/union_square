@@ -179,7 +179,9 @@ async fn replay_stream(cached: &CachedResponse) -> impl Stream<Item = Bytes> {
                     chunk.clone()
                 })
         }
-        _ => unreachable!(),
+        CachedResponse::Complete(data) => {
+            stream::once(async move { data.clone() })
+        }
     }
 }
 ```
