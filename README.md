@@ -1,8 +1,25 @@
-![Logo](logo.svg)
+<div align="center">
+  <table>
+    <tr>
+      <td>
+        <img src="logo.svg" width="200" alt="Union Square Logo">
+      </td>
+      <td>
+        <h1>Union Square</h1>
+        <p>A transparent, high-performance proxy for LLM API calls</p>
+        <p>
+          <a href="https://github.com/jwilger/union_square/actions"><img src="https://github.com/jwilger/union_square/workflows/CI/badge.svg" alt="CI"></a><br>
+          <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a><br>
+          <img src="https://img.shields.io/badge/Status-Early%20Development-orange" alt="Status: Early Development">
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>
 
-# Union Square
+---
 
-A transparent, high-performance proxy for LLM API calls that enables comprehensive observability, testing, and optimization of AI-powered applications.
+Comprehensive observability, testing, and optimization for AI-powered applications.
 
 ## Project Status
 
