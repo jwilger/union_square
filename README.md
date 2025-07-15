@@ -1,14 +1,14 @@
-<div align="center">
-  <table>
-    <tr>
-      <td>
+<div align="center" style="background-color: white;">
+  <table style="background-color: white; border: none;">
+    <tr style="background-color: white;">
+      <td style="background-color: white; border: none; padding: 20px;">
         <img src="logo.svg" width="200" alt="Union Square Logo">
       </td>
-      <td>
+      <td style="background-color: white; border: none; padding: 20px;">
         <h1>Union Square</h1>
         <p>A transparent, high-performance proxy for LLM API calls</p>
         <p>
-          <a href="https://github.com/jwilger/union_square/actions"><img src="https://github.com/jwilger/union_square/workflows/CI/badge.svg" alt="CI"></a><br>
+          <img src="https://img.shields.io/badge/build-not%20yet-lightgrey" alt="Build Status"><br>
           <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a><br>
           <img src="https://img.shields.io/badge/Status-Early%20Development-orange" alt="Status: Early Development">
         </p>
