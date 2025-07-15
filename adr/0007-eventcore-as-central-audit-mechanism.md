@@ -1,4 +1,4 @@
-# EventCore as Central Audit Mechanism
+# ADR-0007: EventCore as Central Audit Mechanism
 
 - Status: proposed
 - Deciders: John Wilger, Claude
