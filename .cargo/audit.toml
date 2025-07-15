@@ -1,12 +1,41 @@
+# Cargo Audit Configuration
+# This file documents security advisories that we've reviewed and determined
+# do not affect our application's security model.
+
 [advisories]
-# Ignore RSA timing side-channel vulnerability (RUSTSEC-2023-0071)
-# This comes from sqlx-mysql which we don't use directly (we only use postgres)
-# and the vulnerability is a timing side-channel attack during RSA decryption
-# which doesn't affect our application's security model
 ignore = [
-    "RUSTSEC-2023-0071",  # RSA Marvin Attack vulnerability
-    "RUSTSEC-2024-0436"   # paste crate unmaintained (via eventcore)
+    # RSA Marvin Attack vulnerability (RUSTSEC-2023-0071)
+    # ====================================================
+    # This vulnerability is in the RSA crate v0.9.8, which is pulled in by
+    # sqlx-mysql. We explicitly do not use MySQL in our application - we only
+    # use PostgreSQL. The vulnerability is a timing side-channel attack during
+    # RSA decryption operations, which our application never performs.
+    #
+    # Why we can't remove the dependency:
+    # - sqlx v0.8.6 is published on crates.io with all database drivers included
+    # - Even with default-features = false, the crate includes mysql support
+    # - This is a known issue with sqlx packaging
+    #
+    # Our mitigation:
+    # - We've disabled the macros feature to minimize dependencies
+    # - We only use PostgreSQL features
+    # - We never perform RSA operations
+    "RUSTSEC-2023-0071",
+    
+    # Paste crate unmaintained (RUSTSEC-2024-0436)
+    # ============================================
+    # The paste crate is marked as unmaintained but has no known security
+    # vulnerabilities. It's used by rmp (MessagePack) which is a dependency
+    # of eventcore for its event serialization.
+    #
+    # Why this is acceptable:
+    # - This is a warning, not a vulnerability
+    # - The crate is stable and hasn't needed updates
+    # - It's used for compile-time code generation, not runtime operations
+    # - eventcore is actively maintained and would switch if needed
+    "RUSTSEC-2024-0436"
 ]
 
 [output]
+# Don't suppress output - we want to see what's being ignored
 quiet = false
