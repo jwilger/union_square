@@ -112,12 +112,11 @@ Union Square is a proxy server that sits between applications and LLM APIs to ca
 - **Not a single point of failure** - Direct provider fallback supported
 
 ### Deployment Options
-- **Initial focus: Self-hosted** - Open source project, simpler to start
+- **Self-hosted** - Open source project
 - **Self-hosted features**:
   - **Container-based deployment** - Docker/Kubernetes support
   - **Single binary distribution** - Easy deployment with minimal dependencies
-- **Future: SaaS offering** 
-  - **Database-level isolation** - Separate databases per customer
+  - **Database-level isolation** - Separate databases per deployment
   - **Complete data separation** - Security and compliance focused
 
 ### Performance Metrics Capture

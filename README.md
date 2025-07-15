@@ -38,7 +38,7 @@ Union Square acts as a drop-in proxy between your applications and LLM providers
 - **Cost & Performance Analytics** - Track token usage, latency, and costs
 - **Streaming Support** - Full support for SSE/streaming responses
 - **Privacy Controls** - Configurable recording rules and PII detection
-- **Self-Hosted** - Run in your own infrastructure (SaaS coming later)
+- **Self-Hosted** - Run in your own infrastructure
 
 ## Use Cases
 
@@ -205,7 +205,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Test case extraction
 - [ ] Analytics dashboards
 - [ ] Plugin system for exporters
-- [ ] SaaS offering
 
 ## Contributing
 
