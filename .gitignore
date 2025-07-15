@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Log4brains
+.log4brains/
+!.log4brains.yml
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log

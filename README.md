@@ -16,6 +16,7 @@
 [![Build Status](https://img.shields.io/badge/build-not%20yet-lightgrey)](https://github.com/jwilger/union_square/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Status: Early Development](https://img.shields.io/badge/Status-Early%20Development-orange)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://jwilger.github.io/union_square/)
 
 </td>
 </tr>
@@ -167,6 +168,16 @@ Union Square follows a functional core, imperative shell architecture:
 - **Recording Pipeline** - Asynchronous capture and storage
 - **Analysis Engine** - Test evaluation and metrics calculation
 - **Web Interface** - Leptos-based reactive UI
+
+### Architecture Decision Records
+
+We use Architecture Decision Records (ADRs) to document significant architectural decisions. 
+
+- **View ADRs**: Visit our [ADR documentation](https://jwilger.github.io/union_square/adr/) on GitHub Pages
+- **Browse locally**: See the `docs/adr/` directory
+- **Create new ADR**: Run `npm run adr:new`
+
+Key architectural decisions are documented including technology choices, patterns, and design rationale.
 
 ## Development
 
