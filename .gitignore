@@ -34,3 +34,6 @@ coverage/
 # Logs
 logs/
 *.log
+# Log4brains build artifacts
+docs/adr/*
+!docs/adr/*.md

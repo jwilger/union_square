@@ -56,31 +56,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Add syntax highlighting effect to code blocks
 document.querySelectorAll('.code-block code').forEach(block => {
-    // Simple syntax highlighting for Rust code
-    let html = block.innerHTML;
+    // Get the text content and preserve it
+    let text = block.textContent;
     
-    // Keywords
-    html = html.replace(/\b(pub|async|fn|struct|impl|let|const|use|mod|trait|enum|match|if|else|for|while|loop|return|break|continue|self|Self|super|crate|move|ref|mut|where|type|unsafe|extern|static|as|in|from|into)\b/g, '<span style="color: var(--ctp-mauve);">$1</span>');
+    // Create a document fragment to build the highlighted content
+    const fragment = document.createDocumentFragment();
     
-    // Types
-    html = html.replace(/\b(String|Result|Ok|Err|Option|Some|None|Vec|HashMap|bool|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64|usize|isize|char|str)\b/g, '<span style="color: var(--ctp-yellow);">$1</span>');
+    // Simple syntax highlighting for Rust code using text manipulation
+    const tokens = text.split(/(\s+|[(){}[\]<>,;:&|!?*+=\-/\\])/);
     
-    // Functions
-    html = html.replace(/\b([a-z_][a-zA-Z0-9_]*)\s*\(/g, '<span style="color: var(--ctp-blue);">$1</span>(');
+    const keywords = new Set(['pub', 'async', 'fn', 'struct', 'impl', 'let', 'const', 'use', 'mod', 'trait', 'enum', 'match', 'if', 'else', 'for', 'while', 'loop', 'return', 'break', 'continue', 'self', 'Self', 'super', 'crate', 'move', 'ref', 'mut', 'where', 'type', 'unsafe', 'extern', 'static', 'as', 'in', 'from', 'into']);
+    const types = new Set(['String', 'Result', 'Ok', 'Err', 'Option', 'Some', 'None', 'Vec', 'HashMap', 'bool', 'u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', 'usize', 'isize', 'char', 'str', 'SessionId', 'ProxyRequest', 'ProxyResponse', 'ProxyError']);
     
-    // Strings
-    html = html.replace(/"([^"]*)"/g, '<span style="color: var(--ctp-green);">"$1"</span>');
+    let inString = false;
+    let inComment = false;
+    let inAttribute = false;
     
-    // Comments
-    html = html.replace(/(\/\/[^\n]*)/g, '<span style="color: var(--ctp-overlay0);">$1</span>');
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        
+        if (token === '"' && !inComment) {
+            inString = !inString;
+            const span = document.createElement('span');
+            span.className = 'syntax-string';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (token === '//' && !inString) {
+            inComment = true;
+            const span = document.createElement('span');
+            span.className = 'syntax-comment';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (token === '\n' && inComment) {
+            inComment = false;
+            fragment.appendChild(document.createTextNode(token));
+        } else if (token.startsWith('#[') && !inString && !inComment) {
+            inAttribute = true;
+            const span = document.createElement('span');
+            span.className = 'syntax-attribute';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (token.includes(']') && inAttribute) {
+            inAttribute = false;
+            const span = document.createElement('span');
+            span.className = 'syntax-attribute';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (inString || inComment || inAttribute) {
+            const span = document.createElement('span');
+            span.className = inString ? 'syntax-string' : (inComment ? 'syntax-comment' : 'syntax-attribute');
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (keywords.has(token)) {
+            const span = document.createElement('span');
+            span.className = 'syntax-keyword';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (types.has(token)) {
+            const span = document.createElement('span');
+            span.className = 'syntax-type';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else if (/^[a-z_][a-zA-Z0-9_]*$/.test(token) && i + 1 < tokens.length && tokens[i + 1] === '(') {
+            const span = document.createElement('span');
+            span.className = 'syntax-function';
+            span.textContent = token;
+            fragment.appendChild(span);
+        } else {
+            fragment.appendChild(document.createTextNode(token));
+        }
+    }
     
-    // Attributes
-    html = html.replace(/#\[([^\]]+)\]/g, '<span style="color: var(--ctp-peach);">#[$1]</span>');
-    
-    // Generics
-    html = html.replace(/&lt;([^&]+)&gt;/g, '<span style="color: var(--ctp-teal);">&lt;$1&gt;</span>');
-    
-    block.innerHTML = html;
+    // Clear the block and append the highlighted content
+    block.textContent = '';
+    block.appendChild(fragment);
 });
 
 // Active navigation link highlighting
