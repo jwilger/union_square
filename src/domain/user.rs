@@ -81,11 +81,11 @@ impl User {
             is_active: true,
         }
     }
-    
+
     pub fn deactivate(&mut self) {
         self.is_active = false;
     }
-    
+
     pub fn activate(&mut self) {
         self.is_active = true;
     }
@@ -101,14 +101,14 @@ mod tests {
         let id2 = UserId::generate();
         assert_ne!(id1, id2);
     }
-    
+
     #[test]
     fn test_email_validation() {
         assert!(EmailAddress::parse("test@example.com".to_string()).is_ok());
         assert!(EmailAddress::parse("invalid-email".to_string()).is_err());
         assert!(EmailAddress::parse("a@b".to_string()).is_err());
     }
-    
+
     #[test]
     fn test_display_name_validation() {
         assert!(DisplayName::parse("John Doe".to_string()).is_ok());
@@ -116,29 +116,29 @@ mod tests {
         assert!(DisplayName::parse("   ".to_string()).is_err());
         assert!(DisplayName::parse("a".repeat(256)).is_err());
     }
-    
+
     #[test]
     fn test_user_creation() {
         let email = EmailAddress::parse("test@example.com".to_string()).unwrap();
         let name = DisplayName::parse("Test User".to_string()).unwrap();
-        
+
         let user = User::new(email, name);
         assert!(user.is_active);
         assert_eq!(user.email.into_inner(), "test@example.com");
         assert_eq!(user.display_name.into_inner(), "Test User");
     }
-    
+
     #[test]
     fn test_user_activation() {
         let email = EmailAddress::parse("test@example.com".to_string()).unwrap();
         let name = DisplayName::parse("Test User".to_string()).unwrap();
-        
+
         let mut user = User::new(email, name);
         assert!(user.is_active);
-        
+
         user.deactivate();
         assert!(!user.is_active);
-        
+
         user.activate();
         assert!(user.is_active);
     }

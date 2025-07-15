@@ -42,7 +42,7 @@ pub struct LoggingSettings {
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
         let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
-        
+
         let config = Config::builder()
             // Start with default values
             .set_default("application.host", "0.0.0.0")?
@@ -60,7 +60,7 @@ impl Settings {
             .set_default("logging.format", "json")?
             // Add configuration file if it exists
             .add_source(File::with_name("config/default").required(false))
-            .add_source(File::with_name(&format!("config/{}", environment)).required(false))
+            .add_source(File::with_name(&format!("config/{environment}")).required(false))
             .add_source(File::with_name("config/local").required(false))
             // Add environment variables with prefix
             .add_source(Environment::with_prefix("UNION_SQUARE").separator("__"))
@@ -68,7 +68,7 @@ impl Settings {
 
         config.try_deserialize()
     }
-    
+
     pub fn database_url(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}/{}",

@@ -74,7 +74,7 @@ pub enum RequestStatus {
 }
 
 /// Metadata associated with an LLM response
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
     pub tokens_used: Option<u32>,
     pub cost_cents: Option<u32>,
@@ -100,47 +100,31 @@ impl LlmRequest {
             status: RequestStatus::Pending,
         }
     }
-    
+
     pub fn start(&mut self) {
         self.status = RequestStatus::InProgress;
     }
-    
+
     pub fn complete(&mut self) {
         self.status = RequestStatus::Completed;
     }
-    
+
     pub fn fail(&mut self) {
         self.status = RequestStatus::Failed;
     }
-    
+
     pub fn cancel(&mut self) {
         self.status = RequestStatus::Cancelled;
     }
 }
 
 impl LlmResponse {
-    pub fn new(
-        request_id: RequestId,
-        response_text: String,
-        metadata: ResponseMetadata,
-    ) -> Self {
+    pub fn new(request_id: RequestId, response_text: String, metadata: ResponseMetadata) -> Self {
         Self {
             request_id,
             response_text,
             metadata,
             created_at: Utc::now(),
-        }
-    }
-}
-
-impl Default for ResponseMetadata {
-    fn default() -> Self {
-        Self {
-            tokens_used: None,
-            cost_cents: None,
-            latency_ms: None,
-            finish_reason: None,
-            model_used: None,
         }
     }
 }
@@ -156,7 +140,7 @@ mod tests {
         let id2 = RequestId::generate();
         assert_ne!(id1, id2);
     }
-    
+
     #[test]
     fn test_llm_request_creation() {
         let session_id = SessionId::generate();
@@ -166,18 +150,18 @@ mod tests {
             version: Some("2024-01".to_string()),
             api_version: Some("v1".to_string()),
         };
-        
+
         let request = LlmRequest::new(
             session_id,
             model_version,
             "Test prompt".to_string(),
             serde_json::json!({"temperature": 0.7}),
         );
-        
+
         assert_eq!(request.status, RequestStatus::Pending);
         assert_eq!(request.prompt, "Test prompt");
     }
-    
+
     #[test]
     fn test_request_status_transitions() {
         let session_id = SessionId::generate();
@@ -187,23 +171,23 @@ mod tests {
             version: None,
             api_version: None,
         };
-        
+
         let mut request = LlmRequest::new(
             session_id,
             model_version,
             "Test prompt".to_string(),
             serde_json::json!({}),
         );
-        
+
         assert_eq!(request.status, RequestStatus::Pending);
-        
+
         request.start();
         assert_eq!(request.status, RequestStatus::InProgress);
-        
+
         request.complete();
         assert_eq!(request.status, RequestStatus::Completed);
     }
-    
+
     #[test]
     fn test_llm_response_creation() {
         let request_id = RequestId::generate();
@@ -214,13 +198,9 @@ mod tests {
             finish_reason: Some("stop".to_string()),
             model_used: Some("gpt-4".to_string()),
         };
-        
-        let response = LlmResponse::new(
-            request_id,
-            "Test response".to_string(),
-            metadata,
-        );
-        
+
+        let response = LlmResponse::new(request_id, "Test response".to_string(), metadata);
+
         assert_eq!(response.response_text, "Test response");
         assert_eq!(response.metadata.tokens_used, Some(150));
         assert_eq!(response.metadata.cost_cents, Some(5));

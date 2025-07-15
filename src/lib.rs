@@ -4,10 +4,10 @@
 //! and test-case extraction, following type-driven development principles.
 
 pub mod application;
-pub mod domain;
-pub mod infrastructure;
-pub mod error;
 pub mod config;
+pub mod domain;
+pub mod error;
+pub mod infrastructure;
 
 pub use application::Application;
 pub use error::{Error, Result};

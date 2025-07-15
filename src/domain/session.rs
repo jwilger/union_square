@@ -71,22 +71,22 @@ impl Session {
             },
         }
     }
-    
+
     pub fn complete(&mut self) {
         self.status = SessionStatus::Completed;
         self.updated_at = Utc::now();
     }
-    
+
     pub fn fail(&mut self) {
         self.status = SessionStatus::Failed;
         self.updated_at = Utc::now();
     }
-    
+
     pub fn cancel(&mut self) {
         self.status = SessionStatus::Cancelled;
         self.updated_at = Utc::now();
     }
-    
+
     pub fn is_active(&self) -> bool {
         matches!(self.status, SessionStatus::Active)
     }
@@ -102,7 +102,7 @@ mod tests {
         let id2 = SessionId::generate();
         assert_ne!(id1, id2);
     }
-    
+
     #[test]
     fn test_session_creation() {
         let session = Session::new(None);
@@ -110,17 +110,17 @@ mod tests {
         assert_eq!(session.status, SessionStatus::Active);
         assert!(session.metadata.tags.is_empty());
     }
-    
+
     #[test]
     fn test_session_status_transitions() {
         let mut session = Session::new(None);
-        
+
         assert!(session.is_active());
-        
+
         session.complete();
         assert_eq!(session.status, SessionStatus::Completed);
         assert!(!session.is_active());
-        
+
         session.fail();
         assert_eq!(session.status, SessionStatus::Failed);
     }

@@ -5,31 +5,31 @@ use thiserror::Error;
 pub enum Error {
     #[error("Configuration error: {0}")]
     Config(#[from] config::ConfigError),
-    
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     #[error("EventCore error: {0}")]
     EventCore(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Application error: {message}")]
     Application { message: String },
-    
+
     #[error("Invalid input: {field}")]
     InvalidInput { field: String },
-    
+
     #[error("Not found: {resource}")]
     NotFound { resource: String },
-    
+
     #[error("Unauthorized")]
     Unauthorized,
-    
+
     #[error("Internal server error")]
     Internal,
 }
@@ -40,13 +40,13 @@ impl Error {
             message: message.into(),
         }
     }
-    
+
     pub fn invalid_input(field: impl Into<String>) -> Self {
         Self::InvalidInput {
             field: field.into(),
         }
     }
-    
+
     pub fn not_found(resource: impl Into<String>) -> Self {
         Self::NotFound {
             resource: resource.into(),
