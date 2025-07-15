@@ -1,0 +1,12 @@
+[advisories]
+# Ignore RSA timing side-channel vulnerability (RUSTSEC-2023-0071)
+# This comes from sqlx-mysql which we don't use directly (we only use postgres)
+# and the vulnerability is a timing side-channel attack during RSA decryption
+# which doesn't affect our application's security model
+ignore = [
+    "RUSTSEC-2023-0071",  # RSA Marvin Attack vulnerability
+    "RUSTSEC-2024-0436"   # paste crate unmaintained (via eventcore)
+]
+
+[output]
+quiet = false
