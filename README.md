@@ -62,9 +62,10 @@ Union Square acts as a drop-in proxy between your applications and LLM providers
 
 ### Prerequisites
 
-- Rust 1.75+
+- Rust 1.88+ (or use the Nix development shell which provides the exact version)
 - PostgreSQL 14+
 - Docker (optional, for containerized deployment)
+- Nix (optional, but recommended for consistent development environment)
 
 ### Installation
 
@@ -73,8 +74,13 @@ Union Square acts as a drop-in proxy between your applications and LLM providers
 git clone https://github.com/jwilger/union_square.git
 cd union_square
 
-# Enter development environment (if using Nix)
+# Option 1: Using Nix (Recommended)
+# This provides a consistent development environment with Rust 1.88.0
 nix develop
+
+# Option 2: Manual setup
+# Ensure you have Rust 1.88+ installed
+rustup update
 
 # Start PostgreSQL
 docker-compose up -d
@@ -85,6 +91,32 @@ cargo build --release
 # Run the server
 ./target/release/union_square
 ```
+
+### Using the Nix Development Shell
+
+This project includes a Nix flake that provides a complete development environment. The Nix shell includes:
+
+- **Rust 1.88.0** - The exact Rust version used by this project
+- **Cargo** and all standard Rust tools (rustc, rustfmt, clippy, etc.)
+- **Pre-configured environment** - All necessary build dependencies
+
+To use the Nix development shell:
+
+```bash
+# Enter the development shell
+nix develop
+
+# All Rust tools are now available
+cargo --version  # Should show cargo 1.88.0
+rustc --version  # Should show rustc 1.88.0
+
+# Run any cargo commands as usual
+cargo build
+cargo test
+cargo run
+```
+
+The Nix shell ensures all developers and CI environments use identical tool versions, eliminating "works on my machine" issues.
 
 ### Basic Usage
 
@@ -135,6 +167,17 @@ Union Square follows a functional core, imperative shell architecture:
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+### Development Environment
+
+We strongly recommend using the Nix development shell for a consistent environment:
+
+```bash
+# Enter the Nix shell (provides Rust 1.88.0 and all tools)
+nix develop
+```
+
+### Common Commands
 
 ```bash
 # Format code
