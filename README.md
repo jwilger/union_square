@@ -1,3 +1,7 @@
+> *"I don't care what they're talking about. All I want is a nice, fat recording."*
+> 
+> — Harry Caul, The Conversation (1974)
+
 <table>
 <tr>
 <td width="200" align="center">
