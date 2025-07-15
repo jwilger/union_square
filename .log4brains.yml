@@ -1,5 +1,5 @@
 project:
   name: Union Square
   tz: UTC
-  adrFolder: ./docs/adr
+  adrFolder: ./adr
   packages: []

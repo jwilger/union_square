@@ -7,7 +7,7 @@
     "adr": "log4brains adr",
     "adr:new": "log4brains adr new",
     "adr:preview": "log4brains preview",
-    "adr:build": "log4brains build --out docs/adr"
+    "adr:build": "log4brains build --out docs/adr --basePath /adr"
   },
   "devDependencies": {
     "log4brains": "^1.0.1"
