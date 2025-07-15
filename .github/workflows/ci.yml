@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: union_square
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Install cargo-nextest
+      run: cargo install cargo-nextest --locked
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run clippy
+      run: cargo clippy --workspace --all-targets -- -D warnings
+    
+    - name: Run tests with nextest
+      run: cargo nextest run --workspace
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
+    
+    - name: Run doctests
+      run: cargo test --doc
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
+    
+    - name: Type check
+      run: cargo check --all-targets
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit --locked
+    
+    - name: Run security audit
+      run: cargo audit
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: union_square
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov --locked
+    
+    - name: Generate code coverage
+      run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: lcov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build debug
+      run: cargo build --workspace
+    
+    - name: Build release
+      run: cargo build --workspace --release
+
+  cross-platform:
+    name: Cross-platform Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build
+      run: cargo build --workspace
