@@ -56,6 +56,12 @@
     /* Component dimensions */
     --floating-card-size: 350px;
     --hero-logo-max-size: 300px;
+    
+    /* Gradient effects */
+    --gradient-blur-size: 8px;
+    --gradient-blur-size-large: 10px;
+    --gradient-inset-negative: -1px;
+    --gradient-inset-negative-large: -2px;
 }
 
 * {
@@ -126,12 +132,12 @@ body {
 .nav-brand .logo::before {
     content: '';
     position: absolute;
-    inset: -1px;
+    inset: var(--gradient-inset-negative);
     background: linear-gradient(135deg, var(--accent-gradient-start), var(--accent-gradient-end));
     border-radius: 8px;
     z-index: -1;
     opacity: 0.5;
-    filter: blur(8px);
+    filter: blur(var(--gradient-blur-size));
 }
 
 @keyframes float {
@@ -346,12 +352,12 @@ body {
 .floating-card::before {
     content: '';
     position: absolute;
-    inset: -2px;
+    inset: var(--gradient-inset-negative-large);
     background: linear-gradient(135deg, var(--accent-gradient-start), var(--accent-gradient-end));
     border-radius: 20px;
     z-index: -1;
     opacity: 0.5;
-    filter: blur(10px);
+    filter: blur(var(--gradient-blur-size-large));
 }
 
 .hero-logo {
