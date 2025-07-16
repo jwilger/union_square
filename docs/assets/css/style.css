@@ -253,6 +253,7 @@ body {
     color: var(--ctp-green);
     font-weight: 600;
     font-family: var(--font-mono);
+    white-space: nowrap;
 }
 
 .hero-quote {
