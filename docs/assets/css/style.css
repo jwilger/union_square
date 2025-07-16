@@ -312,10 +312,15 @@ body {
 .floating-card {
     background-color: var(--bg-surface);
     border-radius: 20px;
-    padding: var(--spacing-2xl);
+    padding: var(--spacing-lg);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     animation: float 4s ease-in-out infinite;
     position: relative;
+    width: 350px;
+    height: 350px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .floating-card::before {
@@ -330,8 +335,10 @@ body {
 }
 
 .hero-logo {
-    width: 200px;
-    height: 200px;
+    width: 90%;
+    height: 90%;
+    max-width: 300px;
+    max-height: 300px;
 }
 
 /* Features Section */
