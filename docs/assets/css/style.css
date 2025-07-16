@@ -122,7 +122,6 @@ body {
 .nav-brand .logo {
     width: 60px;
     height: 60px;
-    background-color: var(--bg-surface);
     border-radius: 8px;
     padding: 4px;
     animation: none;
