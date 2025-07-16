@@ -114,9 +114,12 @@ body {
 }
 
 .nav-brand .logo {
-    background-color: var(--ctp-text);
+    width: 60px;
+    height: 60px;
+    background-color: var(--bg-surface);
     border-radius: 8px;
     padding: 4px;
+    animation: none;
 }
 
 @keyframes float {
@@ -250,6 +253,7 @@ body {
     color: var(--ctp-green);
     font-weight: 600;
     font-family: var(--font-mono);
+    white-space: nowrap;
 }
 
 .hero-quote {
@@ -316,7 +320,7 @@ body {
 .floating-card {
     background-color: var(--bg-surface);
     border-radius: 20px;
-    padding: var(--spacing-lg);
+    padding: 0;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     animation: float 4s ease-in-out infinite;
     position: relative;
