@@ -120,6 +120,18 @@ body {
     border-radius: 8px;
     padding: 4px;
     animation: none;
+    position: relative;
+}
+
+.nav-brand .logo::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(135deg, var(--accent-gradient-start), var(--accent-gradient-end));
+    border-radius: 8px;
+    z-index: -1;
+    opacity: 0.5;
+    filter: blur(8px);
 }
 
 @keyframes float {
