@@ -1,7 +1,8 @@
 //! Infrastructure layer for Union Square
 //!
-//! This module contains the implementations for external concerns like
-//! database access, HTTP clients, and other infrastructure services.
+//! This module contains the implementations for external concerns.
+//! Currently includes:
+//! - Database access via SQLx
 
 pub mod database;
 

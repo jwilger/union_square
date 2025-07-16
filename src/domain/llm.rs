@@ -4,16 +4,12 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for an LLM request
-#[nutype(
-    derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize),
-    new_unchecked
-)]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
 pub struct RequestId(Uuid);
 
 impl RequestId {
     pub fn generate() -> Self {
-        // Safety: Uuid::now_v7() always generates a valid UUID
-        unsafe { Self::new_unchecked(Uuid::now_v7()) }
+        Self::new(Uuid::now_v7())
     }
 }
 

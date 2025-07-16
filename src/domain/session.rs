@@ -4,16 +4,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a session
-#[nutype(
-    derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize),
-    new_unchecked
-)]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
 pub struct SessionId(Uuid);
 
 impl SessionId {
     pub fn generate() -> Self {
-        // Safety: Uuid::now_v7() always generates a valid UUID
-        unsafe { Self::new_unchecked(Uuid::now_v7()) }
+        // Uuid::now_v7() always generates a valid UUID
+        Self::new(Uuid::now_v7())
     }
 }
 

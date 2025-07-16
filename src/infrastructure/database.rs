@@ -36,17 +36,14 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "requires database connection"]
     async fn test_database_health_check() {
-        // This test requires a running database
-        // Skip if not available
-        if let Ok(pool) =
-            PgPool::connect("postgres://postgres:password@localhost:5432/union_square").await
-        {
-            let db = Database::new(pool);
-            let result = db.health_check().await;
+        let pool = PgPool::connect("postgres://postgres:password@localhost:5432/union_square")
+            .await
+            .expect("Failed to connect to database");
 
-            // If the database is available, this should succeed
-            assert!(result.is_ok());
-        }
+        let db = Database::new(pool);
+        let result = db.health_check().await;
+        assert!(result.is_ok());
     }
 }
