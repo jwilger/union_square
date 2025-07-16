@@ -316,7 +316,7 @@ body {
 .floating-card {
     background-color: var(--bg-surface);
     border-radius: 20px;
-    padding: var(--spacing-lg);
+    padding: 0;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     animation: float 4s ease-in-out infinite;
     position: relative;
