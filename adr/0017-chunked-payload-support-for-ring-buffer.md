@@ -43,7 +43,7 @@ Chosen option: "Chunked Payloads with Header-based Reconstruction", because it m
 
 - Slightly more complex atomic operations for multi-slot claims
 - Need to handle partial payload scenarios
-- Additional 24 bytes overhead per slot for headers
+- Additional 26 bytes overhead per slot for headers (before alignment padding)
 - More complex testing scenarios
 
 ## Pros and Cons of the Options
@@ -58,7 +58,7 @@ struct SlotHeader {
     chunk_seq: u16,        // Chunk number (0-based)
     total_chunks: u16,     // Total expected chunks
     chunk_len: u32,        // This chunk's data length
-    flags: u8,             // IS_LAST, IS_FIRST, CONTINUATION
+    flags: u8,             // IS_LAST (0x01), IS_FIRST (0x02)
     state: AtomicU8,       // Slot state (EMPTY, WRITING, READY, READING)
 }
 ```
@@ -129,6 +129,14 @@ fn write_chunked(payload: &[u8]) -> Result<PayloadId, OverflowError> {
     let payload_id = Uuid::new_v7();
     let total_chunks = (payload.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
     
+    // Validate chunk count doesn't overflow u16
+    if total_chunks > u16::MAX as usize {
+        return Err(OverflowError::PayloadTooLarge { 
+            chunks: total_chunks,
+            max_chunks: u16::MAX as usize,
+        });
+    }
+    
     // Atomically claim N consecutive slots
     let start_slot = claim_slots(total_chunks)?;
     
@@ -159,18 +167,28 @@ impl Iterator for ChunkedPayloadReader {
     type Item = &[u8];
     
     fn next(&mut self) -> Option<Self::Item> {
+        let mut spin_count = 0;
         loop {
             let slot = &self.slots[self.current_pos];
             
-            if slot.matches_payload(self.payload_id, self.expected_seq) {
+            // Check slot is ready before attempting to read
+            if slot.header.state.load(Acquire) == READY 
+                && slot.matches_payload(self.payload_id, self.expected_seq) {
                 self.expected_seq += 1;
                 self.current_pos = (self.current_pos + 1) % self.slot_count;
                 return Some(&slot.data[..slot.header.chunk_len as usize]);
             }
             
-            // Handle missing chunk
+            // Handle missing chunk with backoff
             if self.timeout_exceeded() {
                 return None;
+            }
+            
+            // Prevent CPU spinning: yield after threshold
+            spin_count += 1;
+            if spin_count > SPIN_THRESHOLD {
+                std::thread::yield_now();
+                spin_count = 0;
             }
         }
     }
