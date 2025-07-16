@@ -52,6 +52,10 @@
     /* Typography */
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    
+    /* Component dimensions */
+    --floating-card-size: 350px;
+    --hero-logo-max-size: 300px;
 }
 
 * {
@@ -312,10 +316,15 @@ body {
 .floating-card {
     background-color: var(--bg-surface);
     border-radius: 20px;
-    padding: var(--spacing-2xl);
+    padding: var(--spacing-lg);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     animation: float 4s ease-in-out infinite;
     position: relative;
+    width: var(--floating-card-size);
+    height: var(--floating-card-size);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .floating-card::before {
@@ -330,8 +339,10 @@ body {
 }
 
 .hero-logo {
-    width: 200px;
-    height: 200px;
+    width: 90%;
+    height: 90%;
+    max-width: var(--hero-logo-max-size);
+    max-height: var(--hero-logo-max-size);
 }
 
 /* Features Section */
