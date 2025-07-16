@@ -1,6 +1,9 @@
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, Environment, File};
 use serde::Deserialize;
 use std::env;
+
+// Re-export ConfigError so it can be used in error.rs
+pub use config::ConfigError;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {

@@ -3,16 +3,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a user
-#[nutype(
-    derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize),
-    new_unchecked
-)]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
 pub struct UserId(Uuid);
 
 impl UserId {
     pub fn generate() -> Self {
-        // Safety: Uuid::now_v7() always generates a valid UUID
-        unsafe { Self::new_unchecked(Uuid::now_v7()) }
+        // Uuid::now_v7() always generates a valid UUID
+        Self::new(Uuid::now_v7())
     }
 }
 
@@ -25,41 +22,27 @@ impl Default for UserId {
 /// User email address (validated)
 #[nutype(
     derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize),
-    validate(predicate = |email| email.contains('@') && email.len() > 3),
-    new_unchecked
+    validate(predicate = |email| email.contains('@') && email.len() > 3)
 )]
 pub struct EmailAddress(String);
 
 impl EmailAddress {
     pub fn parse(email: String) -> Result<Self, String> {
-        if email.contains('@') && email.len() > 3 {
-            // Safety: We validated the email format above
-            Ok(unsafe { Self::new_unchecked(email) })
-        } else {
-            Err("Invalid email address format".to_string())
-        }
+        Self::try_new(email).map_err(|_| "Invalid email address format".to_string())
     }
 }
 
 /// User display name
 #[nutype(
     derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize),
-    validate(predicate = |name| !name.trim().is_empty() && name.len() <= 255),
-    new_unchecked
+    validate(predicate = |name| !name.trim().is_empty() && name.len() <= 255)
 )]
 pub struct DisplayName(String);
 
 impl DisplayName {
     pub fn parse(name: String) -> Result<Self, String> {
-        let trimmed = name.trim();
-        if trimmed.is_empty() {
-            Err("Display name cannot be empty".to_string())
-        } else if trimmed.len() > 255 {
-            Err("Display name cannot exceed 255 characters".to_string())
-        } else {
-            // Safety: We validated the display name above
-            Ok(unsafe { Self::new_unchecked(trimmed.to_string()) })
-        }
+        let trimmed = name.trim().to_string();
+        Self::try_new(trimmed).map_err(|e| e.to_string())
     }
 }
 

@@ -17,7 +17,7 @@ impl Application {
         info!("Connecting to database at {}", settings.database.host);
         let db_pool = PgPool::connect(&settings.database_url()).await?;
 
-        // Run database migrations if needed
+        // TODO: Implement database migrations once the migration scripts are finalized.
         // sqlx::migrate!("./migrations").run(&db_pool).await?;
 
         Ok(Self { settings, db_pool })
@@ -30,8 +30,10 @@ impl Application {
             self.settings.application.host, self.settings.application.port
         );
 
-        // This is a placeholder - in the future this will start the actual server
-        // For now, just demonstrate that the application can be constructed
+        // TODO: Implement the server startup logic here.
+        // Consider using an HTTP framework like `axum` or `warp` to handle requests.
+        // This should include routing, middleware, and graceful shutdown handling.
+        // Timeline: Prioritize this implementation before the first production release.
         info!("Application started successfully");
 
         Ok(())
@@ -51,11 +53,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "requires database connection"]
     async fn test_application_can_be_created() {
-        // This test will only pass if a database is running
-        // Skip it if the database is not available
-        if let Ok(app) = Application::new().await {
-            assert!(app.settings().application.port > 0);
-        }
+        let app = Application::new()
+            .await
+            .expect("Failed to create application");
+        assert!(app.settings().application.port > 0);
     }
 }
