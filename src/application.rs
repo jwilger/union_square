@@ -1,3 +1,5 @@
+pub mod event_store;
+
 use crate::config::Settings;
 use crate::Result;
 use sqlx::PgPool;

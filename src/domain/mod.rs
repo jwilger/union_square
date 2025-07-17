@@ -3,12 +3,14 @@
 //! This module contains the core domain types that represent the business
 //! concepts of Union Square, following type-driven development principles.
 
+pub mod events;
 pub mod llm;
 pub mod session;
 pub mod user;
 pub mod version;
 pub mod version_capture;
 
+pub use events::*;
 pub use llm::*;
 pub use session::*;
 pub use user::*;
