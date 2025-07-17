@@ -1,4 +1,5 @@
 pub mod event_store;
+pub mod test_config;
 
 use crate::config::Settings;
 use crate::Result;
