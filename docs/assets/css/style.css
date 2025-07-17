@@ -128,12 +128,12 @@ body {
 .nav-brand .logo-container::before {
     content: '';
     position: absolute;
-    inset: var(--gradient-inset-negative);
+    inset: var(--gradient-inset-negative-large);
     background: linear-gradient(135deg, var(--accent-gradient-start), var(--accent-gradient-end));
     border-radius: 8px;
     z-index: -1;
     opacity: 0.5;
-    filter: blur(var(--gradient-blur-size));
+    filter: blur(var(--gradient-blur-size-large));
 }
 
 .nav-brand .logo {
