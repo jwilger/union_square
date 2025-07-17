@@ -228,9 +228,7 @@ mod tests {
         let session_id = SessionId::generate();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         // Record usage
@@ -261,16 +259,12 @@ mod tests {
 
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let event = service
@@ -297,9 +291,7 @@ mod tests {
         let session_id = SessionId::generate();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         service
@@ -323,16 +315,12 @@ mod tests {
 
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         service
@@ -363,9 +351,7 @@ mod tests {
         let config = VersionTestConfig {
             target_version: Some(ModelVersion {
                 provider: LlmProvider::OpenAI,
-                model_name: "gpt-4".to_string(),
-                version: Some("2024-01".to_string()),
-                api_version: Some("v1".to_string()),
+                model_id: "gpt-4-turbo-2024-01".to_string(),
             }),
             mode: TestExecutionMode::Target,
             ..Default::default()
@@ -394,16 +380,12 @@ mod tests {
 
         let original = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
 
         let target = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         // Test Original mode

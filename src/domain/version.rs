@@ -55,107 +55,32 @@ impl TrackedVersion {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum VersionComparison {
     Same,
-    ModelChanged {
-        from: String,
-        to: String,
-    },
-    VersionChanged {
-        from: Option<String>,
-        to: Option<String>,
-    },
-    ApiVersionChanged {
-        from: Option<String>,
-        to: Option<String>,
-    },
-    ProviderChanged {
-        from: LlmProvider,
-        to: LlmProvider,
-    },
-    MultipleChanges {
-        changes: Vec<VersionChange>,
-    },
-}
-
-/// Individual version change
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum VersionChange {
-    Model {
-        from: String,
-        to: String,
-    },
-    Version {
-        from: Option<String>,
-        to: Option<String>,
-    },
-    ApiVersion {
-        from: Option<String>,
-        to: Option<String>,
-    },
-    Provider {
-        from: LlmProvider,
-        to: LlmProvider,
+    Changed {
+        from_provider: LlmProvider,
+        from_model_id: String,
+        to_provider: LlmProvider,
+        to_model_id: String,
     },
 }
 
 impl ModelVersion {
-    /// Compare this version with another, returning detailed change information
+    /// Compare this version with another
     pub fn compare(&self, other: &ModelVersion) -> VersionComparison {
-        let mut changes = Vec::new();
-
-        if self.provider != other.provider {
-            changes.push(VersionChange::Provider {
-                from: self.provider.clone(),
-                to: other.provider.clone(),
-            });
-        }
-
-        if self.model_name != other.model_name {
-            changes.push(VersionChange::Model {
-                from: self.model_name.clone(),
-                to: other.model_name.clone(),
-            });
-        }
-
-        if self.version != other.version {
-            changes.push(VersionChange::Version {
-                from: self.version.clone(),
-                to: other.version.clone(),
-            });
-        }
-
-        if self.api_version != other.api_version {
-            changes.push(VersionChange::ApiVersion {
-                from: self.api_version.clone(),
-                to: other.api_version.clone(),
-            });
-        }
-
-        match changes.len() {
-            0 => VersionComparison::Same,
-            1 => match changes.into_iter().next().unwrap() {
-                VersionChange::Model { from, to } => VersionComparison::ModelChanged { from, to },
-                VersionChange::Version { from, to } => {
-                    VersionComparison::VersionChanged { from, to }
-                }
-                VersionChange::ApiVersion { from, to } => {
-                    VersionComparison::ApiVersionChanged { from, to }
-                }
-                VersionChange::Provider { from, to } => {
-                    VersionComparison::ProviderChanged { from, to }
-                }
-            },
-            _ => VersionComparison::MultipleChanges { changes },
+        if self.provider == other.provider && self.model_id == other.model_id {
+            VersionComparison::Same
+        } else {
+            VersionComparison::Changed {
+                from_provider: self.provider.clone(),
+                from_model_id: self.model_id.clone(),
+                to_provider: other.provider.clone(),
+                to_model_id: other.model_id.clone(),
+            }
         }
     }
 
-    /// Create a version identifier string for comparison
+    /// Create a version identifier string for display
     pub fn to_version_string(&self) -> String {
-        format!(
-            "{}/{}/{}",
-            self.provider_string(),
-            self.model_name,
-            self.version.as_deref().unwrap_or("latest")
-        )
+        format!("{}/{}", self.provider_string(), self.model_id)
     }
 
     fn provider_string(&self) -> &str {
@@ -247,9 +172,7 @@ mod tests {
     fn test_version_comparison_same() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let v2 = v1.clone();
@@ -257,61 +180,56 @@ mod tests {
     }
 
     #[test]
-    fn test_version_comparison_model_changed() {
+    fn test_version_comparison_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         assert_eq!(
             v1.compare(&v2),
-            VersionComparison::ModelChanged {
-                from: "gpt-3.5-turbo".to_string(),
-                to: "gpt-4".to_string(),
+            VersionComparison::Changed {
+                from_provider: LlmProvider::OpenAI,
+                from_model_id: "gpt-3.5-turbo".to_string(),
+                to_provider: LlmProvider::OpenAI,
+                to_model_id: "gpt-4-turbo-2024-01".to_string(),
             }
         );
     }
 
     #[test]
-    fn test_version_comparison_multiple_changes() {
+    fn test_version_comparison_provider_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2023-12".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo".to_string(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_name: "claude-3".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v2".to_string()),
+            model_id: "claude-3-opus-20240229".to_string(),
         };
 
-        match v1.compare(&v2) {
-            VersionComparison::MultipleChanges { changes } => {
-                assert_eq!(changes.len(), 4);
+        assert_eq!(
+            v1.compare(&v2),
+            VersionComparison::Changed {
+                from_provider: LlmProvider::OpenAI,
+                from_model_id: "gpt-4-turbo".to_string(),
+                to_provider: LlmProvider::Anthropic,
+                to_model_id: "claude-3-opus-20240229".to_string(),
             }
-            _ => panic!("Expected MultipleChanges"),
-        }
+        );
     }
 
     #[test]
     fn test_tracked_version_usage() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let mut tracked = TrackedVersion::new(version);
@@ -329,23 +247,19 @@ mod tests {
     fn test_version_string_formatting() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
-        assert_eq!(version.to_version_string(), "openai/gpt-4/2024-01");
+        assert_eq!(version.to_version_string(), "openai/gpt-4-turbo-2024-01");
 
-        let version_no_ver = ModelVersion {
+        let version_anthropic = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_name: "claude-3".to_string(),
-            version: None,
-            api_version: Some("v1".to_string()),
+            model_id: "claude-3-opus-20240229".to_string(),
         };
 
         assert_eq!(
-            version_no_ver.to_version_string(),
-            "anthropic/claude-3/latest"
+            version_anthropic.to_version_string(),
+            "anthropic/claude-3-opus-20240229"
         );
     }
 
@@ -354,16 +268,12 @@ mod tests {
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let event = VersionChangeEvent::new(
@@ -377,9 +287,11 @@ mod tests {
         assert_eq!(event.to_version, v2);
         assert_eq!(
             event.change_type,
-            VersionComparison::ModelChanged {
-                from: "gpt-3.5-turbo".to_string(),
-                to: "gpt-4".to_string(),
+            VersionComparison::Changed {
+                from_provider: LlmProvider::OpenAI,
+                from_model_id: "gpt-3.5-turbo".to_string(),
+                to_provider: LlmProvider::OpenAI,
+                to_model_id: "gpt-4-turbo-2024-01".to_string(),
             }
         );
         assert_eq!(

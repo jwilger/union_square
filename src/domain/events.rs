@@ -220,9 +220,7 @@ mod tests {
         let session_id = SessionId::generate();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let event = DomainEvent::VersionFirstSeen {
@@ -232,6 +230,6 @@ mod tests {
         };
 
         assert!(event.entity_id().contains("version:"));
-        assert!(event.entity_id().contains("openai/gpt-4"));
+        assert!(event.entity_id().contains("openai/gpt-4-turbo-2024-01"));
     }
 }

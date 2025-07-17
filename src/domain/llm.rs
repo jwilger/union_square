@@ -29,13 +29,11 @@ pub enum LlmProvider {
     Other(String),
 }
 
-/// Model version information
+/// Model version information - treats model IDs as opaque strings
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
-    pub model_name: String,
-    pub version: Option<String>,
-    pub api_version: Option<String>,
+    pub model_id: String, // Opaque identifier from the provider
 }
 
 /// LLM request represents a single request to an LLM provider
@@ -142,9 +140,7 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let request = LlmRequest::new(
@@ -163,9 +159,7 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_name: "claude-3".to_string(),
-            version: None,
-            api_version: None,
+            model_id: "claude-3-opus-20240229".to_string(),
         };
 
         let mut request = LlmRequest::new(

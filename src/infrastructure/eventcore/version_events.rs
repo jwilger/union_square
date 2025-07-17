@@ -141,9 +141,7 @@ mod tests {
         let session_id = SessionId::generate();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         // First usage should emit VersionFirstSeen
@@ -175,15 +173,11 @@ mod tests {
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-3.5-turbo".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-3.5-turbo".to_string(),
         };
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         let change_event = adapter
@@ -213,9 +207,7 @@ mod tests {
         let session_id = SessionId::generate();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_name: "gpt-4".to_string(),
-            version: Some("2024-01".to_string()),
-            api_version: Some("v1".to_string()),
+            model_id: "gpt-4-turbo-2024-01".to_string(),
         };
 
         // First record the version
