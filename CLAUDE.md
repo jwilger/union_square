@@ -16,7 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Quick Reference by Task
 - **🆕 Starting new work?** → Read [🚨 Critical Rules](#critical-rules---always-apply), [Development Process Rules](#development-process-rules), [GitHub Issues Workflow](#github-issues-workflow)
 - **🔧 Setting up environment?** → Read [Development Commands](#development-commands)
-- **💻 Writing code?** → Read [Architecture](#architecture), [Type-Driven Development](#type-driven-development-philosophy)
+- **💻 Writing code?** → Read [Architecture](#architecture), [Type-Driven Development](#type-driven-development-philosophy), [EventCore Library Usage](#eventcore-library-usage)
+- **📊 Working with events?** → Read [EventCore Library Usage](#eventcore-library-usage)
 - **🏛️ Making architectural decisions?** → Read [Architecture Decision Records](#architecture-decision-records-adrs)
 - **📤 Making commits?** → Read [Commit Rules](#commit-rules), [Pre-commit Hooks](#pre-commit-hooks)
 - **🔄 Creating/updating PRs?** → Read [Pull Request Workflow](#pull-request-workflow), [🚨 Critical Rules](#critical-rules---always-apply)
@@ -30,14 +31,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. [Type-Driven Development Philosophy](#type-driven-development-philosophy)
 5. [Development Commands](#development-commands)
 6. [Architecture](#architecture)
-7. [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
-8. [Performance Targets](#performance-targets)
-9. [Pre-commit Hooks](#pre-commit-hooks)
-10. [Development Principles](#development-principles)
-11. [GitHub MCP Integration](#github-mcp-integration)
-12. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
-13. [Pull Request Workflow](#pull-request-workflow)
-14. [Memories](#memories) (Important reminders)
+7. [EventCore Library Usage](#eventcore-library-usage) (Event sourcing with EventCore)
+8. [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
+9. [Performance Targets](#performance-targets)
+10. [Pre-commit Hooks](#pre-commit-hooks)
+11. [Development Principles](#development-principles)
+12. [GitHub MCP Integration](#github-mcp-integration)
+13. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
+14. [Pull Request Workflow](#pull-request-workflow)
+15. [Memories](#memories) (Important reminders)
 
 ## Project Overview
 
@@ -200,6 +202,169 @@ sqlx migrate run
 ## Architecture
 
 [Project architecture to be defined]
+
+## EventCore Library Usage
+
+**IMPORTANT**: This project uses EventCore for event sourcing. When working with EventCore, fetch the full documentation at https://docs.rs/eventcore/0.1.3/eventcore/ for detailed information.
+
+### EventCore Overview
+
+EventCore is a Rust library for implementing multi-stream event sourcing with dynamic consistency boundaries. Key characteristics:
+
+- **No predefined aggregate boundaries** - Commands define their own consistency boundaries
+- **Multi-stream atomic operations** - Write events atomically across multiple streams
+- **Type-driven development** - Leverages Rust's type system for domain modeling
+- **Flexible consistency** - Each command decides which streams to read and write
+
+### Core Concepts
+
+1. **Commands**: Define business operations with:
+   - Stream selection (which streams to read)
+   - State folding (how to build state from events)
+   - Business logic (producing new events)
+
+2. **Events**: Domain events representing state changes
+   - Defined as enums with variants for different changes
+   - Must implement `Serialize`, `Deserialize`, `Send`, `Sync`
+   - Stored with metadata (stream ID, timestamp, version)
+
+3. **Event Stores**: Provide durable storage with:
+   - Multi-stream atomic writes
+   - Optimistic concurrency control
+   - Global event ordering
+   - PostgreSQL and in-memory implementations
+
+### Implementation Pattern
+
+```rust
+// 1. Define your events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum DomainEvent {
+    SomethingHappened { data: String },
+    SomethingElseOccurred { value: u64 },
+}
+
+// 2. Define your command with streams
+#[derive(Command, Clone)]
+struct MyCommand {
+    #[stream]
+    primary_stream: StreamId,
+    #[stream]
+    secondary_stream: StreamId,
+    // command data
+    amount: Money,
+}
+
+// 3. Implement CommandLogic
+#[async_trait]
+impl CommandLogic for MyCommand {
+    type State = MyState;  // Must impl Default + Send + Sync
+    type Event = DomainEvent;
+
+    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
+        // Apply events to state
+        match &event.payload {
+            DomainEvent::SomethingHappened { data } => {
+                state.update_with(data);
+            }
+            // ... handle other events
+        }
+    }
+
+    async fn handle(
+        &self,
+        read_streams: ReadStreams<Self::StreamSet>,
+        state: Self::State,
+        stream_resolver: &mut StreamResolver,
+    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+        // Business logic here
+        // Return events to be written
+        Ok(vec![
+            StreamWrite::new(&read_streams, self.primary_stream.clone(), 
+                DomainEvent::SomethingHappened { data: "test".into() })?,
+        ])
+    }
+}
+```
+
+### PostgreSQL Event Store Setup
+
+```rust
+// Configure PostgreSQL event store
+let config = PostgresConfig::builder()
+    .connection_string("postgres://...")
+    .build();
+
+let event_store = PostgresEventStore::new(config).await?;
+
+// Initialize database schema (run once)
+event_store.initialize().await?;
+
+// Run migrations if needed
+event_store.migrate().await?;
+```
+
+### Best Practices
+
+1. **Event Design**:
+   - Events should be immutable facts about what happened
+   - Use past tense naming (e.g., `OrderPlaced`, not `PlaceOrder`)
+   - Include all necessary data in the event
+   - Events should be self-contained
+
+2. **Command Design**:
+   - Commands represent intentions
+   - Define clear consistency boundaries via streams
+   - Keep commands focused on a single business operation
+   - Use the type system to enforce invariants
+
+3. **State Management**:
+   - State is ephemeral - rebuilt from events
+   - Keep state minimal and focused
+   - Use type-safe state representations
+   - Implement `Default` trait meaningfully
+
+4. **Testing**:
+   - Use `InMemoryEventStore` for unit tests
+   - Test command logic independently
+   - Verify event sequences match expectations
+   - Test error scenarios and edge cases
+
+5. **Production Considerations**:
+   - Always use PostgreSQL event store in production
+   - Configure retry strategies for resilience
+   - Monitor event store health
+   - Plan for event schema evolution
+
+### Common Patterns
+
+```rust
+// Multi-stream transaction
+#[derive(Command)]
+struct TransferFunds {
+    #[stream]
+    from_account: StreamId,
+    #[stream]
+    to_account: StreamId,
+    amount: Money,
+}
+
+// Event replay for projections
+let events = event_store.read_stream(stream_id, None).await?;
+let state = events.fold(State::default(), |mut state, event| {
+    command.apply(&mut state, &event);
+    state
+});
+```
+
+### Troubleshooting
+
+- **Concurrency conflicts**: Use optimistic concurrency control via stream versions
+- **Performance**: Batch event writes when possible
+- **Schema evolution**: Plan for event versioning from the start
+- **Testing**: Always test with both in-memory and PostgreSQL stores
+
+**Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/0.1.3/eventcore/
 
 ## Architecture Decision Records (ADRs)
 
