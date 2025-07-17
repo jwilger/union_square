@@ -1,43 +1,43 @@
-//! Test configuration and execution with version awareness
+//! Evaluation configuration and execution with version awareness
 //!
-//! This module provides functionality for configuring and executing tests
-//! with specific model versions, enabling version-aware testing scenarios.
+//! This module provides functionality for configuring and executing evaluations
+//! with specific model versions, enabling version-aware evaluation scenarios.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    application::event_store::EventStore,
+    application::event_store::UnionSquareEventStore,
     domain::{
         DomainEvent, ExtendedModelVersion, LlmProvider, SessionId, VersionChangeReason,
-        VersionTestConfig,
+        VersionEvaluationConfig,
     },
     error::Result,
 };
 
-/// Test execution context that manages version selection
-pub struct TestExecutionContext {
-    /// The configuration for this test run
-    pub config: VersionTestConfig,
+/// Evaluation execution context that manages version selection
+pub struct EvaluationExecutionContext {
+    /// The configuration for this evaluation run
+    pub config: VersionEvaluationConfig,
 
-    /// The session being tested
+    /// The session being evaluated
     pub session_id: SessionId,
 }
 
-/// Result of a test execution
+/// Result of an evaluation execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestExecutionResult {
-    /// The session that was tested
+pub struct EvaluationExecutionResult {
+    /// The session that was evaluated
     pub session_id: SessionId,
 
-    /// Version used for the test
+    /// Version used for the evaluation
     pub version_used: ExtendedModelVersion,
 
-    /// Whether the test passed
+    /// Whether the evaluation passed
     pub passed: bool,
 
-    /// Any error message if the test failed
+    /// Any error message if the evaluation failed
     pub error_message: Option<String>,
 
     /// Comparison results if comparison mode was enabled
@@ -57,30 +57,30 @@ pub struct ComparisonResults {
     pub comparison_data: serde_json::Value,
 }
 
-/// Service for executing version-aware tests
+/// Service for executing version-aware evaluations
 #[async_trait]
-pub trait TestExecutor: Send + Sync {
-    /// Execute a test with the given context
-    async fn execute_test(
+pub trait EvaluationExecutor: Send + Sync {
+    /// Execute an evaluation with the given context
+    async fn execute_evaluation(
         &self,
-        context: &TestExecutionContext,
+        context: &EvaluationExecutionContext,
         request_payload: &serde_json::Value,
-    ) -> Result<TestExecutionResult>;
+    ) -> Result<EvaluationExecutionResult>;
 
-    /// Get the appropriate model version for the test
+    /// Get the appropriate model version for the evaluation
     async fn resolve_version(
         &self,
-        context: &TestExecutionContext,
-        event_store: &dyn EventStore,
+        context: &EvaluationExecutionContext,
+        event_store: &dyn UnionSquareEventStore,
     ) -> Result<ExtendedModelVersion>;
 }
 
-/// Default implementation of the test executor
-pub struct DefaultTestExecutor {
+/// Default implementation of the evaluation executor
+pub struct DefaultEvaluationExecutor {
     /// Available provider clients
     provider_clients: HashMap<LlmProvider, Box<dyn ProviderClient + Send + Sync>>,
     /// Event store for version resolution
-    event_store: Box<dyn EventStore + Send + Sync>,
+    event_store: Box<dyn UnionSquareEventStore + Send + Sync>,
 }
 
 /// Trait for provider-specific clients
@@ -94,9 +94,9 @@ pub trait ProviderClient: Send + Sync {
     ) -> Result<serde_json::Value>;
 }
 
-impl TestExecutionContext {
-    /// Create a new test execution context
-    pub fn new(config: VersionTestConfig, session_id: SessionId) -> Self {
+impl EvaluationExecutionContext {
+    /// Create a new evaluation execution context
+    pub fn new(config: VersionEvaluationConfig, session_id: SessionId) -> Self {
         Self { config, session_id }
     }
 
@@ -116,9 +116,9 @@ impl TestExecutionContext {
     }
 }
 
-impl DefaultTestExecutor {
-    /// Create a new test executor with an event store
-    pub fn new(event_store: Box<dyn EventStore + Send + Sync>) -> Self {
+impl DefaultEvaluationExecutor {
+    /// Create a new evaluation executor with an event store
+    pub fn new(event_store: Box<dyn UnionSquareEventStore + Send + Sync>) -> Self {
         Self {
             provider_clients: HashMap::new(),
             event_store,
@@ -136,13 +136,13 @@ impl DefaultTestExecutor {
 }
 
 #[async_trait]
-impl TestExecutor for DefaultTestExecutor {
-    async fn execute_test(
+impl EvaluationExecutor for DefaultEvaluationExecutor {
+    async fn execute_evaluation(
         &self,
-        context: &TestExecutionContext,
+        context: &EvaluationExecutionContext,
         request_payload: &serde_json::Value,
-    ) -> Result<TestExecutionResult> {
-        // Get the version to use for this test
+    ) -> Result<EvaluationExecutionResult> {
+        // Get the version to use for this evaluation
         let version = self
             .resolve_version(context, self.event_store.as_ref())
             .await?;
@@ -160,14 +160,14 @@ impl TestExecutor for DefaultTestExecutor {
 
         // Execute the request
         match client.send_request(&version, request_payload).await {
-            Ok(_response) => Ok(TestExecutionResult {
+            Ok(_response) => Ok(EvaluationExecutionResult {
                 session_id: context.session_id.clone(),
                 version_used: version,
                 passed: true,
                 error_message: None,
                 comparison_results: None,
             }),
-            Err(e) => Ok(TestExecutionResult {
+            Err(e) => Ok(EvaluationExecutionResult {
                 session_id: context.session_id.clone(),
                 version_used: version,
                 passed: false,
@@ -179,8 +179,8 @@ impl TestExecutor for DefaultTestExecutor {
 
     async fn resolve_version(
         &self,
-        context: &TestExecutionContext,
-        event_store: &dyn EventStore,
+        context: &EvaluationExecutionContext,
+        event_store: &dyn UnionSquareEventStore,
     ) -> Result<ExtendedModelVersion> {
         // If a target version is explicitly set, use it
         if let Some(target) = context.target_version() {
@@ -256,10 +256,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execution_context_creation() {
-        let config = VersionTestConfig::default();
+    async fn test_evaluation_context_creation() {
+        let config = VersionEvaluationConfig::default();
         let session_id = SessionId::generate();
-        let context = TestExecutionContext::new(config, session_id.clone());
+        let context = EvaluationExecutionContext::new(config, session_id.clone());
 
         assert_eq!(context.session_id, session_id);
         assert!(context.should_use_original());
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execution_context_with_target_version() {
+    async fn test_evaluation_context_with_target_version() {
         let target_version = ExtendedModelVersion::new(
             LlmProvider::OpenAI,
             ModelName::try_new("gpt-4").unwrap(),
@@ -279,25 +279,25 @@ mod tests {
             },
         );
 
-        let config = VersionTestConfig {
+        let config = VersionEvaluationConfig {
             use_original_version: false,
             target_version: Some(target_version.clone()),
             comparison_mode: None,
         };
 
         let session_id = SessionId::generate();
-        let context = TestExecutionContext::new(config, session_id);
+        let context = EvaluationExecutionContext::new(config, session_id);
 
         assert!(!context.should_use_original());
         assert_eq!(context.target_version(), Some(&target_version));
     }
 
     #[tokio::test]
-    async fn test_executor_with_mock_client() {
+    async fn test_evaluation_executor_with_mock_client() {
         use crate::application::event_store::test_support::InMemoryEventStore;
 
         let event_store = Box::new(InMemoryEventStore::new());
-        let mut executor = DefaultTestExecutor::new(event_store);
+        let mut executor = DefaultEvaluationExecutor::new(event_store);
 
         let mock_client = MockProviderClient::new().with_response(
             "gpt-4/1106-preview (API: 2023-12-01)",
@@ -316,15 +316,15 @@ mod tests {
             },
         );
 
-        let config = VersionTestConfig {
+        let config = VersionEvaluationConfig {
             use_original_version: false,
             target_version: Some(target_version),
             comparison_mode: None,
         };
 
-        let context = TestExecutionContext::new(config, SessionId::generate());
+        let context = EvaluationExecutionContext::new(config, SessionId::generate());
         let result = executor
-            .execute_test(&context, &serde_json::json!({ "prompt": "test" }))
+            .execute_evaluation(&context, &serde_json::json!({ "prompt": "test" }))
             .await
             .unwrap();
 
@@ -374,9 +374,9 @@ mod tests {
         };
         test_event_store.store_event(event).await.unwrap();
 
-        let executor = DefaultTestExecutor::new(Box::new(test_event_store));
-        let config = VersionTestConfig::default();
-        let context = TestExecutionContext::new(config, session_id);
+        let executor = DefaultEvaluationExecutor::new(Box::new(test_event_store));
+        let config = VersionEvaluationConfig::default();
+        let context = EvaluationExecutionContext::new(config, session_id);
 
         let resolved = executor
             .resolve_version(&context, executor.event_store.as_ref())

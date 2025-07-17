@@ -102,8 +102,8 @@ fn capture_openai_version(
         }
     })?;
 
-    // Parse model version from model name (e.g., "gpt-4-1106-preview")
-    let model_version = extract_openai_model_version(&model_name);
+    // Store raw model name without parsing - version info comes from explicit API fields
+    let model_version = None;
 
     Ok(ExtendedModelVersion::new(
         LlmProvider::OpenAI,
@@ -116,34 +116,9 @@ fn capture_openai_version(
     ))
 }
 
-/// Extract model version from OpenAI model names
-fn extract_openai_model_version(model_name: &ModelName) -> Option<ModelVersionString> {
-    let name = model_name.as_ref();
-
-    // Common patterns: gpt-4-1106-preview, gpt-3.5-turbo-0613
-    // We want to extract the version part after the model identifier
-
-    // Handle specific patterns
-    if let Some(version) = name.strip_prefix("gpt-3.5-turbo-") {
-        if !version.is_empty() {
-            return ModelVersionString::try_new(version.to_string()).ok();
-        }
-    } else if let Some(version) = name.strip_prefix("gpt-4-turbo-") {
-        if !version.is_empty() {
-            return ModelVersionString::try_new(version.to_string()).ok();
-        }
-    } else if let Some(version) = name.strip_prefix("gpt-4-") {
-        if !version.is_empty() {
-            return ModelVersionString::try_new(version.to_string()).ok();
-        }
-    } else if let Some(version) = name.strip_prefix("gpt-3-") {
-        if !version.is_empty() {
-            return ModelVersionString::try_new(version.to_string()).ok();
-        }
-    }
-
-    None
-}
+// Note: We no longer parse version information from model names to avoid
+// fragility when providers change their naming schemes. Version information
+// should come from explicit API fields (headers, response metadata) when available.
 
 /// Capture Anthropic version information
 fn capture_anthropic_version(
@@ -180,11 +155,13 @@ fn capture_anthropic_version(
         }
     })?;
 
-    // Extract model version from model name (e.g., "claude-3-opus-20240229")
-    let model_version = extract_anthropic_model_version(&model_name).ok_or_else(|| {
-        VersionCaptureError::ParsingError(
-            "Could not extract version from Anthropic model name".to_string(),
-        )
+    // Store raw model name without parsing - use explicit version fields when available
+    let model_version = ModelVersionString::try_new("unknown".to_string()).map_err(|e| {
+        VersionCaptureError::InvalidFieldValue {
+            field: "model_version".to_string(),
+            value: "unknown".to_string(),
+            message: format!("Original error: {e}"),
+        }
     })?;
 
     Ok(ExtendedModelVersion::new(
@@ -198,52 +175,8 @@ fn capture_anthropic_version(
     ))
 }
 
-/// Extract model version from Anthropic model names
-fn extract_anthropic_model_version(model_name: &ModelName) -> Option<ModelVersionString> {
-    let name = model_name.as_ref();
-
-    // Common patterns:
-    // - claude-3-opus-20240229
-    // - claude-3-5-sonnet-20241022
-    // - claude-2.1
-    // - claude-instant-1.2
-
-    let parts: Vec<&str> = name.split('-').collect();
-
-    // First, check if the last part is a date (8 digits)
-    if let Some(last_part) = parts.last() {
-        if last_part.len() == 8 && last_part.chars().all(|c| c.is_numeric()) {
-            // Validate it looks like a date (YYYYMMDD)
-            if let Ok(year) = last_part[0..4].parse::<u32>() {
-                if let Ok(month) = last_part[4..6].parse::<u32>() {
-                    if let Ok(day) = last_part[6..8].parse::<u32>() {
-                        if (2020..=2099).contains(&year)
-                            && (1..=12).contains(&month)
-                            && (1..=31).contains(&day)
-                        {
-                            return ModelVersionString::try_new(last_part.to_string()).ok();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Check for version patterns like "2.1" or "1.2"
-    if let Some(pos) = name.rfind('-') {
-        let potential_version = &name[pos + 1..];
-        if potential_version.contains('.')
-            && potential_version
-                .chars()
-                .all(|c| c.is_numeric() || c == '.')
-        {
-            return ModelVersionString::try_new(potential_version.to_string()).ok();
-        }
-    }
-
-    // If no version found, return None
-    None
-}
+// Removed complex model name parsing functions to avoid fragility.
+// Model names are stored as-is, version info comes from explicit API fields.
 
 /// Capture Vertex AI version information
 fn capture_vertex_ai_version(
@@ -400,10 +333,8 @@ mod tests {
                 api_version,
                 system_fingerprint,
             } => {
-                assert_eq!(
-                    model_version.as_ref().map(|v| v.as_ref()),
-                    Some("1106-preview")
-                );
+                // We no longer parse version from model name
+                assert!(model_version.is_none());
                 assert_eq!(api_version.as_ref(), "2023-12-01");
                 assert_eq!(system_fingerprint, Some("fp_123456789".to_string()));
             }
@@ -433,7 +364,8 @@ mod tests {
                 api_version,
                 ..
             } => {
-                assert_eq!(model_version.as_ref(), "20240229");
+                // We use "unknown" as a placeholder since we don't parse model names
+                assert_eq!(model_version.as_ref(), "unknown");
                 assert_eq!(api_version.as_ref(), "2023-06-01");
             }
             _ => panic!("Expected Anthropic version info"),
@@ -458,28 +390,44 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_openai_model_version() {
-        let model_name = ModelName::try_new("gpt-4-1106-preview".to_string()).unwrap();
-        let version = extract_openai_model_version(&model_name);
-        assert_eq!(version.as_ref().map(|v| v.as_ref()), Some("1106-preview"));
+    fn test_openai_version_capture_without_parsing() {
+        let capture = DefaultVersionCapture;
+        let mut headers = HashMap::new();
+        headers.insert("openai-version".to_string(), "2023-12-01".to_string());
 
-        let model_name = ModelName::try_new("gpt-3.5-turbo-0613".to_string()).unwrap();
-        let version = extract_openai_model_version(&model_name);
-        assert_eq!(version.as_ref().map(|v| v.as_ref()), Some("0613"));
+        let response_body = json!({"model": "gpt-4-1106-preview"});
 
-        let model_name = ModelName::try_new("gpt-4".to_string()).unwrap();
-        let version = extract_openai_model_version(&model_name);
-        assert!(version.is_none());
+        let result = capture.capture_version(&LlmProvider::OpenAI, &headers, &response_body);
+        assert!(result.is_ok());
+
+        let version = result.unwrap();
+        // We no longer parse version from model name, so model_version should be None
+        match version.version_info {
+            ProviderVersionInfo::OpenAI { model_version, .. } => {
+                assert!(model_version.is_none());
+            }
+            _ => panic!("Expected OpenAI version info"),
+        }
     }
 
     #[test]
-    fn test_extract_anthropic_model_version() {
-        let model_name = ModelName::try_new("claude-3-opus-20240229".to_string()).unwrap();
-        let version = extract_anthropic_model_version(&model_name);
-        assert_eq!(version.as_ref().map(|v| v.as_ref()), Some("20240229"));
+    fn test_anthropic_version_capture_without_parsing() {
+        let capture = DefaultVersionCapture;
+        let mut headers = HashMap::new();
+        headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
 
-        let model_name = ModelName::try_new("claude-3-sonnet".to_string()).unwrap();
-        let version = extract_anthropic_model_version(&model_name);
-        assert!(version.is_none());
+        let response_body = json!({"model": "claude-3-opus-20240229"});
+
+        let result = capture.capture_version(&LlmProvider::Anthropic, &headers, &response_body);
+        assert!(result.is_ok());
+
+        let version = result.unwrap();
+        // We store "unknown" as a placeholder since we don't parse model names anymore
+        match version.version_info {
+            ProviderVersionInfo::Anthropic { model_version, .. } => {
+                assert_eq!(model_version.as_ref(), "unknown");
+            }
+            _ => panic!("Expected Anthropic version info"),
+        }
     }
 }

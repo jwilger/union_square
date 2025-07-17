@@ -147,7 +147,7 @@ pub struct VersionChangeEvent {
 }
 
 /// Reasons for model version changes
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionChangeReason {
     /// Initial version detection for session
     InitialDetection,
@@ -168,13 +168,13 @@ pub enum VersionChangeReason {
     Other(String),
 }
 
-/// Configuration for version-aware test execution
+/// Configuration for version-aware evaluation execution
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VersionTestConfig {
-    /// Run tests against original recorded version
+pub struct VersionEvaluationConfig {
+    /// Run evaluations against original recorded version
     pub use_original_version: bool,
 
-    /// Specific version to test against (overrides original)
+    /// Specific version to evaluate against (overrides original)
     pub target_version: Option<ExtendedModelVersion>,
 
     /// Compare results between versions
@@ -291,7 +291,7 @@ impl fmt::Display for ExtendedModelVersion {
     }
 }
 
-impl Default for VersionTestConfig {
+impl Default for VersionEvaluationConfig {
     fn default() -> Self {
         Self {
             use_original_version: true,

@@ -4,15 +4,20 @@
 //! handling all EventCore interactions for audit logging and event sourcing.
 
 use async_trait::async_trait;
+use eventcore::StreamId;
 
 use crate::{
     domain::{DomainEvent, SessionId, VersionChangeEvent},
     error::Result,
 };
 
-/// Trait for storing and retrieving domain events
+/// Union Square specific event store interface
+///
+/// This provides domain-specific methods while using EventCore's EventStore internally.
+/// We maintain this interface for domain-specific operations while leveraging EventCore's
+/// multi-stream capabilities.
 #[async_trait]
-pub trait EventStore: Send + Sync {
+pub trait UnionSquareEventStore: Send + Sync {
     /// Store a domain event
     async fn store_event(&self, event: DomainEvent) -> Result<()>;
 
@@ -23,6 +28,14 @@ pub trait EventStore: Send + Sync {
     async fn get_version_changes(&self, session_id: &SessionId) -> Result<Vec<VersionChangeEvent>>;
 }
 
+/// Convert SessionId to EventCore StreamId
+impl From<&SessionId> for StreamId {
+    fn from(session_id: &SessionId) -> Self {
+        StreamId::try_new(format!("session-{session_id}"))
+            .expect("Session ID should always be valid for stream ID")
+    }
+}
+
 /// In-memory event store for testing
 #[cfg(test)]
 pub mod test_support {
@@ -31,6 +44,10 @@ pub mod test_support {
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
+    /// Simple in-memory event store for Union Square domain events
+    ///
+    /// This is a temporary implementation that provides a domain-specific interface
+    /// while we work on proper EventCore integration.
     pub struct InMemoryEventStore {
         events: Arc<RwLock<HashMap<String, Vec<DomainEvent>>>>,
     }
@@ -50,7 +67,7 @@ pub mod test_support {
     }
 
     #[async_trait]
-    impl EventStore for InMemoryEventStore {
+    impl UnionSquareEventStore for InMemoryEventStore {
         async fn store_event(&self, event: DomainEvent) -> Result<()> {
             let session_id = event.session_id().clone();
 

@@ -14,24 +14,11 @@ use crate::domain::{
 #[cfg(test)]
 use crate::domain::LlmProvider;
 
-/// Aggregate ID type for session-related events
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SessionAggregateId(pub SessionId);
-
-impl From<SessionId> for SessionAggregateId {
-    fn from(id: SessionId) -> Self {
-        Self(id)
-    }
-}
-
-impl std::fmt::Display for SessionAggregateId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "session:{}", self.0)
-    }
-}
+// Note: We use SessionId directly as the stream ID for EventCore.
+// This avoids unnecessary wrapping while maintaining clear domain boundaries.
 
 /// All domain events in the Union Square system
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DomainEvent {
     /// A new session has been started

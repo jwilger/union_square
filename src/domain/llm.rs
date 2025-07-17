@@ -30,7 +30,7 @@ pub enum LlmProvider {
 }
 
 /// Model version information
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
     pub model_name: String,
@@ -39,7 +39,7 @@ pub struct ModelVersion {
 }
 
 /// LLM request represents a single request to an LLM provider
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmRequest {
     pub id: RequestId,
     pub session_id: crate::domain::SessionId,
@@ -51,7 +51,7 @@ pub struct LlmRequest {
 }
 
 /// LLM response represents the response from an LLM provider
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmResponse {
     pub request_id: RequestId,
     pub response_text: String,
@@ -60,7 +60,7 @@ pub struct LlmResponse {
 }
 
 /// Status of an LLM request
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestStatus {
     Pending,
     InProgress,
@@ -70,7 +70,7 @@ pub enum RequestStatus {
 }
 
 /// Metadata associated with an LLM response
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
     pub tokens_used: Option<u32>,
     pub cost_cents: Option<u32>,
