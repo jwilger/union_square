@@ -52,7 +52,7 @@ impl TrackedVersion {
 }
 
 /// Version comparison result
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionComparison {
     Same,
     Changed {

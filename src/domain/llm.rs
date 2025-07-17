@@ -43,7 +43,7 @@ impl LlmProvider {
 }
 
 /// Model version information - treats model IDs as opaque strings
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
     pub model_id: String, // Opaque identifier from the provider
@@ -81,7 +81,7 @@ pub enum RequestStatus {
 }
 
 /// Metadata associated with an LLM response
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
     pub tokens_used: Option<u32>,
     pub cost_cents: Option<u32>,

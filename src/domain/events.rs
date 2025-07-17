@@ -15,7 +15,7 @@ use crate::domain::{
 };
 
 /// All domain events in the Union Square system
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum DomainEvent {
     // Session Events
@@ -183,6 +183,14 @@ impl DomainEvent {
     }
 }
 
+// EventCore requires TryFrom<&'a ES::Event> for CommandExecutor
+impl<'a> TryFrom<&'a DomainEvent> for DomainEvent {
+    type Error = &'static str;
+
+    fn try_from(event: &'a DomainEvent) -> Result<Self, Self::Error> {
+        Ok(event.clone())
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

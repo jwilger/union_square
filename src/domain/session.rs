@@ -32,7 +32,7 @@ pub struct Session {
 }
 
 /// Status of a session
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionStatus {
     Active,
     Completed,
