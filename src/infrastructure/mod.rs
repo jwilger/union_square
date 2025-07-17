@@ -5,5 +5,6 @@
 //! - Database access via SQLx
 
 pub mod database;
+pub mod eventcore;
 
 pub use database::*;
