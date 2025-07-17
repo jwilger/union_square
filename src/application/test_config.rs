@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use crate::{
     application::event_store::EventStore,
     domain::{
-        DefaultVersionCapture, DomainEvent, ExtendedModelVersion, LlmProvider, SessionId,
-        VersionCapture, VersionChangeReason, VersionTestConfig,
+        DomainEvent, ExtendedModelVersion, LlmProvider, SessionId, VersionChangeReason,
+        VersionTestConfig,
     },
     error::Result,
 };
@@ -23,10 +23,6 @@ pub struct TestExecutionContext {
 
     /// The session being tested
     pub session_id: SessionId,
-
-    /// Version capture implementation
-    #[allow(dead_code)]
-    version_capture: Box<dyn VersionCapture + Send + Sync>,
 }
 
 /// Result of a test execution
@@ -80,10 +76,11 @@ pub trait TestExecutor: Send + Sync {
 }
 
 /// Default implementation of the test executor
-#[derive(Default)]
 pub struct DefaultTestExecutor {
     /// Available provider clients
     provider_clients: HashMap<LlmProvider, Box<dyn ProviderClient + Send + Sync>>,
+    /// Event store for version resolution
+    event_store: Box<dyn EventStore + Send + Sync>,
 }
 
 /// Trait for provider-specific clients
@@ -100,24 +97,7 @@ pub trait ProviderClient: Send + Sync {
 impl TestExecutionContext {
     /// Create a new test execution context
     pub fn new(config: VersionTestConfig, session_id: SessionId) -> Self {
-        Self {
-            config,
-            session_id,
-            version_capture: Box::new(DefaultVersionCapture),
-        }
-    }
-
-    /// Create with a custom version capture implementation
-    pub fn with_version_capture(
-        config: VersionTestConfig,
-        session_id: SessionId,
-        version_capture: Box<dyn VersionCapture + Send + Sync>,
-    ) -> Self {
-        Self {
-            config,
-            session_id,
-            version_capture,
-        }
+        Self { config, session_id }
     }
 
     /// Check if we should use the original version
@@ -137,9 +117,12 @@ impl TestExecutionContext {
 }
 
 impl DefaultTestExecutor {
-    /// Create a new test executor
-    pub fn new() -> Self {
-        Self::default()
+    /// Create a new test executor with an event store
+    pub fn new(event_store: Box<dyn EventStore + Send + Sync>) -> Self {
+        Self {
+            provider_clients: HashMap::new(),
+            event_store,
+        }
     }
 
     /// Register a provider client
@@ -160,7 +143,9 @@ impl TestExecutor for DefaultTestExecutor {
         request_payload: &serde_json::Value,
     ) -> Result<TestExecutionResult> {
         // Get the version to use for this test
-        let version = self.resolve_version(context, &DummyEventStore).await?;
+        let version = self
+            .resolve_version(context, self.event_store.as_ref())
+            .await?;
 
         // Get the appropriate client for the provider
         let client = self
@@ -228,27 +213,6 @@ impl TestExecutor for DefaultTestExecutor {
         Err(crate::error::Error::application(
             "No version resolution strategy matched",
         ))
-    }
-}
-
-// Dummy event store for testing
-struct DummyEventStore;
-
-#[async_trait]
-impl EventStore for DummyEventStore {
-    async fn store_event(&self, _event: DomainEvent) -> Result<()> {
-        Ok(())
-    }
-
-    async fn get_session_events(&self, _session_id: &SessionId) -> Result<Vec<DomainEvent>> {
-        Ok(vec![])
-    }
-
-    async fn get_version_changes(
-        &self,
-        _session_id: &SessionId,
-    ) -> Result<Vec<crate::domain::VersionChangeEvent>> {
-        Ok(vec![])
     }
 }
 
@@ -330,7 +294,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_executor_with_mock_client() {
-        let mut executor = DefaultTestExecutor::new();
+        use crate::application::event_store::test_support::InMemoryEventStore;
+
+        let event_store = Box::new(InMemoryEventStore::new());
+        let mut executor = DefaultTestExecutor::new(event_store);
 
         let mock_client = MockProviderClient::new().with_response(
             "gpt-4/1106-preview (API: 2023-12-01)",
@@ -393,13 +360,26 @@ mod tests {
 
         event_store.store_event(event).await.unwrap();
 
-        // Test resolution
-        let executor = DefaultTestExecutor::new();
+        // Test resolution - create a new executor with a new event store instance
+        // since we can't clone InMemoryEventStore
+        let test_event_store = InMemoryEventStore::new();
+
+        // Re-add the event to the new store
+        let event = DomainEvent::VersionChanged {
+            session_id: session_id.clone(),
+            from_version: None,
+            to_version: version.clone(),
+            reason: VersionChangeReason::InitialDetection,
+            occurred_at: Utc::now(),
+        };
+        test_event_store.store_event(event).await.unwrap();
+
+        let executor = DefaultTestExecutor::new(Box::new(test_event_store));
         let config = VersionTestConfig::default();
         let context = TestExecutionContext::new(config, session_id);
 
         let resolved = executor
-            .resolve_version(&context, &event_store)
+            .resolve_version(&context, executor.event_store.as_ref())
             .await
             .unwrap();
         assert_eq!(resolved, version);

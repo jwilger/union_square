@@ -27,8 +27,12 @@ pub enum VersionCaptureError {
     #[error("Missing required field: {field}")]
     MissingField { field: String },
 
-    #[error("Invalid field value: {field} = {value}")]
-    InvalidFieldValue { field: String, value: String },
+    #[error("Invalid field value: {field} = {value}. {message}")]
+    InvalidFieldValue {
+        field: String,
+        value: String,
+        message: String,
+    },
 
     #[error("Unsupported provider: {0:?}")]
     UnsupportedProvider(LlmProvider),
@@ -70,10 +74,11 @@ fn capture_openai_version(
             field: "model".to_string(),
         })?;
 
-    let model_name = ModelName::try_new(model_name.to_string()).map_err(|_e| {
+    let model_name = ModelName::try_new(model_name.to_string()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "model".to_string(),
             value: model_name.to_string(),
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -89,10 +94,11 @@ fn capture_openai_version(
         .cloned()
         .unwrap_or_else(|| "2023-12-01".to_string());
 
-    let api_version = ApiVersion::try_new(api_version.clone()).map_err(|_e| {
+    let api_version = ApiVersion::try_new(api_version.clone()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "api_version".to_string(),
             value: api_version,
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -152,10 +158,11 @@ fn capture_anthropic_version(
             field: "model".to_string(),
         })?;
 
-    let model_name = ModelName::try_new(model_name.to_string()).map_err(|_e| {
+    let model_name = ModelName::try_new(model_name.to_string()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "model".to_string(),
             value: model_name.to_string(),
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -165,10 +172,11 @@ fn capture_anthropic_version(
         .cloned()
         .unwrap_or_else(|| "2023-06-01".to_string());
 
-    let api_version = ApiVersion::try_new(api_version.clone()).map_err(|_e| {
+    let api_version = ApiVersion::try_new(api_version.clone()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "api_version".to_string(),
             value: api_version,
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -194,14 +202,46 @@ fn capture_anthropic_version(
 fn extract_anthropic_model_version(model_name: &ModelName) -> Option<ModelVersionString> {
     let name = model_name.as_ref();
 
-    // Pattern: claude-3-opus-20240229
-    if let Some(version) = name.split('-').next_back() {
-        // Check if it looks like a date (8 digits)
-        if version.len() == 8 && version.chars().all(|c| c.is_numeric()) {
-            return ModelVersionString::try_new(version.to_string()).ok();
+    // Common patterns:
+    // - claude-3-opus-20240229
+    // - claude-3-5-sonnet-20241022
+    // - claude-2.1
+    // - claude-instant-1.2
+
+    let parts: Vec<&str> = name.split('-').collect();
+
+    // First, check if the last part is a date (8 digits)
+    if let Some(last_part) = parts.last() {
+        if last_part.len() == 8 && last_part.chars().all(|c| c.is_numeric()) {
+            // Validate it looks like a date (YYYYMMDD)
+            if let Ok(year) = last_part[0..4].parse::<u32>() {
+                if let Ok(month) = last_part[4..6].parse::<u32>() {
+                    if let Ok(day) = last_part[6..8].parse::<u32>() {
+                        if (2020..=2099).contains(&year)
+                            && (1..=12).contains(&month)
+                            && (1..=31).contains(&day)
+                        {
+                            return ModelVersionString::try_new(last_part.to_string()).ok();
+                        }
+                    }
+                }
+            }
         }
     }
 
+    // Check for version patterns like "2.1" or "1.2"
+    if let Some(pos) = name.rfind('-') {
+        let potential_version = &name[pos + 1..];
+        if potential_version.contains('.')
+            && potential_version
+                .chars()
+                .all(|c| c.is_numeric() || c == '.')
+        {
+            return ModelVersionString::try_new(potential_version.to_string()).ok();
+        }
+    }
+
+    // If no version found, return None
     None
 }
 
@@ -225,10 +265,11 @@ fn capture_vertex_ai_version(
             field: "metadata.model".to_string(),
         })?;
 
-    let model_name = ModelName::try_new(model_name.to_string()).map_err(|_e| {
+    let model_name = ModelName::try_new(model_name.to_string()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "model".to_string(),
             value: model_name.to_string(),
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -237,10 +278,11 @@ fn capture_vertex_ai_version(
         .and_then(|v| v.as_str())
         .unwrap_or("latest");
 
-    let version = ModelVersionString::try_new(version.to_string()).map_err(|_e| {
+    let version = ModelVersionString::try_new(version.to_string()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "version".to_string(),
             value: version.to_string(),
+            message: format!("Original error: {e}"),
         }
     })?;
 
@@ -266,10 +308,14 @@ fn capture_azure_version(
     response_body: &Value,
 ) -> Result<ExtendedModelVersion, VersionCaptureError> {
     // Azure uses similar format to OpenAI but with deployment names
-    capture_openai_version(headers, response_body).map(|mut version| {
-        version.provider = LlmProvider::Azure;
-        version
-    })
+    let openai_version = capture_openai_version(headers, response_body)?;
+
+    // Create a new version with Azure as the provider
+    Ok(ExtendedModelVersion::new(
+        LlmProvider::Azure,
+        openai_version.model_name,
+        openai_version.version_info,
+    ))
 }
 
 /// Capture generic version information for unknown providers
@@ -288,10 +334,11 @@ fn capture_generic_version(
             field: "model".to_string(),
         })?;
 
-    let model_name = ModelName::try_new(model_name.to_string()).map_err(|_e| {
+    let model_name = ModelName::try_new(model_name.to_string()).map_err(|e| {
         VersionCaptureError::InvalidFieldValue {
             field: "model".to_string(),
             value: model_name.to_string(),
+            message: format!("Original error: {e}"),
         }
     })?;
 
