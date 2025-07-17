@@ -119,16 +119,13 @@ body {
     animation: float 3s ease-in-out infinite;
 }
 
-.nav-brand .logo {
+.nav-brand .logo-container {
     width: 60px;
     height: 60px;
-    border-radius: 8px;
-    padding: 4px;
-    animation: none;
     position: relative;
 }
 
-.nav-brand .logo::before {
+.nav-brand .logo-container::before {
     content: '';
     position: absolute;
     inset: var(--gradient-inset-negative);
@@ -137,6 +134,16 @@ body {
     z-index: -1;
     opacity: 0.5;
     filter: blur(var(--gradient-blur-size));
+}
+
+.nav-brand .logo {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    padding: 4px;
+    animation: none;
+    position: relative;
+    z-index: 1;
 }
 
 @keyframes float {
