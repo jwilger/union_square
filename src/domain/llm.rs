@@ -29,6 +29,19 @@ pub enum LlmProvider {
     Other(String),
 }
 
+impl LlmProvider {
+    /// Get the string representation of the provider
+    pub fn as_str(&self) -> &str {
+        match self {
+            LlmProvider::OpenAI => "openai",
+            LlmProvider::Anthropic => "anthropic",
+            LlmProvider::Google => "google",
+            LlmProvider::Azure => "azure",
+            LlmProvider::Other(name) => name,
+        }
+    }
+}
+
 /// Model version information - treats model IDs as opaque strings
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelVersion {

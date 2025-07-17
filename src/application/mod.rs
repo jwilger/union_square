@@ -4,7 +4,5 @@
 //! domain logic and infrastructure components.
 
 pub mod app;
-pub mod version_tracking;
 
 pub use app::Application;
-pub use version_tracking::{VersionStats, VersionTestService, VersionTrackingService};

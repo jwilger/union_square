@@ -80,17 +80,7 @@ impl ModelVersion {
 
     /// Create a version identifier string for display
     pub fn to_version_string(&self) -> String {
-        format!("{}/{}", self.provider_string(), self.model_id)
-    }
-
-    fn provider_string(&self) -> &str {
-        match &self.provider {
-            LlmProvider::OpenAI => "openai",
-            LlmProvider::Anthropic => "anthropic",
-            LlmProvider::Google => "google",
-            LlmProvider::Azure => "azure",
-            LlmProvider::Other(name) => name,
-        }
+        format!("{}/{}", self.provider.as_str(), self.model_id)
     }
 }
 

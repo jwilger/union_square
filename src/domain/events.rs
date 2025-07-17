@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
+    entity::EntityId,
     llm::{ModelVersion, RequestId, ResponseMetadata},
     session::{SessionId, SessionStatus},
     user::{EmailAddress, UserId},
@@ -79,6 +80,11 @@ pub enum DomainEvent {
         reason: Option<String>,
         changed_at: DateTime<Utc>,
     },
+    VersionUsageRecorded {
+        model_version: ModelVersion,
+        session_id: SessionId,
+        recorded_at: DateTime<Utc>,
+    },
     VersionDeactivated {
         model_version: ModelVersion,
         reason: Option<String>,
@@ -117,6 +123,7 @@ impl DomainEvent {
             DomainEvent::LlmRequestCancelled { cancelled_at, .. } => *cancelled_at,
             DomainEvent::VersionFirstSeen { first_seen_at, .. } => *first_seen_at,
             DomainEvent::VersionChanged { changed_at, .. } => *changed_at,
+            DomainEvent::VersionUsageRecorded { recorded_at, .. } => *recorded_at,
             DomainEvent::VersionDeactivated { deactivated_at, .. } => *deactivated_at,
             DomainEvent::UserCreated { created_at, .. } => *created_at,
             DomainEvent::UserActivated { activated_at, .. } => *activated_at,
@@ -125,49 +132,52 @@ impl DomainEvent {
     }
 
     /// Get the primary entity ID associated with this event
-    pub fn entity_id(&self) -> String {
+    pub fn entity_id(&self) -> EntityId {
         match self {
             DomainEvent::SessionStarted { session_id, .. } => {
-                format!("session:{}", session_id.clone().into_inner())
+                EntityId::session(session_id.clone().into_inner())
             }
             DomainEvent::SessionEnded { session_id, .. } => {
-                format!("session:{}", session_id.clone().into_inner())
+                EntityId::session(session_id.clone().into_inner())
             }
             DomainEvent::SessionTagged { session_id, .. } => {
-                format!("session:{}", session_id.clone().into_inner())
+                EntityId::session(session_id.clone().into_inner())
             }
             DomainEvent::LlmRequestReceived { request_id, .. } => {
-                format!("request:{}", request_id.clone().into_inner())
+                EntityId::request(request_id.clone().into_inner())
             }
             DomainEvent::LlmRequestStarted { request_id, .. } => {
-                format!("request:{}", request_id.clone().into_inner())
+                EntityId::request(request_id.clone().into_inner())
             }
             DomainEvent::LlmResponseReceived { request_id, .. } => {
-                format!("request:{}", request_id.clone().into_inner())
+                EntityId::request(request_id.clone().into_inner())
             }
             DomainEvent::LlmRequestFailed { request_id, .. } => {
-                format!("request:{}", request_id.clone().into_inner())
+                EntityId::request(request_id.clone().into_inner())
             }
             DomainEvent::LlmRequestCancelled { request_id, .. } => {
-                format!("request:{}", request_id.clone().into_inner())
+                EntityId::request(request_id.clone().into_inner())
             }
             DomainEvent::VersionFirstSeen { model_version, .. } => {
-                format!("version:{}", model_version.to_version_string())
+                EntityId::version(&model_version.to_version_string())
             }
             DomainEvent::VersionChanged { change_id, .. } => {
-                format!("version_change:{}", change_id.clone().into_inner())
+                EntityId::version_change(change_id.clone().into_inner())
+            }
+            DomainEvent::VersionUsageRecorded { model_version, .. } => {
+                EntityId::version(&model_version.to_version_string())
             }
             DomainEvent::VersionDeactivated { model_version, .. } => {
-                format!("version:{}", model_version.to_version_string())
+                EntityId::version(&model_version.to_version_string())
             }
             DomainEvent::UserCreated { user_id, .. } => {
-                format!("user:{}", user_id.clone().into_inner())
+                EntityId::user(user_id.clone().into_inner())
             }
             DomainEvent::UserActivated { user_id, .. } => {
-                format!("user:{}", user_id.clone().into_inner())
+                EntityId::user(user_id.clone().into_inner())
             }
             DomainEvent::UserDeactivated { user_id, .. } => {
-                format!("user:{}", user_id.clone().into_inner())
+                EntityId::user(user_id.clone().into_inner())
             }
         }
     }
@@ -206,13 +216,21 @@ mod tests {
             application_name: "test-app".to_string(),
             started_at: Utc::now(),
         };
-        assert!(session_event.entity_id().starts_with("session:"));
+        let entity_id = session_event.entity_id();
+        assert_eq!(
+            entity_id,
+            EntityId::session(session_id.clone().into_inner())
+        );
 
         let request_event = DomainEvent::LlmRequestStarted {
             request_id: request_id.clone(),
             started_at: Utc::now(),
         };
-        assert!(request_event.entity_id().starts_with("request:"));
+        let entity_id = request_event.entity_id();
+        assert_eq!(
+            entity_id,
+            EntityId::request(request_id.clone().into_inner())
+        );
     }
 
     #[test]
@@ -229,7 +247,9 @@ mod tests {
             first_seen_at: Utc::now(),
         };
 
-        assert!(event.entity_id().contains("version:"));
-        assert!(event.entity_id().contains("openai/gpt-4-turbo-2024-01"));
+        let entity_id = event.entity_id();
+        let id_str = entity_id.into_inner();
+        assert!(id_str.contains("version:"));
+        assert!(id_str.contains("openai/gpt-4-turbo-2024-01"));
     }
 }
