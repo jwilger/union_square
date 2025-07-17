@@ -55,3 +55,26 @@ impl Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Application-specific error type for service layer
+#[derive(Error, Debug)]
+pub enum ApplicationError {
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}
+
+impl From<ApplicationError> for Error {
+    fn from(err: ApplicationError) -> Self {
+        match err {
+            ApplicationError::NotFound(resource) => Error::not_found(resource),
+            ApplicationError::ValidationError(msg) => Error::invalid_input(msg),
+            ApplicationError::InternalError(msg) => Error::application(msg),
+        }
+    }
+}
