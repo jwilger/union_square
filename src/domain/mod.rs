@@ -6,7 +6,9 @@
 pub mod llm;
 pub mod session;
 pub mod user;
+pub mod version;
 
 pub use llm::*;
 pub use session::*;
 pub use user::*;
+pub use version::*;
