@@ -5,14 +5,14 @@
 
 use async_trait::async_trait;
 use eventcore::{
-    CommandError, CommandLogic, CommandResult, CommandStreams, ReadStreams, StoredEvent, StreamId,
-    StreamResolver, StreamWrite,
+    CommandError, CommandLogic, CommandResult, ReadStreams, StoredEvent, StreamId, StreamResolver,
+    StreamWrite,
 };
+use eventcore_macros::Command;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::domain::{
-    entity::EntityId,
     events::DomainEvent,
     llm::ModelVersion,
     session::SessionId,
@@ -45,39 +45,35 @@ impl VersionState {
                 }
             }
             // VersionChanged events record transitions between versions but don't
-            // modify the state of tracked versions themselves
+            // modify the state of tracked versions themselves. They are stored
+            // in both the from and to version streams as historical records.
             _ => {} // Ignore other events
         }
     }
 }
 
 /// Command to record the usage of a model version
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct RecordVersionUsage {
+    #[stream]
+    version_stream: StreamId,
     pub session_id: SessionId,
     pub model_version: ModelVersion,
 }
 
 impl RecordVersionUsage {
     pub fn new(session_id: SessionId, model_version: ModelVersion) -> Self {
+        let version_stream = Self::version_stream_id(&model_version);
         Self {
+            version_stream,
             session_id,
             model_version,
         }
     }
-}
 
-/// Phantom type for RecordVersionUsage stream access
-pub struct RecordVersionUsageStreams;
-
-impl CommandStreams for RecordVersionUsage {
-    type StreamSet = RecordVersionUsageStreams;
-
-    fn read_streams(&self) -> Vec<StreamId> {
-        vec![StreamId::try_new(
-            EntityId::version(&self.model_version.to_version_string()).into_inner(),
-        )
-        .expect("Valid stream ID")]
+    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
+            .expect("Valid stream ID")
     }
 }
 
@@ -97,10 +93,6 @@ impl CommandLogic for RecordVersionUsage {
         _stream_resolver: &mut StreamResolver,
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
         let mut events = Vec::new();
-        let stream_id = StreamId::try_new(
-            EntityId::version(&self.model_version.to_version_string()).into_inner(),
-        )
-        .map_err(|_| CommandError::ValidationFailed("Invalid stream ID".into()))?;
 
         // Check if this is the first time we've seen this version
         let is_first_seen = !state.tracked_versions.contains_key(&self.model_version);
@@ -108,7 +100,7 @@ impl CommandLogic for RecordVersionUsage {
         if is_first_seen {
             events.push(StreamWrite::new(
                 &_read_streams,
-                stream_id.clone(),
+                self.version_stream.clone(),
                 DomainEvent::VersionFirstSeen {
                     model_version: self.model_version.clone(),
                     session_id: self.session_id.clone(),
@@ -120,7 +112,7 @@ impl CommandLogic for RecordVersionUsage {
         // Always record usage
         events.push(StreamWrite::new(
             &_read_streams,
-            stream_id,
+            self.version_stream.clone(),
             DomainEvent::VersionUsageRecorded {
                 model_version: self.model_version.clone(),
                 session_id: self.session_id.clone(),
@@ -133,8 +125,12 @@ impl CommandLogic for RecordVersionUsage {
 }
 
 /// Command to record a version change
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct RecordVersionChange {
+    #[stream]
+    from_stream: StreamId,
+    #[stream]
+    to_stream: StreamId,
     pub session_id: SessionId,
     pub from_version: ModelVersion,
     pub to_version: ModelVersion,
@@ -148,30 +144,21 @@ impl RecordVersionChange {
         to_version: ModelVersion,
         reason: Option<String>,
     ) -> Self {
+        let from_stream = Self::version_stream_id(&from_version);
+        let to_stream = Self::version_stream_id(&to_version);
         Self {
+            from_stream,
+            to_stream,
             session_id,
             from_version,
             to_version,
             reason,
         }
     }
-}
 
-/// Phantom type for RecordVersionChange stream access
-pub struct RecordVersionChangeStreams;
-
-impl CommandStreams for RecordVersionChange {
-    type StreamSet = RecordVersionChangeStreams;
-
-    fn read_streams(&self) -> Vec<StreamId> {
-        vec![
-            StreamId::try_new(
-                EntityId::version(&self.from_version.to_version_string()).into_inner(),
-            )
-            .expect("Valid stream ID"),
-            StreamId::try_new(EntityId::version(&self.to_version.to_version_string()).into_inner())
-                .expect("Valid stream ID"),
-        ]
+    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
+            .expect("Valid stream ID")
     }
 }
 
@@ -193,15 +180,6 @@ impl CommandLogic for RecordVersionChange {
         let change_type = self.from_version.compare(&self.to_version);
         let change_id = VersionChangeId::generate();
 
-        let from_stream_id = StreamId::try_new(
-            EntityId::version(&self.from_version.to_version_string()).into_inner(),
-        )
-        .map_err(|_| CommandError::ValidationFailed("Invalid from stream ID".into()))?;
-
-        let to_stream_id =
-            StreamId::try_new(EntityId::version(&self.to_version.to_version_string()).into_inner())
-                .map_err(|_| CommandError::ValidationFailed("Invalid to stream ID".into()))?;
-
         let event = DomainEvent::VersionChanged {
             change_id: change_id.clone(),
             session_id: self.session_id.clone(),
@@ -212,40 +190,36 @@ impl CommandLogic for RecordVersionChange {
             changed_at: chrono::Utc::now(),
         };
 
+        // Write to both streams
         Ok(vec![
-            StreamWrite::new(&_read_streams, from_stream_id, event.clone())?,
-            StreamWrite::new(&_read_streams, to_stream_id, event)?,
+            StreamWrite::new(&_read_streams, self.from_stream.clone(), event.clone())?,
+            StreamWrite::new(&_read_streams, self.to_stream.clone(), event)?,
         ])
     }
 }
 
 /// Command to deactivate a version
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct DeactivateVersion {
+    #[stream]
+    version_stream: StreamId,
     pub model_version: ModelVersion,
     pub reason: Option<String>,
 }
 
 impl DeactivateVersion {
     pub fn new(model_version: ModelVersion, reason: Option<String>) -> Self {
+        let version_stream = Self::version_stream_id(&model_version);
         Self {
+            version_stream,
             model_version,
             reason,
         }
     }
-}
 
-/// Phantom type for DeactivateVersion stream access
-pub struct DeactivateVersionStreams;
-
-impl CommandStreams for DeactivateVersion {
-    type StreamSet = DeactivateVersionStreams;
-
-    fn read_streams(&self) -> Vec<StreamId> {
-        vec![StreamId::try_new(
-            EntityId::version(&self.model_version.to_version_string()).into_inner(),
-        )
-        .expect("Valid stream ID")]
+    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
+            .expect("Valid stream ID")
     }
 }
 
@@ -277,14 +251,9 @@ impl CommandLogic for DeactivateVersion {
             ));
         }
 
-        let stream_id = StreamId::try_new(
-            EntityId::version(&self.model_version.to_version_string()).into_inner(),
-        )
-        .map_err(|_| CommandError::ValidationFailed("Invalid stream ID".into()))?;
-
         Ok(vec![StreamWrite::new(
             &_read_streams,
-            stream_id,
+            self.version_stream.clone(),
             DomainEvent::VersionDeactivated {
                 model_version: self.model_version.clone(),
                 reason: self.reason.clone(),
@@ -313,16 +282,15 @@ mod tests {
         let executor = CommandExecutor::new(event_store);
 
         // Execute command with the executor
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = executor
+            .execute(command.clone(), ExecutionOptions::default())
+            .await;
         assert!(result.is_ok());
 
         // Read events from the version stream
-        let stream_id =
-            StreamId::try_new(EntityId::version(&model_version.to_version_string()).into_inner())
-                .unwrap();
         let stream_data = executor
             .event_store()
-            .read_streams(&[stream_id], &ReadOptions::default())
+            .read_streams(&[command.version_stream], &ReadOptions::default())
             .await
             .unwrap();
         let events = stream_data.events;
@@ -352,7 +320,7 @@ mod tests {
         // First, record the version to make it exist
         let first_command = RecordVersionUsage::new(session_id.clone(), model_version.clone());
         executor
-            .execute(first_command, ExecutionOptions::default())
+            .execute(first_command.clone(), ExecutionOptions::default())
             .await
             .unwrap();
 
@@ -364,12 +332,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Read all events from the version stream
-        let stream_id =
-            StreamId::try_new(EntityId::version(&model_version.to_version_string()).into_inner())
-                .unwrap();
         let stream_data = executor
             .event_store()
-            .read_streams(&[stream_id], &ReadOptions::default())
+            .read_streams(&[first_command.version_stream], &ReadOptions::default())
             .await
             .unwrap();
         let events = stream_data.events;
@@ -403,21 +368,16 @@ mod tests {
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = executor
+            .execute(command.clone(), ExecutionOptions::default())
+            .await;
         assert!(result.is_ok());
 
         // Read events from both version streams
-        let from_stream_id =
-            StreamId::try_new(EntityId::version(&from_version.to_version_string()).into_inner())
-                .unwrap();
-        let to_stream_id =
-            StreamId::try_new(EntityId::version(&to_version.to_version_string()).into_inner())
-                .unwrap();
-
         // Check from_version stream
         let from_stream_data = executor
             .event_store()
-            .read_streams(&[from_stream_id], &ReadOptions::default())
+            .read_streams(&[command.from_stream.clone()], &ReadOptions::default())
             .await
             .unwrap();
         let from_events = from_stream_data.events;
@@ -444,7 +404,7 @@ mod tests {
         // Check to_version stream
         let to_stream_data = executor
             .event_store()
-            .read_streams(&[to_stream_id], &ReadOptions::default())
+            .read_streams(&[command.to_stream], &ReadOptions::default())
             .await
             .unwrap();
         let to_events = to_stream_data.events;
@@ -468,7 +428,7 @@ mod tests {
         // First, record the version to make it exist
         let record_command = RecordVersionUsage::new(session_id, model_version.clone());
         executor
-            .execute(record_command, ExecutionOptions::default())
+            .execute(record_command.clone(), ExecutionOptions::default())
             .await
             .unwrap();
 
@@ -476,17 +436,14 @@ mod tests {
         let deactivate_command =
             DeactivateVersion::new(model_version.clone(), Some("Model deprecated".to_string()));
         let result = executor
-            .execute(deactivate_command, ExecutionOptions::default())
+            .execute(deactivate_command.clone(), ExecutionOptions::default())
             .await;
         assert!(result.is_ok());
 
         // Read events from the version stream
-        let stream_id =
-            StreamId::try_new(EntityId::version(&model_version.to_version_string()).into_inner())
-                .unwrap();
         let stream_data = executor
             .event_store()
-            .read_streams(&[stream_id], &ReadOptions::default())
+            .read_streams(&[record_command.version_stream], &ReadOptions::default())
             .await
             .unwrap();
         let events = stream_data.events;

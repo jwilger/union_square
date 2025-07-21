@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    entity::EntityId,
     llm::{ModelVersion, RequestId, ResponseMetadata},
     session::{SessionId, SessionStatus},
     user::{EmailAddress, UserId},
@@ -130,57 +129,6 @@ impl DomainEvent {
             DomainEvent::UserDeactivated { deactivated_at, .. } => *deactivated_at,
         }
     }
-
-    /// Get the primary entity ID associated with this event
-    pub fn entity_id(&self) -> EntityId {
-        match self {
-            DomainEvent::SessionStarted { session_id, .. } => {
-                EntityId::session(session_id.clone().into_inner())
-            }
-            DomainEvent::SessionEnded { session_id, .. } => {
-                EntityId::session(session_id.clone().into_inner())
-            }
-            DomainEvent::SessionTagged { session_id, .. } => {
-                EntityId::session(session_id.clone().into_inner())
-            }
-            DomainEvent::LlmRequestReceived { request_id, .. } => {
-                EntityId::request(request_id.clone().into_inner())
-            }
-            DomainEvent::LlmRequestStarted { request_id, .. } => {
-                EntityId::request(request_id.clone().into_inner())
-            }
-            DomainEvent::LlmResponseReceived { request_id, .. } => {
-                EntityId::request(request_id.clone().into_inner())
-            }
-            DomainEvent::LlmRequestFailed { request_id, .. } => {
-                EntityId::request(request_id.clone().into_inner())
-            }
-            DomainEvent::LlmRequestCancelled { request_id, .. } => {
-                EntityId::request(request_id.clone().into_inner())
-            }
-            DomainEvent::VersionFirstSeen { model_version, .. } => {
-                EntityId::version(&model_version.to_version_string())
-            }
-            DomainEvent::VersionChanged { change_id, .. } => {
-                EntityId::version_change(change_id.clone().into_inner())
-            }
-            DomainEvent::VersionUsageRecorded { model_version, .. } => {
-                EntityId::version(&model_version.to_version_string())
-            }
-            DomainEvent::VersionDeactivated { model_version, .. } => {
-                EntityId::version(&model_version.to_version_string())
-            }
-            DomainEvent::UserCreated { user_id, .. } => {
-                EntityId::user(user_id.clone().into_inner())
-            }
-            DomainEvent::UserActivated { user_id, .. } => {
-                EntityId::user(user_id.clone().into_inner())
-            }
-            DomainEvent::UserDeactivated { user_id, .. } => {
-                EntityId::user(user_id.clone().into_inner())
-            }
-        }
-    }
 }
 
 // EventCore requires TryFrom<&'a ES::Event> for CommandExecutor
@@ -194,7 +142,6 @@ impl<'a> TryFrom<&'a DomainEvent> for DomainEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::llm::LlmProvider;
 
     #[test]
     fn test_event_timestamp_extraction() {
@@ -210,54 +157,5 @@ mod tests {
         };
 
         assert_eq!(event.occurred_at(), now);
-    }
-
-    #[test]
-    fn test_event_entity_id() {
-        let session_id = SessionId::generate();
-        let request_id = RequestId::generate();
-        let user_id = UserId::generate();
-
-        let session_event = DomainEvent::SessionStarted {
-            session_id: session_id.clone(),
-            user_id,
-            application_name: "test-app".to_string(),
-            started_at: Utc::now(),
-        };
-        let entity_id = session_event.entity_id();
-        assert_eq!(
-            entity_id,
-            EntityId::session(session_id.clone().into_inner())
-        );
-
-        let request_event = DomainEvent::LlmRequestStarted {
-            request_id: request_id.clone(),
-            started_at: Utc::now(),
-        };
-        let entity_id = request_event.entity_id();
-        assert_eq!(
-            entity_id,
-            EntityId::request(request_id.clone().into_inner())
-        );
-    }
-
-    #[test]
-    fn test_version_events() {
-        let session_id = SessionId::generate();
-        let version = ModelVersion {
-            provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
-        };
-
-        let event = DomainEvent::VersionFirstSeen {
-            model_version: version.clone(),
-            session_id,
-            first_seen_at: Utc::now(),
-        };
-
-        let entity_id = event.entity_id();
-        let id_str = entity_id.into_inner();
-        assert!(id_str.contains("version:"));
-        assert!(id_str.contains("openai/gpt-4-turbo-2024-01"));
     }
 }

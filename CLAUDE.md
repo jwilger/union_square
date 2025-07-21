@@ -204,6 +204,7 @@ cargo add derive_more  # For additional derives on newtypes
 # EventCore dependency (since this project uses it)
 cargo add eventcore
 cargo add eventcore-postgres
+cargo add eventcore-macros  # For #[derive(Command)] macro
 ```
 
 ### Development Workflow
@@ -289,6 +290,11 @@ EventCore is a Rust library for implementing multi-stream event sourcing with dy
 
 ### Implementation Pattern
 
+**IMPORTANT**: Always use the `#[derive(Command)]` macro from eventcore-macros to reduce boilerplate. This macro automatically generates:
+- A phantom type for compile-time stream access control (e.g., `MyCommandStreamSet`)
+- The `CommandStreams` trait implementation with `read_streams()` method
+- Proper type associations for EventCore
+
 ```rust
 // 1. Define your events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,16 +303,20 @@ enum DomainEvent {
     SomethingElseOccurred { value: u64 },
 }
 
-// 2. Define your command with streams
-#[derive(Command, Clone)]
+// 2. Define your command with the Command derive macro
+use eventcore_macros::Command;
+
+#[derive(Command, Clone, Debug, Serialize, Deserialize)]
 struct MyCommand {
-    #[stream]
+    #[stream]  // Mark fields that are streams
     primary_stream: StreamId,
     #[stream]
     secondary_stream: StreamId,
-    // command data
+    // command data (non-stream fields)
     amount: Money,
 }
+
+// The macro eliminates the need to manually implement CommandStreams!
 
 // 3. Implement CommandLogic
 #[async_trait]
