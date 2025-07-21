@@ -43,7 +43,7 @@ impl LlmProvider {
 }
 
 /// Model version information - treats model IDs as opaque strings
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
     pub model_id: String, // Opaque identifier from the provider

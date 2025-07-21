@@ -9,6 +9,7 @@ use eventcore::{
     StreamResolver, StreamWrite,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::domain::{
     entity::EntityId,
@@ -21,7 +22,7 @@ use crate::domain::{
 /// State for version tracking
 #[derive(Debug, Default, Clone)]
 pub struct VersionState {
-    pub tracked_versions: Vec<TrackedVersion>,
+    pub tracked_versions: HashMap<ModelVersion, TrackedVersion>,
 }
 
 impl VersionState {
@@ -30,27 +31,21 @@ impl VersionState {
         match event {
             DomainEvent::VersionFirstSeen { model_version, .. } => {
                 let tracked = TrackedVersion::new(model_version.clone());
-                self.tracked_versions.push(tracked);
+                self.tracked_versions.insert(model_version.clone(), tracked);
             }
             DomainEvent::VersionUsageRecorded { model_version, .. } => {
                 // Find and update the tracked version
-                if let Some(tracked) = self
-                    .tracked_versions
-                    .iter_mut()
-                    .find(|v| v.version == *model_version)
-                {
+                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
                     tracked.record_usage();
                 }
             }
             DomainEvent::VersionDeactivated { model_version, .. } => {
-                if let Some(tracked) = self
-                    .tracked_versions
-                    .iter_mut()
-                    .find(|v| v.version == *model_version)
-                {
+                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
                     tracked.deactivate();
                 }
             }
+            // VersionChanged events record transitions between versions but don't
+            // modify the state of tracked versions themselves
             _ => {} // Ignore other events
         }
     }
@@ -108,10 +103,7 @@ impl CommandLogic for RecordVersionUsage {
         .map_err(|_| CommandError::ValidationFailed("Invalid stream ID".into()))?;
 
         // Check if this is the first time we've seen this version
-        let is_first_seen = !state
-            .tracked_versions
-            .iter()
-            .any(|v| v.version == self.model_version);
+        let is_first_seen = !state.tracked_versions.contains_key(&self.model_version);
 
         if is_first_seen {
             events.push(StreamWrite::new(
@@ -200,24 +192,30 @@ impl CommandLogic for RecordVersionChange {
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
         let change_type = self.from_version.compare(&self.to_version);
         let change_id = VersionChangeId::generate();
-        let stream_id = StreamId::try_new(
+
+        let from_stream_id = StreamId::try_new(
             EntityId::version(&self.from_version.to_version_string()).into_inner(),
         )
-        .map_err(|_| CommandError::ValidationFailed("Invalid stream ID".into()))?;
+        .map_err(|_| CommandError::ValidationFailed("Invalid from stream ID".into()))?;
 
-        Ok(vec![StreamWrite::new(
-            &_read_streams,
-            stream_id,
-            DomainEvent::VersionChanged {
-                change_id,
-                session_id: self.session_id.clone(),
-                from_version: self.from_version.clone(),
-                to_version: self.to_version.clone(),
-                change_type,
-                reason: self.reason.clone(),
-                changed_at: chrono::Utc::now(),
-            },
-        )?])
+        let to_stream_id =
+            StreamId::try_new(EntityId::version(&self.to_version.to_version_string()).into_inner())
+                .map_err(|_| CommandError::ValidationFailed("Invalid to stream ID".into()))?;
+
+        let event = DomainEvent::VersionChanged {
+            change_id: change_id.clone(),
+            session_id: self.session_id.clone(),
+            from_version: self.from_version.clone(),
+            to_version: self.to_version.clone(),
+            change_type,
+            reason: self.reason.clone(),
+            changed_at: chrono::Utc::now(),
+        };
+
+        Ok(vec![
+            StreamWrite::new(&_read_streams, from_stream_id, event.clone())?,
+            StreamWrite::new(&_read_streams, to_stream_id, event)?,
+        ])
     }
 }
 
@@ -269,8 +267,9 @@ impl CommandLogic for DeactivateVersion {
         // Check if version exists and is active
         let version_exists = state
             .tracked_versions
-            .iter()
-            .any(|v| v.version == self.model_version && v.is_active);
+            .get(&self.model_version)
+            .map(|v| v.is_active)
+            .unwrap_or(false);
 
         if !version_exists {
             return Err(CommandError::ValidationFailed(
@@ -396,9 +395,9 @@ mod tests {
         };
 
         let command = RecordVersionChange::new(
-            session_id,
-            from_version,
-            to_version,
+            session_id.clone(),
+            from_version.clone(),
+            to_version.clone(),
             Some("Performance upgrade".to_string()),
         );
         let event_store = InMemoryEventStore::new();
@@ -407,9 +406,52 @@ mod tests {
         let result = executor.execute(command, ExecutionOptions::default()).await;
         assert!(result.is_ok());
 
-        // The event is written to a change-specific stream
-        // We'll need to extract the change_id from the result to read it
-        // For now, just verify the command executes successfully
+        // Read events from both version streams
+        let from_stream_id =
+            StreamId::try_new(EntityId::version(&from_version.to_version_string()).into_inner())
+                .unwrap();
+        let to_stream_id =
+            StreamId::try_new(EntityId::version(&to_version.to_version_string()).into_inner())
+                .unwrap();
+
+        // Check from_version stream
+        let from_stream_data = executor
+            .event_store()
+            .read_streams(&[from_stream_id], &ReadOptions::default())
+            .await
+            .unwrap();
+        let from_events = from_stream_data.events;
+
+        assert_eq!(from_events.len(), 1);
+        match &from_events[0].payload {
+            DomainEvent::VersionChanged {
+                session_id: event_session_id,
+                from_version: event_from,
+                to_version: event_to,
+                reason,
+                change_type,
+                ..
+            } => {
+                assert_eq!(event_session_id, &session_id);
+                assert_eq!(event_from, &from_version);
+                assert_eq!(event_to, &to_version);
+                assert_eq!(reason, &Some("Performance upgrade".to_string()));
+                assert_eq!(change_type, &from_version.compare(&to_version));
+            }
+            _ => panic!("Expected VersionChanged event"),
+        }
+
+        // Check to_version stream
+        let to_stream_data = executor
+            .event_store()
+            .read_streams(&[to_stream_id], &ReadOptions::default())
+            .await
+            .unwrap();
+        let to_events = to_stream_data.events;
+
+        assert_eq!(to_events.len(), 1);
+        // Verify it's the same event (both streams should have the same event)
+        assert_eq!(from_events[0].payload, to_events[0].payload);
     }
 
     #[tokio::test]
