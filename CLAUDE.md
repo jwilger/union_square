@@ -628,8 +628,9 @@ After creating or updating a PR:
 
 ### Responding to PR Feedback
 
-**IMPORTANT**: Only respond to formal review comments, not regular PR comments:
-- **Review comments** (part of a formal review with "Changes requested", "Approved", etc.) = Address these
+**IMPORTANT**: Respond to ALL formal review comments, including those from bots:
+- **Review comments** (part of a formal review with "Changes requested", "Approved", etc.) = Always address these
+- **Bot review comments** (from Copilot, etc.) = Also address these, even though they're automated
 - **Regular PR comments** (standalone comments on the PR) = These are for human-to-human conversation, ignore them
 
 When addressing PR review feedback:
