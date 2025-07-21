@@ -1,5 +1,5 @@
 > *"I don't care what they're talking about. All I want is a nice, fat recording."*
-> 
+>
 > — Harry Caul, The Conversation (1974)
 
 <table>
@@ -171,7 +171,7 @@ Union Square follows a functional core, imperative shell architecture:
 
 ### Architecture Decision Records
 
-We use Architecture Decision Records (ADRs) to document significant architectural decisions. 
+We use Architecture Decision Records (ADRs) to document significant architectural decisions.
 
 - **View ADRs**: Visit our [ADR documentation](https://jwilger.github.io/union_square/adr/) on GitHub Pages
 - **Browse locally**: See the `docs/adr/` directory

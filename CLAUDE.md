@@ -169,6 +169,10 @@ For detailed type-driven development guidance, refer to `/home/jwilger/.claude/C
 # Enter development environment (required for all work)
 nix develop
 
+# Install pre-commit hooks (first time setup)
+pre-commit install
+pre-commit install --hook-type commit-msg
+
 # Start PostgreSQL databases
 docker-compose up -d
 
@@ -329,7 +333,7 @@ impl CommandLogic for MyCommand {
         // Business logic here
         // Return events to be written
         Ok(vec![
-            StreamWrite::new(&read_streams, self.primary_stream.clone(), 
+            StreamWrite::new(&read_streams, self.primary_stream.clone(),
                 DomainEvent::SomethingHappened { data: "test".into() })?,
         ])
     }
@@ -472,14 +476,46 @@ ADRs are automatically published to GitHub Pages when merged to main:
 
 **🚨 CRITICAL**: These hooks ensure code quality. NEVER bypass them with `--no-verify`!
 
-The project uses pre-commit hooks that automatically run:
+This project uses the [pre-commit framework](https://pre-commit.com/) to manage git hooks. The configuration is in `.pre-commit-config.yaml`.
 
-1. `cargo fmt --all && git add -u` - Auto-formats code and stages changes (runs first)
-2. `cargo clippy` - Linting
-3. `cargo test` - All tests
-4. `cargo check` - Type checking
+### Hooks that run on every commit:
 
-The formatting hook automatically fixes and stages formatting issues instead of failing, saving time during the commit process.
+1. **Rust checks** (run on .rs files):
+   - `cargo fmt` - Auto-formats Rust code
+   - `cargo clippy` - Linting with all warnings as errors
+   - `cargo test` - Runs all workspace tests
+   - `cargo check` - Type checking
+
+2. **General file checks**:
+   - Remove trailing whitespace
+   - Fix end-of-file issues
+   - Check YAML, TOML, and JSON syntax
+   - Prevent large files from being committed
+   - Check for merge conflicts
+   - Pretty-format JSON files
+
+3. **Commit message validation** (commit-msg stage):
+   - **Conventional Commits enforcement** via commitizen
+   - Ensures all commits follow the format: `type(scope): description`
+
+### Setup
+
+After cloning the repository:
+```bash
+# Install pre-commit hooks
+pre-commit install
+pre-commit install --hook-type commit-msg
+
+# Optional: Run hooks on all files
+pre-commit run --all-files
+```
+
+### Troubleshooting
+
+If hooks fail:
+- Fix the issues identified (formatting, linting, tests, commit message format)
+- Run the specific hook manually: `pre-commit run <hook-id>`
+- **NEVER use `--no-verify`** - always fix the underlying issues
 
 ## Development Principles
 
@@ -570,7 +606,7 @@ Key tools for development workflow:
    - **THEN**: Logical dependencies between issues
    - **THEN**: Project value and impact
    - **THEN**: Technical debt that blocks other work
-   
+
    > **IMPORTANT**: When listing available issues:
    > - Always check if any issues are already assigned to the current user
    > - Check for existing branches matching the issue pattern (e.g., `issue-{number}-*`)
@@ -638,19 +674,19 @@ This project uses a **pull request-based workflow**. Direct commits to the main 
    ```
    mcp__github__create_pull_request
    ```
-   
+
    **PR TITLE**: Must follow Conventional Commits format!
    - Use the same format as commit messages: `<type>[scope]: <description>`
    - Examples:
      - `feat: add user authentication system`
      - `fix(api): resolve timeout issue in health check`
      - `docs: update installation instructions`
-   
+
    **PR DESCRIPTION**:
    - Provide a clear description of what changes you made and why
    - Include any relevant context or motivation
    - Mention any breaking changes or important considerations
-   
+
    **PR LABELS**: Add appropriate labels based on the type of change:
    - `bug` - For bug fixes
    - `enhancement` - For new features or improvements
@@ -659,7 +695,7 @@ This project uses a **pull request-based workflow**. Direct commits to the main 
    - `developer-experience` - For DX improvements (tooling, workflows, etc.)
    - `api-design` - For changes to public APIs
    - `automated` - For automated/bot-created PRs
-   
+
    **Note**: The Definition of Done bot will automatically add a checklist to your PR. These items are for HUMAN VERIFICATION ONLY - never attempt to check or complete them yourself.
 
 5. **CI runs automatically** on PR creation - no need to monitor before creating the PR
@@ -730,35 +766,35 @@ When addressing PR review feedback:
      }
    }'
    ```
-   
+
    **Note**: Use triple quotes (""") for multiline strings in GraphQL to avoid escaping issues
-   
+
    **🚨 REMINDER**: Always sign automated responses with `-- @claude`!
 
 3. **Always include in your response**:
    - Explanation of what changes you made
    - Or why you're NOT making the suggested change
    - Sign with `-- @claude` to indicate automation
-   
+
 4. **Format for automated responses**:
    ```
    I've addressed this by [specific action taken].
-   
+
    [Optional: Brief explanation of the change]
-   
+
    -- @claude
    ```
 
 5. **Check for new responses** after posting your reply:
    - Use `mcp__github__get_issue_comments` to see if reviewers responded
    - Continue the conversation until resolved
-   
+
 6. **Example response**:
    ```
-   I've consolidated the duplicate PR workflow sections into a single 
+   I've consolidated the duplicate PR workflow sections into a single
    comprehensive section under "Pull Request Workflow". This provides
    clearer guidance for contributors.
-   
+
    -- @claude
    ```
 

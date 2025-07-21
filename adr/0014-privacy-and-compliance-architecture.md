@@ -127,13 +127,13 @@ EventCore-based retention with automated cleanup:
 struct RetentionPolicy {
     application_id: ApplicationId,
     environment: Environment,
-    
+
     // Base retention
     default_retention_days: u32,
-    
+
     // Overrides by classification
     overrides: HashMap<SensitivityLevel, u32>,
-    
+
     // GDPR deletion support
     deletion_grace_period_days: u32,
 }

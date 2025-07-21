@@ -44,7 +44,7 @@ impl CacheKey {
         // Canonicalize request for consistent hashing
         let canonical = canonicalize_request(request);
         let hash = sha256(&canonical);
-        
+
         Self {
             provider: provider.clone(),
             model: extract_model(request),
@@ -119,22 +119,22 @@ Age: 120                             # Age of cached response
 ```rust
 async fn handle_request(request: Request<Body>) -> Response<Body> {
     let cache_control = parse_cache_control(&request);
-    
+
     // 1. Check if caching is enabled and allowed
     if !cache_config.enabled || cache_control.no_cache {
         return forward_request(request).await;
     }
-    
+
     // 2. Generate cache key
     let key = CacheKey::from_request(&provider, &request);
-    
+
     // 3. Try hot cache first
     if let Some(cached) = hot_cache.get(&key).await {
         if !is_stale(&cached, &cache_control) {
             return build_cached_response(cached, CacheHit::Hot);
         }
     }
-    
+
     // 4. Try warm cache
     if let Some(cached) = warm_cache.get(&key).await {
         if !is_stale(&cached, &cache_control) {
@@ -143,17 +143,17 @@ async fn handle_request(request: Request<Body>) -> Response<Body> {
             return build_cached_response(cached, CacheHit::Warm);
         }
     }
-    
+
     // 5. Cache miss - forward request
     let response = forward_request(request).await;
-    
+
     // 6. Store in cache if appropriate
     if should_cache(&response) {
         let entry = CacheEntry::new(response.clone());
         hot_cache.put(&key, &entry).await;
         warm_cache.put(&key, &entry).await;
     }
-    
+
     response
 }
 ```

@@ -64,7 +64,7 @@ Use event sourcing for all auditable data including LLM interactions, configurat
 Event source only LLM interactions, use traditional CRUD for configuration with separate audit logging.
 
 - Good, because simpler configuration management
-- Good, because allows direct config changes in emergencies  
+- Good, because allows direct config changes in emergencies
 - Good, because reduces scope of event sourcing complexity
 - Bad, because two different audit mechanisms to maintain
 - Bad, because configuration audit trail may be incomplete
