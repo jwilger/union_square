@@ -270,6 +270,10 @@ EventCore is a Rust library for implementing multi-stream event sourcing with dy
 - **Type-driven development** - Leverages Rust's type system for domain modeling
 - **Flexible consistency** - Each command decides which streams to read and write
 
+**Important Note on Helper Macros**: While EventCore 0.1.3 documentation mentions `emit!` and `require!` helper macros, these macros have a bug where they try to access private modules within the eventcore crate. Until this is fixed in a future version, use the manual approach:
+- Instead of `require!(condition, "error message")`, use: `if !condition { return Err(CommandError::BusinessRuleViolation("error message".to_string())); }`
+- Instead of `emit!(events, &read_streams, stream_id, event)`, use: `events.push(StreamWrite::new(&read_streams, stream_id, event)?);`
+
 ### Core Concepts
 
 1. **Commands**: Define business operations with:

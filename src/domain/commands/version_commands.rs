@@ -177,6 +177,7 @@ impl CommandLogic for RecordVersionChange {
         _state: Self::State,
         _stream_resolver: &mut StreamResolver,
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+        let mut events = Vec::new();
         let change_type = self.from_version.compare(&self.to_version);
         let change_id = VersionChangeId::generate();
 
@@ -191,10 +192,18 @@ impl CommandLogic for RecordVersionChange {
         };
 
         // Write to both streams
-        Ok(vec![
-            StreamWrite::new(&_read_streams, self.from_stream.clone(), event.clone())?,
-            StreamWrite::new(&_read_streams, self.to_stream.clone(), event)?,
-        ])
+        events.push(StreamWrite::new(
+            &_read_streams,
+            self.from_stream.clone(),
+            event.clone(),
+        )?);
+        events.push(StreamWrite::new(
+            &_read_streams,
+            self.to_stream.clone(),
+            event,
+        )?);
+
+        Ok(events)
     }
 }
 
@@ -246,12 +255,12 @@ impl CommandLogic for DeactivateVersion {
             .unwrap_or(false);
 
         if !version_exists {
-            return Err(CommandError::ValidationFailed(
-                "Version not found or already deactivated".into(),
+            return Err(CommandError::BusinessRuleViolation(
+                "Version not found or already deactivated".to_string(),
             ));
         }
 
-        Ok(vec![StreamWrite::new(
+        let events = vec![StreamWrite::new(
             &_read_streams,
             self.version_stream.clone(),
             DomainEvent::VersionDeactivated {
@@ -259,7 +268,9 @@ impl CommandLogic for DeactivateVersion {
                 reason: self.reason.clone(),
                 deactivated_at: chrono::Utc::now(),
             },
-        )?])
+        )?];
+
+        Ok(events)
     }
 }
 
