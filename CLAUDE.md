@@ -90,9 +90,58 @@ For PR feedback specifically:
 **BEFORE MAKING ANY COMMIT**:
 
 1. **Ensure all changes are properly tested** and pre-commit checks will pass
-2. **Write clear, descriptive commit messages** that explain the why, not just the what
+2. **Use Conventional Commits format** for all commit messages (see details below)
+3. **Write clear, descriptive commit messages** that explain the why, not just the what
 
 **🚨 CRITICAL REMINDER**: NEVER use `--no-verify` flag. All pre-commit checks must pass!
+
+### Conventional Commits Format
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) for all commit messages. This ensures a standardized, readable commit history that supports automated tooling.
+
+**Commit Message Structure**:
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Required Types**:
+- `feat:` - A new feature (correlates with MINOR in semantic versioning)
+- `fix:` - A bug fix (correlates with PATCH in semantic versioning)
+- `docs:` - Documentation only changes
+- `style:` - Changes that don't affect code meaning (formatting, missing semi-colons, etc)
+- `refactor:` - Code change that neither fixes a bug nor adds a feature
+- `perf:` - Code change that improves performance
+- `test:` - Adding missing tests or correcting existing tests
+- `build:` - Changes that affect the build system or dependencies
+- `ci:` - Changes to CI configuration files and scripts
+- `chore:` - Other changes that don't modify src or test files
+- `revert:` - Reverts a previous commit
+
+**Breaking Changes**:
+- Add `!` after the type/scope: `feat!: remove deprecated API`
+- OR include `BREAKING CHANGE:` in the footer
+
+**Examples**:
+```
+feat: add EventCore command for version tracking
+
+fix(version-commands): handle HashMap lookup correctly
+
+docs: update CLAUDE.md with conventional commits format
+
+refactor!: remove adapter layer for EventCore integration
+
+BREAKING CHANGE: EventCore commands are now first-class citizens
+```
+
+**Scope Guidelines**:
+- Use module names for scope when appropriate (e.g., `fix(eventcore):`)
+- Keep scope concise and lowercase
+- Omit scope if the change is broad or crosses multiple modules
 
 ## Type-Driven Development Philosophy
 
@@ -589,6 +638,13 @@ This project uses a **pull request-based workflow**. Direct commits to the main 
    ```
    mcp__github__create_pull_request
    ```
+   
+   **PR TITLE**: Must follow Conventional Commits format!
+   - Use the same format as commit messages: `<type>[scope]: <description>`
+   - Examples:
+     - `feat: add user authentication system`
+     - `fix(api): resolve timeout issue in health check`
+     - `docs: update installation instructions`
    
    **PR DESCRIPTION**:
    - Provide a clear description of what changes you made and why
