@@ -259,7 +259,7 @@ sqlx migrate run
 
 ## EventCore Library Usage
 
-**IMPORTANT**: This project uses EventCore for event sourcing. When working with EventCore, fetch the full documentation at https://docs.rs/eventcore/0.1.3/eventcore/ for detailed information.
+**IMPORTANT**: This project uses EventCore for event sourcing. When working with EventCore, fetch the full documentation at https://docs.rs/eventcore/latest/eventcore/ for detailed information.
 
 ### EventCore Overview
 
@@ -269,10 +269,6 @@ EventCore is a Rust library for implementing multi-stream event sourcing with dy
 - **Multi-stream atomic operations** - Write events atomically across multiple streams
 - **Type-driven development** - Leverages Rust's type system for domain modeling
 - **Flexible consistency** - Each command decides which streams to read and write
-
-**Important Note on Helper Macros**: While EventCore 0.1.3 documentation mentions `emit!` and `require!` helper macros, these macros have a bug where they try to access private modules within the eventcore crate. Until this is fixed in a future version, use the manual approach:
-- Instead of `require!(condition, "error message")`, use: `if !condition { return Err(CommandError::BusinessRuleViolation("error message".to_string())); }`
-- Instead of `emit!(events, &read_streams, stream_id, event)`, use: `events.push(StreamWrite::new(&read_streams, stream_id, event)?);`
 
 ### Core Concepts
 
@@ -294,7 +290,12 @@ EventCore is a Rust library for implementing multi-stream event sourcing with dy
 
 ### Implementation Pattern
 
-**IMPORTANT**: Always use the `#[derive(Command)]` macro from eventcore-macros to reduce boilerplate. This macro automatically generates:
+**IMPORTANT**: Always use the macros from eventcore-macros to reduce boilerplate:
+- `#[derive(Command)]` - Automatically generates stream set types and trait implementations
+- `require!` - Simplifies business rule validation
+- `emit!` - Simplifies event emission
+
+The `#[derive(Command)]` macro automatically generates:
 - A phantom type for compile-time stream access control (e.g., `MyCommandStreamSet`)
 - The `CommandStreams` trait implementation with `read_streams()` method
 - Proper type associations for EventCore
@@ -308,6 +309,7 @@ enum DomainEvent {
 }
 
 // 2. Define your command with the Command derive macro
+use eventcore::{emit, require};
 use eventcore_macros::Command;
 
 #[derive(Command, Clone, Debug, Serialize, Deserialize)]
@@ -344,12 +346,20 @@ impl CommandLogic for MyCommand {
         state: Self::State,
         stream_resolver: &mut StreamResolver,
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
-        // Business logic here
-        // Return events to be written
-        Ok(vec![
-            StreamWrite::new(&read_streams, self.primary_stream.clone(),
-                DomainEvent::SomethingHappened { data: "test".into() })?,
-        ])
+        let mut events = Vec::new();
+
+        // Use require! for business rule validation
+        require!(state.balance >= self.amount, "Insufficient funds");
+
+        // Use emit! for event emission
+        emit!(
+            events,
+            &read_streams,
+            self.primary_stream.clone(),
+            DomainEvent::SomethingHappened { data: "test".into() }
+        );
+
+        Ok(events)
     }
 }
 ```
@@ -431,7 +441,7 @@ let state = events.fold(State::default(), |mut state, event| {
 - **Schema evolution**: Plan for event versioning from the start
 - **Testing**: Always test with both in-memory and PostgreSQL stores
 
-**Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/0.1.3/eventcore/
+**Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/latest/eventcore/
 
 ## Architecture Decision Records (ADRs)
 

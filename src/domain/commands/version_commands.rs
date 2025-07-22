@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use eventcore::{
-    CommandError, CommandLogic, CommandResult, ReadStreams, StoredEvent, StreamId, StreamResolver,
+    emit, require, CommandLogic, CommandResult, ReadStreams, StoredEvent, StreamId, StreamResolver,
     StreamWrite,
 };
 use eventcore_macros::Command;
@@ -98,27 +98,29 @@ impl CommandLogic for RecordVersionUsage {
         let is_first_seen = !state.tracked_versions.contains_key(&self.model_version);
 
         if is_first_seen {
-            events.push(StreamWrite::new(
+            emit!(
+                events,
                 &_read_streams,
                 self.version_stream.clone(),
                 DomainEvent::VersionFirstSeen {
                     model_version: self.model_version.clone(),
                     session_id: self.session_id.clone(),
                     first_seen_at: chrono::Utc::now(),
-                },
-            )?);
+                }
+            );
         }
 
         // Always record usage
-        events.push(StreamWrite::new(
+        emit!(
+            events,
             &_read_streams,
             self.version_stream.clone(),
             DomainEvent::VersionUsageRecorded {
                 model_version: self.model_version.clone(),
                 session_id: self.session_id.clone(),
                 recorded_at: chrono::Utc::now(),
-            },
-        )?);
+            }
+        );
 
         Ok(events)
     }
@@ -192,16 +194,13 @@ impl CommandLogic for RecordVersionChange {
         };
 
         // Write to both streams
-        events.push(StreamWrite::new(
+        emit!(
+            events,
             &_read_streams,
             self.from_stream.clone(),
-            event.clone(),
-        )?);
-        events.push(StreamWrite::new(
-            &_read_streams,
-            self.to_stream.clone(),
-            event,
-        )?);
+            event.clone()
+        );
+        emit!(events, &_read_streams, self.to_stream.clone(), event);
 
         Ok(events)
     }
@@ -241,6 +240,7 @@ impl CommandLogic for DeactivateVersion {
         state.apply(&event.payload);
     }
 
+    #[allow(clippy::vec_init_then_push)]
     async fn handle(
         &self,
         _read_streams: ReadStreams<Self::StreamSet>,
@@ -254,21 +254,20 @@ impl CommandLogic for DeactivateVersion {
             .map(|v| v.is_active)
             .unwrap_or(false);
 
-        if !version_exists {
-            return Err(CommandError::BusinessRuleViolation(
-                "Version not found or already deactivated".to_string(),
-            ));
-        }
+        require!(version_exists, "Version not found or already deactivated");
 
-        let events = vec![StreamWrite::new(
+        let mut events = vec![];
+
+        emit!(
+            events,
             &_read_streams,
             self.version_stream.clone(),
             DomainEvent::VersionDeactivated {
                 model_version: self.model_version.clone(),
                 reason: self.reason.clone(),
                 deactivated_at: chrono::Utc::now(),
-            },
-        )?];
+            }
+        );
 
         Ok(events)
     }
