@@ -621,8 +621,8 @@ body {
 }
 
 .footer-logo {
-    width: 37.5px; /* Increased by 25% from 30px */
-    height: 37.5px; /* Increased by 25% from 30px */
+    width: 38px; /* Increased by 25% from 30px, rounded for browser compatibility */
+    height: 38px; /* Increased by 25% from 30px, rounded for browser compatibility */
     opacity: 0.7;
 }
 
