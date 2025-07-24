@@ -30,7 +30,7 @@
 		</feMerge>
 	</filter>
 </defs>
-<path fill="#000000" opacity="1.000000" stroke="none" filter="url(#whiteGlow)" filter="url(#whiteGlow)"
+<path fill="#000000" opacity="1.000000" stroke="none" filter="url(#whiteGlow)"
 	d="
 M943.375000,815.000122
 	C943.374634,836.166504 943.419006,856.833008 943.364075,877.499268
