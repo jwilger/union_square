@@ -10,7 +10,7 @@ on:
       - '.log4brains.yml'
       - 'package.json'
       - '.github/workflows/deploy-gh-pages.yml'
-  
+
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -33,28 +33,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Full history for log4brains
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Build site
         run: |
           # Build log4brains to a temporary directory
           npx log4brains build --out .build/adr --basePath /union_square/adr
-          
+
           # Copy static docs to build directory
           mkdir -p .build
           cp -r docs/* .build/
-          
+
           # Ensure ADR site is in the right place
           ls -la .build/
-      
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

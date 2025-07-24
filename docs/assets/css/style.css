@@ -48,15 +48,15 @@
     --spacing-lg: 2rem;
     --spacing-xl: 3rem;
     --spacing-2xl: 4rem;
-    
+
     /* Typography */
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
-    
+
     /* Component dimensions */
     --floating-card-size: 350px;
     --hero-logo-max-size: 300px;
-    
+
     /* Gradient effects */
     --gradient-blur-size: 8px;
     --gradient-blur-size-large: 10px;
@@ -676,28 +676,28 @@ body {
         grid-template-columns: 1fr;
         text-align: center;
     }
-    
+
     .hero-visual {
         margin-top: var(--spacing-xl);
     }
-    
+
     .architecture-content {
         grid-template-columns: 1fr;
     }
-    
+
     .nav-links {
         gap: var(--spacing-md);
     }
-    
+
     .nav-link:not(.github-link) {
         display: none;
     }
-    
+
     .hero-actions {
         flex-direction: column;
         align-items: center;
     }
-    
+
     .footer-content {
         flex-direction: column;
         gap: var(--spacing-md);

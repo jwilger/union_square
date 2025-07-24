@@ -60,7 +60,7 @@ Chosen option: **"Hybrid approach with property and example tests"** because it 
 #[cfg(test)]
 mod property_tests {
     use proptest::prelude::*;
-    
+
     proptest! {
         #[test]
         fn session_id_roundtrip(s in "[a-zA-Z0-9-]{1,50}") {
@@ -69,7 +69,7 @@ mod property_tests {
             let deserialized: SessionId = serde_json::from_str(&serialized).unwrap();
             prop_assert_eq!(session_id, deserialized);
         }
-        
+
         #[test]
         fn recording_event_ordering(
             events in prop::collection::vec(arb_session_event(), 1..100)
@@ -91,12 +91,12 @@ mod property_tests {
 async fn proxy_latency_under_5ms() {
     let proxy = test_helpers::start_proxy().await;
     let client = TestClient::new(&proxy);
-    
+
     // Warm up
     for _ in 0..10 {
         client.proxy_request(test_request()).await.unwrap();
     }
-    
+
     // Measure
     let mut latencies = Vec::new();
     for _ in 0..100 {
@@ -104,7 +104,7 @@ async fn proxy_latency_under_5ms() {
         client.proxy_request(test_request()).await.unwrap();
         latencies.push(start.elapsed());
     }
-    
+
     let p99 = percentile(&latencies, 99.0);
     assert!(p99 < Duration::from_millis(5), "P99 latency: {:?}", p99);
 }
@@ -114,7 +114,7 @@ async fn proxy_latency_under_5ms() {
 fn openai_chat_completion_parsing() {
     let recorded_response = include_str!("fixtures/openai_chat_response.json");
     let parsed: OpenAiChatResponse = serde_json::from_str(recorded_response).unwrap();
-    
+
     assert_eq!(parsed.model, "gpt-4");
     assert!(parsed.usage.total_tokens > 0);
 }
@@ -130,18 +130,18 @@ pub struct SessionBuilder {
 }
 
 impl SessionBuilder {
-    pub fn new() -> Self { 
-        Self { 
-            id: None, 
-            metadata: HashMap::new() 
-        } 
+    pub fn new() -> Self {
+        Self {
+            id: None,
+            metadata: HashMap::new()
+        }
     }
-    
+
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(SessionId::new(id.into()).unwrap());
         self
     }
-    
+
     pub fn build(self) -> Session {
         Session {
             id: self.id.unwrap_or_else(|| SessionId::new("test-session").unwrap()),
@@ -152,8 +152,8 @@ impl SessionBuilder {
 }
 
 // Async test helpers
-pub async fn with_test_db<F, Fut>(f: F) 
-where 
+pub async fn with_test_db<F, Fut>(f: F)
+where
     F: FnOnce(Database) -> Fut,
     Fut: Future<Output = ()>,
 {
@@ -180,20 +180,20 @@ test:
         --health-interval 10s
         --health-timeout 5s
         --health-retries 5
-  
+
   steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
-    
+
     - name: Run tests
       run: |
         cargo test --all-features
         cargo test --doc
-    
+
     - name: Run property tests (extended)
       run: |
         PROPTEST_CASES=10000 cargo test --test property_tests
-    
+
     - name: Performance tests
       run: |
         cargo test --test performance --release

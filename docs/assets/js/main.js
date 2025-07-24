@@ -18,13 +18,13 @@ const navbar = document.querySelector('.navbar');
 
 window.addEventListener('scroll', () => {
     const currentScroll = window.pageYOffset;
-    
+
     if (currentScroll <= 0) {
         navbar.style.boxShadow = 'none';
     } else {
         navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.3)';
     }
-    
+
     lastScroll = currentScroll;
 });
 
@@ -58,23 +58,23 @@ document.addEventListener('DOMContentLoaded', () => {
 document.querySelectorAll('.code-block code').forEach(block => {
     // Get the text content and preserve it
     let text = block.textContent;
-    
+
     // Create a document fragment to build the highlighted content
     const fragment = document.createDocumentFragment();
-    
+
     // Simple syntax highlighting for Rust code using text manipulation
     const tokens = text.split(/(\s+|[(){}[\]<>,;:&|!?*+=\-/\\])/);
-    
+
     const keywords = new Set(['pub', 'async', 'fn', 'struct', 'impl', 'let', 'const', 'use', 'mod', 'trait', 'enum', 'match', 'if', 'else', 'for', 'while', 'loop', 'return', 'break', 'continue', 'self', 'Self', 'super', 'crate', 'move', 'ref', 'mut', 'where', 'type', 'unsafe', 'extern', 'static', 'as', 'in', 'from', 'into']);
     const types = new Set(['String', 'Result', 'Ok', 'Err', 'Option', 'Some', 'None', 'Vec', 'HashMap', 'bool', 'u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', 'usize', 'isize', 'char', 'str', 'SessionId', 'ProxyRequest', 'ProxyResponse', 'ProxyError']);
-    
+
     let inString = false;
     let inComment = false;
     let inAttribute = false;
-    
+
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
-        
+
         if (token === '"' && !inComment) {
             inString = !inString;
             const span = document.createElement('span');
@@ -126,7 +126,7 @@ document.querySelectorAll('.code-block code').forEach(block => {
             fragment.appendChild(document.createTextNode(token));
         }
     }
-    
+
     // Clear the block and append the highlighted content
     block.textContent = '';
     block.appendChild(fragment);
@@ -138,7 +138,7 @@ const navLinks = document.querySelectorAll('.nav-link');
 
 window.addEventListener('scroll', () => {
     let current = '';
-    
+
     sections.forEach(section => {
         const sectionTop = section.offsetTop;
         const sectionHeight = section.clientHeight;
@@ -146,7 +146,7 @@ window.addEventListener('scroll', () => {
             current = section.getAttribute('id');
         }
     });
-    
+
     navLinks.forEach(link => {
         link.classList.remove('active');
         if (link.getAttribute('href') === `#${current}`) {

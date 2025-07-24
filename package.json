@@ -1,14 +1,14 @@
 {
-  "name": "union-square",
-  "version": "0.1.0",
-  "private": true,
   "description": "Union Square - LLM proxy service",
+  "devDependencies": {
+    "log4brains": "^1.0.1"
+  },
+  "name": "union-square",
+  "private": true,
   "scripts": {
     "adr": "log4brains adr",
     "adr:new": "log4brains adr new",
     "adr:preview": "log4brains preview"
   },
-  "devDependencies": {
-    "log4brains": "^1.0.1"
-  }
+  "version": "0.1.0"
 }

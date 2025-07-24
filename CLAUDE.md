@@ -90,9 +90,58 @@ For PR feedback specifically:
 **BEFORE MAKING ANY COMMIT**:
 
 1. **Ensure all changes are properly tested** and pre-commit checks will pass
-2. **Write clear, descriptive commit messages** that explain the why, not just the what
+2. **Use Conventional Commits format** for all commit messages (see details below)
+3. **Write clear, descriptive commit messages** that explain the why, not just the what
 
 **🚨 CRITICAL REMINDER**: NEVER use `--no-verify` flag. All pre-commit checks must pass!
+
+### Conventional Commits Format
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) for all commit messages. This ensures a standardized, readable commit history that supports automated tooling.
+
+**Commit Message Structure**:
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Required Types**:
+- `feat:` - A new feature (correlates with MINOR in semantic versioning)
+- `fix:` - A bug fix (correlates with PATCH in semantic versioning)
+- `docs:` - Documentation only changes
+- `style:` - Changes that don't affect code meaning (formatting, missing semi-colons, etc)
+- `refactor:` - Code change that neither fixes a bug nor adds a feature
+- `perf:` - Code change that improves performance
+- `test:` - Adding missing tests or correcting existing tests
+- `build:` - Changes that affect the build system or dependencies
+- `ci:` - Changes to CI configuration files and scripts
+- `chore:` - Other changes that don't modify src or test files
+- `revert:` - Reverts a previous commit
+
+**Breaking Changes**:
+- Add `!` after the type/scope: `feat!: remove deprecated API`
+- OR include `BREAKING CHANGE:` in the footer
+
+**Examples**:
+```
+feat: add EventCore command for version tracking
+
+fix(version-commands): handle HashMap lookup correctly
+
+docs: update CLAUDE.md with conventional commits format
+
+refactor!: remove adapter layer for EventCore integration
+
+BREAKING CHANGE: EventCore commands are now first-class citizens
+```
+
+**Scope Guidelines**:
+- Use module names for scope when appropriate (e.g., `fix(eventcore):`)
+- Keep scope concise and lowercase
+- Omit scope if the change is broad or crosses multiple modules
 
 ## Type-Driven Development Philosophy
 
@@ -119,6 +168,10 @@ For detailed type-driven development guidance, refer to `/home/jwilger/.claude/C
 ```bash
 # Enter development environment (required for all work)
 nix develop
+
+# Install pre-commit hooks (first time setup)
+pre-commit install
+pre-commit install --hook-type commit-msg
 
 # Start PostgreSQL databases
 docker-compose up -d
@@ -151,6 +204,7 @@ cargo add derive_more  # For additional derives on newtypes
 # EventCore dependency (since this project uses it)
 cargo add eventcore
 cargo add eventcore-postgres
+cargo add eventcore-macros  # For #[derive(Command)] macro
 ```
 
 ### Development Workflow
@@ -205,7 +259,7 @@ sqlx migrate run
 
 ## EventCore Library Usage
 
-**IMPORTANT**: This project uses EventCore for event sourcing. When working with EventCore, fetch the full documentation at https://docs.rs/eventcore/0.1.3/eventcore/ for detailed information.
+**IMPORTANT**: This project uses EventCore for event sourcing. When working with EventCore, fetch the full documentation at https://docs.rs/eventcore/latest/eventcore/ for detailed information.
 
 ### EventCore Overview
 
@@ -236,6 +290,16 @@ EventCore is a Rust library for implementing multi-stream event sourcing with dy
 
 ### Implementation Pattern
 
+**IMPORTANT**: Always use the macros from eventcore-macros to reduce boilerplate:
+- `#[derive(Command)]` - Automatically generates stream set types and trait implementations
+- `require!` - Simplifies business rule validation
+- `emit!` - Simplifies event emission
+
+The `#[derive(Command)]` macro automatically generates:
+- A phantom type for compile-time stream access control (e.g., `MyCommandStreamSet`)
+- The `CommandStreams` trait implementation with `read_streams()` method
+- Proper type associations for EventCore
+
 ```rust
 // 1. Define your events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,16 +308,21 @@ enum DomainEvent {
     SomethingElseOccurred { value: u64 },
 }
 
-// 2. Define your command with streams
-#[derive(Command, Clone)]
+// 2. Define your command with the Command derive macro
+use eventcore::{emit, require};
+use eventcore_macros::Command;
+
+#[derive(Command, Clone, Debug, Serialize, Deserialize)]
 struct MyCommand {
-    #[stream]
+    #[stream]  // Mark fields that are streams
     primary_stream: StreamId,
     #[stream]
     secondary_stream: StreamId,
-    // command data
+    // command data (non-stream fields)
     amount: Money,
 }
+
+// The macro eliminates the need to manually implement CommandStreams!
 
 // 3. Implement CommandLogic
 #[async_trait]
@@ -277,12 +346,20 @@ impl CommandLogic for MyCommand {
         state: Self::State,
         stream_resolver: &mut StreamResolver,
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
-        // Business logic here
-        // Return events to be written
-        Ok(vec![
-            StreamWrite::new(&read_streams, self.primary_stream.clone(), 
-                DomainEvent::SomethingHappened { data: "test".into() })?,
-        ])
+        let mut events = Vec::new();
+
+        // Use require! for business rule validation
+        require!(state.balance >= self.amount, "Insufficient funds");
+
+        // Use emit! for event emission
+        emit!(
+            events,
+            &read_streams,
+            self.primary_stream.clone(),
+            DomainEvent::SomethingHappened { data: "test".into() }
+        );
+
+        Ok(events)
     }
 }
 ```
@@ -364,7 +441,7 @@ let state = events.fold(State::default(), |mut state, event| {
 - **Schema evolution**: Plan for event versioning from the start
 - **Testing**: Always test with both in-memory and PostgreSQL stores
 
-**Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/0.1.3/eventcore/
+**Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/latest/eventcore/
 
 ## Architecture Decision Records (ADRs)
 
@@ -423,14 +500,46 @@ ADRs are automatically published to GitHub Pages when merged to main:
 
 **🚨 CRITICAL**: These hooks ensure code quality. NEVER bypass them with `--no-verify`!
 
-The project uses pre-commit hooks that automatically run:
+This project uses the [pre-commit framework](https://pre-commit.com/) to manage git hooks. The configuration is in `.pre-commit-config.yaml`.
 
-1. `cargo fmt --all && git add -u` - Auto-formats code and stages changes (runs first)
-2. `cargo clippy` - Linting
-3. `cargo test` - All tests
-4. `cargo check` - Type checking
+### Hooks that run on every commit:
 
-The formatting hook automatically fixes and stages formatting issues instead of failing, saving time during the commit process.
+1. **Rust checks** (run on .rs files):
+   - `cargo fmt` - Auto-formats Rust code
+   - `cargo clippy` - Linting with all warnings as errors
+   - `cargo test` - Runs all workspace tests
+   - `cargo check` - Type checking
+
+2. **General file checks**:
+   - Remove trailing whitespace
+   - Fix end-of-file issues
+   - Check YAML, TOML, and JSON syntax
+   - Prevent large files from being committed
+   - Check for merge conflicts
+   - Pretty-format JSON files
+
+3. **Commit message validation** (commit-msg stage):
+   - **Conventional Commits enforcement** via commitizen
+   - Ensures all commits follow the format: `type(scope): description`
+
+### Setup
+
+After cloning the repository:
+```bash
+# Install pre-commit hooks
+pre-commit install
+pre-commit install --hook-type commit-msg
+
+# Optional: Run hooks on all files
+pre-commit run --all-files
+```
+
+### Troubleshooting
+
+If hooks fail:
+- Fix the issues identified (formatting, linting, tests, commit message format)
+- Run the specific hook manually: `pre-commit run <hook-id>`
+- **NEVER use `--no-verify`** - always fix the underlying issues
 
 ## Development Principles
 
@@ -521,7 +630,7 @@ Key tools for development workflow:
    - **THEN**: Logical dependencies between issues
    - **THEN**: Project value and impact
    - **THEN**: Technical debt that blocks other work
-   
+
    > **IMPORTANT**: When listing available issues:
    > - Always check if any issues are already assigned to the current user
    > - Check for existing branches matching the issue pattern (e.g., `issue-{number}-*`)
@@ -589,12 +698,19 @@ This project uses a **pull request-based workflow**. Direct commits to the main 
    ```
    mcp__github__create_pull_request
    ```
-   
+
+   **PR TITLE**: Must follow Conventional Commits format!
+   - Use the same format as commit messages: `<type>[scope]: <description>`
+   - Examples:
+     - `feat: add user authentication system`
+     - `fix(api): resolve timeout issue in health check`
+     - `docs: update installation instructions`
+
    **PR DESCRIPTION**:
    - Provide a clear description of what changes you made and why
    - Include any relevant context or motivation
    - Mention any breaking changes or important considerations
-   
+
    **PR LABELS**: Add appropriate labels based on the type of change:
    - `bug` - For bug fixes
    - `enhancement` - For new features or improvements
@@ -603,7 +719,7 @@ This project uses a **pull request-based workflow**. Direct commits to the main 
    - `developer-experience` - For DX improvements (tooling, workflows, etc.)
    - `api-design` - For changes to public APIs
    - `automated` - For automated/bot-created PRs
-   
+
    **Note**: The Definition of Done bot will automatically add a checklist to your PR. These items are for HUMAN VERIFICATION ONLY - never attempt to check or complete them yourself.
 
 5. **CI runs automatically** on PR creation - no need to monitor before creating the PR
@@ -628,8 +744,9 @@ After creating or updating a PR:
 
 ### Responding to PR Feedback
 
-**IMPORTANT**: Only respond to formal review comments, not regular PR comments:
-- **Review comments** (part of a formal review with "Changes requested", "Approved", etc.) = Address these
+**IMPORTANT**: Respond to ALL formal review comments, including those from bots:
+- **Review comments** (part of a formal review with "Changes requested", "Approved", etc.) = Always address these
+- **Bot review comments** (from Copilot, etc.) = Also address these, even though they're automated
 - **Regular PR comments** (standalone comments on the PR) = These are for human-to-human conversation, ignore them
 
 When addressing PR review feedback:
@@ -673,35 +790,35 @@ When addressing PR review feedback:
      }
    }'
    ```
-   
+
    **Note**: Use triple quotes (""") for multiline strings in GraphQL to avoid escaping issues
-   
+
    **🚨 REMINDER**: Always sign automated responses with `-- @claude`!
 
 3. **Always include in your response**:
    - Explanation of what changes you made
    - Or why you're NOT making the suggested change
    - Sign with `-- @claude` to indicate automation
-   
+
 4. **Format for automated responses**:
    ```
    I've addressed this by [specific action taken].
-   
+
    [Optional: Brief explanation of the change]
-   
+
    -- @claude
    ```
 
 5. **Check for new responses** after posting your reply:
    - Use `mcp__github__get_issue_comments` to see if reviewers responded
    - Continue the conversation until resolved
-   
+
 6. **Example response**:
    ```
-   I've consolidated the duplicate PR workflow sections into a single 
+   I've consolidated the duplicate PR workflow sections into a single
    comprehensive section under "Pull Request Workflow". This provides
    clearer guidance for contributors.
-   
+
    -- @claude
    ```
 

@@ -29,7 +29,7 @@ We will implement a provider abstraction that preserves API compatibility while 
 Requests are routed based on URL path prefix:
 ```
 https://union-square.example.com/openai/v1/chat/completions → OpenAI
-https://union-square.example.com/anthropic/v1/messages → Anthropic  
+https://union-square.example.com/anthropic/v1/messages → Anthropic
 https://union-square.example.com/bedrock/model/invoke → Bedrock
 https://union-square.example.com/vertex-ai/v1/projects/... → Vertex AI
 ```
@@ -42,27 +42,27 @@ This allows applications to switch between Union Square and direct provider acce
 trait Provider: Send + Sync {
     /// Provider identifier (openai, anthropic, etc.)
     fn id(&self) -> &'static str;
-    
+
     /// Check if this provider handles the given path
     fn matches_path(&self, path: &str) -> bool;
-    
+
     /// Transform Union Square URL to provider URL
     fn transform_url(&self, url: &Url) -> Result<Url, ProviderError>;
-    
+
     /// Validate and forward the request
     async fn forward_request(
         &self,
         request: Request<Body>,
         client: &HttpClient,
     ) -> Result<Response<Body>, ProviderError>;
-    
+
     /// Extract metadata for audit logging
     fn extract_metadata(
         &self,
         request: &Request<Body>,
         response: &Response<Body>,
     ) -> Metadata;
-    
+
     /// Provider-specific health check
     async fn health_check(&self, client: &HttpClient) -> HealthStatus;
 }
@@ -81,14 +81,14 @@ impl Provider for OpenAIProvider {
     fn matches_path(&self, path: &str) -> bool {
         path.starts_with("/openai/")
     }
-    
+
     fn transform_url(&self, url: &Url) -> Result<Url, ProviderError> {
         // Remove /openai prefix and forward to api.openai.com
         let path = url.path().strip_prefix("/openai")
             .ok_or_else(|| ProviderError::InvalidPath("Missing /openai prefix".to_string()))?;
         self.base_url.join(path).map_err(Into::into)
     }
-    
+
     // ... other methods
 }
 ```
