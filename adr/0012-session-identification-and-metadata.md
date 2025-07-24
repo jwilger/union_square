@@ -66,7 +66,7 @@ struct SessionContext {
     user_id: Option<String>,
     metadata: HashMap<String, String>,
     application_context: Option<serde_json::Value>,
-    
+
     // Auto-captured context
     request_id: Uuid,           // Unique per request
     timestamp: DateTime<Utc>,
@@ -80,7 +80,7 @@ impl SessionContext {
             .get("x-unionsquare-session-id")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
-            
+
         let metadata = headers
             .iter()
             .filter_map(|(name, value)| {
@@ -89,7 +89,7 @@ impl SessionContext {
                     .map(|key| (key.to_string(), value.to_str().unwrap_or("").to_string()))
             })
             .collect();
-            
+
         // Extract other fields and construct SessionContext
         SessionContext {
             session_id,

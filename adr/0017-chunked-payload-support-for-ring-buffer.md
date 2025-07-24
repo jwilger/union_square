@@ -128,18 +128,18 @@ Simply increase slot size to 1MB to accommodate largest payloads.
 fn write_chunked(payload: &[u8]) -> Result<PayloadId, OverflowError> {
     let payload_id = Uuid::new_v7();
     let total_chunks = (payload.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
-    
+
     // Validate chunk count doesn't overflow u16
     if total_chunks > u16::MAX as usize {
-        return Err(OverflowError::PayloadTooLarge { 
+        return Err(OverflowError::PayloadTooLarge {
             chunks: total_chunks,
             max_chunks: u16::MAX as usize,
         });
     }
-    
+
     // Atomically claim N consecutive slots
     let start_slot = claim_slots(total_chunks)?;
-    
+
     for (i, chunk) in payload.chunks(CHUNK_SIZE).enumerate() {
         let slot = &slots[(start_slot + i) % slot_count];
         let header = SlotHeader {
@@ -147,15 +147,15 @@ fn write_chunked(payload: &[u8]) -> Result<PayloadId, OverflowError> {
             chunk_seq: i as u16,
             total_chunks: total_chunks as u16,
             chunk_len: chunk.len() as u32,
-            flags: if i == 0 { IS_FIRST } else { 0 } 
+            flags: if i == 0 { IS_FIRST } else { 0 }
                  | if i == total_chunks - 1 { IS_LAST } else { 0 },
             state: AtomicU8::new(WRITING),
         };
-        
+
         write_slot(slot, header, chunk);
         slot.header.state.store(READY, Release);
     }
-    
+
     Ok(payload_id)
 }
 ```
@@ -165,25 +165,25 @@ fn write_chunked(payload: &[u8]) -> Result<PayloadId, OverflowError> {
 ```rust
 impl Iterator for ChunkedPayloadReader {
     type Item = &[u8];
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         let mut spin_count = 0;
         loop {
             let slot = &self.slots[self.current_pos];
-            
+
             // Check slot is ready before attempting to read
-            if slot.header.state.load(Acquire) == READY 
+            if slot.header.state.load(Acquire) == READY
                 && slot.matches_payload(self.payload_id, self.expected_seq) {
                 self.expected_seq += 1;
                 self.current_pos = (self.current_pos + 1) % self.slot_count;
                 return Some(&slot.data[..slot.header.chunk_len as usize]);
             }
-            
+
             // Handle missing chunk with backoff
             if self.timeout_exceeded() {
                 return None;
             }
-            
+
             // Prevent CPU spinning: yield after threshold
             spin_count += 1;
             if spin_count > SPIN_THRESHOLD {

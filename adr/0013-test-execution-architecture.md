@@ -31,21 +31,21 @@ struct TestCase {
     id: TestCaseId,
     name: String,
     description: String,
-    
+
     // Captured from original session
     source_session_id: SessionId,
     source_request: CapturedRequest,
     source_response: CapturedResponse,
-    
+
     // Test configuration
     evaluation_method: EvaluationMethod,
     evaluation_config: serde_json::Value,
-    
+
     // Execution settings
     target_providers: Vec<ProviderId>,  // Which providers to test against
     timeout: Duration,
     retries: u32,
-    
+
     // Metadata
     tags: Vec<String>,
     created_at: DateTime<Utc>,
@@ -66,7 +66,7 @@ enum EvaluationMethod {
 trait EvaluationStrategy: Send + Sync {
     /// Unique identifier for this strategy
     fn id(&self) -> &str;
-    
+
     /// Evaluate a test execution result
     async fn evaluate(
         &self,
@@ -75,7 +75,7 @@ trait EvaluationStrategy: Send + Sync {
         actual: &ExecutionResponse,
         config: &serde_json::Value,
     ) -> EvaluationResult;
-    
+
     /// Validate configuration for this strategy
     fn validate_config(&self, config: &serde_json::Value) -> Result<(), ValidationError>;
 }
@@ -132,14 +132,14 @@ impl TestExecutor {
     async fn execute_test(&self, test_case: &TestCase) -> Result<TestResult, TestError> {
         // 1. Prepare request from test case
         let request = self.prepare_request(&test_case.source_request);
-        
+
         // 2. Execute against target providers
         let mut executions = Vec::new();
         for provider in &test_case.target_providers {
             let response = self.execute_request(provider, &request).await;
             executions.push(response);
         }
-        
+
         // 3. Evaluate results
         let strategy = self.strategy_registry.get(&test_case.evaluation_method)?;
         let mut evaluations = Vec::new();
@@ -152,7 +152,7 @@ impl TestExecutor {
             ).await;
             evaluations.push(result);
         }
-        
+
         // 4. Store results
         let test_result = TestResult {
             test_case_id: test_case.id,
@@ -160,7 +160,7 @@ impl TestExecutor {
             evaluations,
             timestamp: Utc::now(),
         };
-        
+
         self.result_store.store(&test_result).await?;
         Ok(test_result)
     }
@@ -175,12 +175,12 @@ struct TestSuite {
     name: String,
     test_cases: Vec<TestCaseId>,
     schedule: Option<Schedule>,  // For automated execution
-    
+
     // Execution configuration
     parallel_execution: bool,
     max_parallel: usize,
     stop_on_failure: bool,
-    
+
     // Notification settings
     notify_on: NotificationTriggers,
     notification_channels: Vec<NotificationChannel>,

@@ -67,7 +67,7 @@ async fn proxy_streaming_response(
     mut events: mpsc::Sender<RecordingEvent>,
 ) -> Result<Response<Body>> {
     let (tx, body) = Body::channel();
-    
+
     tokio::spawn(async move {
         let mut full_response = Vec::new();
         while let Some(chunk) = response.body_mut().data().await {
@@ -77,7 +77,7 @@ async fn proxy_streaming_response(
         }
         events.send(RecordingEvent::Response(full_response)).await?;
     });
-    
+
     Ok(Response::new(body))
 }
 ```

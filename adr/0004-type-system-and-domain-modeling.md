@@ -134,7 +134,7 @@ pub trait ProviderApi: private::Sealed {
     type Request: Serialize + DeserializeOwned;
     type Response: Serialize + DeserializeOwned;
     type StreamChunk: Serialize + DeserializeOwned;
-    
+
     fn endpoint_pattern(&self) -> &'static str;
     fn parse_model(&self, request: &Self::Request) -> ModelIdentifier;
 }
@@ -151,10 +151,10 @@ mod private {
 pub enum DomainError {
     #[error("Invalid session ID: {0}")]
     InvalidSessionId(String),
-    
+
     #[error("Rate limit exceeded for {provider:?}")]
     RateLimitExceeded { provider: Provider },
-    
+
     #[error("Test assertion failed: {message}")]
     TestAssertionFailed { message: String },
 }

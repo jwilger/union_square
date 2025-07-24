@@ -68,7 +68,7 @@ CREATE TABLE sessions (
     INDEX idx_app_time (app_id, timestamp DESC)
 );
 
--- Optimized for test queries  
+-- Optimized for test queries
 CREATE TABLE test_executions (
     id UUID PRIMARY KEY,
     test_id UUID NOT NULL,

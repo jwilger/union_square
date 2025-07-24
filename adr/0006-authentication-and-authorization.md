@@ -64,11 +64,11 @@ impl User {
     pub fn can_view_session(&self, session: &Session) -> bool {
         self.application_id == session.application_id
     }
-    
+
     pub fn can_create_test(&self) -> bool {
         matches!(self.role, Role::Admin | Role::Developer)
     }
-    
+
     pub fn can_flag_session(&self) -> bool {
         matches!(self.role, Role::Admin | Role::Developer | Role::CSM)
     }
@@ -100,7 +100,7 @@ async fn forward_to_provider(
 ) -> Result<Response> {
     let api_key = request.extract_api_key()
         .ok_or(AuthError::MissingApiKey)?;
-    
+
     // Use key for this request only, never persist
     provider.forward_request(request, api_key).await
 }
@@ -124,7 +124,7 @@ CREATE POLICY event_isolation ON events
     FOR ALL
     USING (
         session_id IN (
-            SELECT id FROM sessions 
+            SELECT id FROM sessions
             WHERE application_id = current_setting('app.application_id')::uuid
         )
     );
@@ -137,7 +137,7 @@ impl DatabaseConnection {
         f: impl Future<Output = Result<T>>,
     ) -> Result<T> {
         self.execute(&format!(
-            "SET LOCAL app.application_id = '{}'", 
+            "SET LOCAL app.application_id = '{}'",
             application_id
         )).await?;
         f.await
