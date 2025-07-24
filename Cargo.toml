@@ -19,9 +19,9 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # EventCore will be used for event sourcing and CQRS patterns
-eventcore = "0.1.7"
-eventcore-postgres = "0.1.7"
-eventcore-macros = "0.1.7"
+eventcore = "0.1.8"
+eventcore-postgres = "0.1.8"
+eventcore-macros = "0.1.8"
 nutype = { version = "0.5", features = ["serde", "new_unchecked"] }
 derive_more = { version = "1.0", features = ["debug", "display", "from", "into"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -33,7 +33,7 @@ tokio-test = "0.4"
 tempfile = "3.0"
 rstest = "0.22"
 proptest = "1.4"
-eventcore-memory = "0.1.7"
+eventcore-memory = "0.1.8"
 
 [[bin]]
 name = "union_square"

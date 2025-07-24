@@ -240,7 +240,6 @@ impl CommandLogic for DeactivateVersion {
         state.apply(&event.payload);
     }
 
-    #[allow(clippy::vec_init_then_push)]
     async fn handle(
         &self,
         _read_streams: ReadStreams<Self::StreamSet>,
