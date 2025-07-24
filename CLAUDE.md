@@ -633,7 +633,7 @@ Key tools for development workflow:
 
    **Example**: For repositories with many issues, use the Task tool:
    ```
-   Use Task tool with prompt: "Check ALL pages of open issues for jwilger/union_square
+   Use Task tool with prompt: "Check ALL pages of open issues for owner/repository
    using mcp__github__list_issues with perPage=5. Continue checking pages until you
    get an empty result. Compile a complete list with issue numbers, titles, and priorities."
    ```
