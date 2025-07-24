@@ -31,7 +31,7 @@ config = "0.14"
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.0"
-rstest = "0.22"
+rstest = "0.25"
 proptest = "1.4"
 eventcore-memory = "0.1.8"
 
