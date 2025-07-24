@@ -624,6 +624,20 @@ Key tools for development workflow:
    mcp__github__list_issues with state="open"
    ```
 
+   **🚨 CRITICAL**: GitHub API paginates results! When listing issues:
+   - Start with a reasonable page size (e.g., `perPage=5` - larger sizes may exceed token limits)
+   - **ALWAYS check ALL pages** until you get an empty result set
+   - Use the Task tool to efficiently check all pages if there are many issues
+   - **DO NOT** assume the first page shows all available issues
+   - A repository may have 100+ issues across many pages
+
+   **Example**: For repositories with many issues, use the Task tool:
+   ```
+   Use Task tool with prompt: "Check ALL pages of open issues for owner/repository
+   using mcp__github__list_issues with perPage=5. Continue checking pages until you
+   get an empty result. Compile a complete list with issue numbers, titles, and priorities."
+   ```
+
 2. **Prioritize and suggest issues** to work on based on:
    - **HIGHEST PRIORITY**: Issues already assigned to the current user, especially if there's an existing branch for that issue
    - **THEN**: Priority levels (CRITICAL > HIGH > MEDIUM > LOW)
