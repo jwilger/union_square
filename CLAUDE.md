@@ -625,7 +625,7 @@ Key tools for development workflow:
    ```
 
    **🚨 CRITICAL**: GitHub API paginates results! When listing issues:
-   - Start with a reasonable page size (e.g., `perPage=10` or `perPage=20`)
+   - Start with a reasonable page size (e.g., `perPage=5` - larger sizes may exceed token limits)
    - **ALWAYS check ALL pages** until you get an empty result set
    - Use the Task tool to efficiently check all pages if there are many issues
    - **DO NOT** assume the first page shows all available issues
@@ -634,7 +634,7 @@ Key tools for development workflow:
    **Example**: For repositories with many issues, use the Task tool:
    ```
    Use Task tool with prompt: "Check ALL pages of open issues for jwilger/union_square
-   using mcp__github__list_issues with perPage=10. Continue checking pages until you
+   using mcp__github__list_issues with perPage=5. Continue checking pages until you
    get an empty result. Compile a complete list with issue numbers, titles, and priorities."
    ```
 
