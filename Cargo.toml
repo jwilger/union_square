@@ -23,7 +23,7 @@ eventcore = "0.1.8"
 eventcore-postgres = "0.1.8"
 eventcore-macros = "0.1.8"
 nutype = { version = "0.5", features = ["serde", "new_unchecked"] }
-derive_more = { version = "1.0", features = ["debug", "display", "from", "into"] }
+derive_more = { version = "2.0", features = ["debug", "display", "from", "into"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 config = "0.14"
