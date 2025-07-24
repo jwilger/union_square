@@ -228,5 +228,3 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 ## Security
 
 For security vulnerabilities, please email security@example.com instead of using the issue tracker.
-
-<!-- And here is a useless comment to trigger a release PR build! -->
