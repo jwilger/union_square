@@ -1,36 +1,42 @@
 <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
 	 width="100%" viewBox="0 0 1024 1024" enable-background="new 0 0 1024 1024" xml:space="preserve">
 <defs>
-	<filter id="whiteGlow" x="-50%" y="-50%" width="200%" height="200%">
-		<!-- Create white glow by stacking multiple blurs -->
-		<feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur1"/>
-		<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur2"/>
-		<feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur3"/>
+	<filter id="whiteBackgroundGlow" x="-50%" y="-50%" width="200%" height="200%">
+		<!-- Create white background behind the entire shape -->
+		<feFlood flood-color="white" flood-opacity="1" result="whiteBackground"/>
+		<feComposite in="whiteBackground" in2="SourceAlpha" operator="in" result="whiteShape"/>
 
-		<!-- Convert to white -->
+		<!-- Create white glow outside the shape -->
+		<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur1"/>
+		<feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur2"/>
+		<feGaussianBlur in="SourceGraphic" stdDeviation="24" result="blur3"/>
+
+		<!-- Convert blurs to white -->
 		<feColorMatrix in="blur1" type="matrix" values="0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 1 0" result="whiteBlur1"/>
+		                                                 0 0 0 0 1
+		                                                 0 0 0 0 1
+		                                                 0 0 0 1 0" result="whiteBlur1"/>
 		<feColorMatrix in="blur2" type="matrix" values="0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 1 0" result="whiteBlur2"/>
+		                                                 0 0 0 0 1
+		                                                 0 0 0 0 1
+		                                                 0 0 0 1 0" result="whiteBlur2"/>
 		<feColorMatrix in="blur3" type="matrix" values="0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 0 1
-														0 0 0 1 0" result="whiteBlur3"/>
+		                                                 0 0 0 0 1
+		                                                 0 0 0 0 1
+		                                                 0 0 0 1 0" result="whiteBlur3"/>
 
-		<!-- Merge all glows -->
+		<!-- Merge all layers: background glows, white shape background, then original -->
 		<feMerge>
 			<feMergeNode in="whiteBlur3"/>
 			<feMergeNode in="whiteBlur2"/>
 			<feMergeNode in="whiteBlur1"/>
+			<feMergeNode in="whiteShape"/>
 			<feMergeNode in="SourceGraphic"/>
 		</feMerge>
 	</filter>
 </defs>
-<path fill="#000000" opacity="1.000000" stroke="none" filter="url(#whiteGlow)"
+<g filter="url(#whiteBackgroundGlow)">
+<path fill="#000000" opacity="1.000000" stroke="none"
 	d="
 M943.375000,815.000122
 	C943.374634,836.166504 943.419006,856.833008 943.364075,877.499268
@@ -526,4 +532,5 @@ M581.467285,394.058838
 	C605.199097,374.704376 603.531738,375.579742 603.936829,379.525055
 	C605.130676,391.150970 594.370544,398.105530 581.467285,394.058838
 z"/>
+</g>
 </svg>
