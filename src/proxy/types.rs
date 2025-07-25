@@ -197,6 +197,45 @@ pub const METHOD_POST: &str = "POST";
 pub const STATUS_OK: u16 = 200;
 pub const STATUS_INTERNAL_ERROR: u16 = 500;
 
+// ========== Size Constants ==========
+
+/// Common byte sizes
+pub const BYTES_1KB: usize = 1024;
+pub const BYTES_2KB: usize = 2 * BYTES_1KB;
+pub const BYTES_16KB: usize = 16 * BYTES_1KB;
+pub const BYTES_32KB: usize = 32 * BYTES_1KB;
+pub const BYTES_64KB: usize = 64 * BYTES_1KB;
+pub const BYTES_128KB: usize = 128 * BYTES_1KB;
+pub const BYTES_1MB: usize = 1024 * BYTES_1KB;
+pub const BYTES_2MB: usize = 2 * BYTES_1MB;
+pub const BYTES_10MB: usize = 10 * BYTES_1MB;
+pub const BYTES_512MB: usize = 512 * BYTES_1MB;
+pub const BYTES_1GB: usize = 1024 * BYTES_1MB;
+
+/// Buffer sizes for testing
+pub const BUFFER_SIZE_SMALL: usize = 256; // For stress tests
+pub const BUFFER_SIZE_TEST: usize = BYTES_1KB; // Standard test size
+pub const BUFFER_SIZE_DEFAULT: usize = BYTES_1MB; // Default buffer
+
+/// Slot sizes for testing
+pub const SLOT_SIZE_TINY: usize = 64; // For stress tests
+pub const SLOT_SIZE_SMALL: usize = 128; // Small test slots
+pub const SLOT_SIZE_TEST: usize = BYTES_1KB; // Standard test slots
+
+/// Thread and iteration counts for testing
+pub const TEST_THREAD_COUNT: usize = 10;
+pub const TEST_ITERATIONS_SMALL: usize = 100;
+pub const TEST_ITERATIONS_LARGE: usize = 1000;
+
+/// Network and timeout constants
+pub const TEST_PORT_BASE: u16 = 8080;
+pub const TIMEOUT_SHORT_MS: u64 = 100;
+pub const TIMEOUT_DEFAULT_SECS: u64 = 30;
+pub const TIMEOUT_LONG_SECS: u64 = 60;
+
+/// Channel buffer sizes
+pub const CHANNEL_BUFFER_SIZE: usize = 16;
+
 /// Proxy configuration
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProxyConfig {
@@ -213,9 +252,9 @@ pub struct ProxyConfig {
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
-            max_request_size: RequestSizeLimit::try_new(10 * 1024 * 1024).expect("10MB is valid"), // 10MB
-            max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).expect("10MB is valid"), // 10MB
-            request_timeout: Duration::from_secs(30),
+            max_request_size: RequestSizeLimit::try_new(BYTES_10MB).expect("10MB is valid"),
+            max_response_size: ResponseSizeLimit::try_new(BYTES_10MB).expect("10MB is valid"),
+            request_timeout: Duration::from_secs(TIMEOUT_DEFAULT_SECS),
             ring_buffer: RingBufferConfig::default(),
         }
     }
@@ -233,8 +272,8 @@ pub struct RingBufferConfig {
 impl Default for RingBufferConfig {
     fn default() -> Self {
         Self {
-            buffer_size: BufferSize::try_new(1024 * 1024 * 1024).expect("1GB is valid power of 2"), // 1GB
-            slot_size: SlotSize::try_new(64 * 1024).expect("64KB is valid"), // 64KB
+            buffer_size: BufferSize::try_new(BYTES_1GB).expect("1GB is valid power of 2"),
+            slot_size: SlotSize::try_new(BYTES_64KB).expect("64KB is valid"),
         }
     }
 }

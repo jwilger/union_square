@@ -32,14 +32,14 @@ async fn run_mock_backend(port: u16) -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/slow",
             axum::routing::get(|| async {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(TIMEOUT_SHORT_MS)).await;
                 "Slow response"
             }),
         )
         .route(
             "/large",
             axum::routing::get(|| async {
-                "x".repeat(1024 * 1024) // 1MB
+                "x".repeat(BYTES_1MB) // 1MB
             }),
         )
         .fallback(|request: ExtractRequest| async move {
@@ -57,7 +57,7 @@ async fn run_mock_backend(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Give the server time to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(TIMEOUT_SHORT_MS)).await;
 
     Ok(())
 }
@@ -69,14 +69,14 @@ mod tests {
     #[tokio::test]
     async fn test_basic_proxy_flow() {
         // Start mock backend
-        run_mock_backend(8081)
+        run_mock_backend(TEST_PORT_BASE + 1)
             .await
             .expect("Failed to start mock backend");
 
         // Create proxy configuration
         let config = ProxyConfig {
-            max_request_size: RequestSizeLimit::try_new(10 * 1024 * 1024).unwrap(),
-            max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).unwrap(),
+            max_request_size: RequestSizeLimit::try_new(BYTES_10MB).unwrap(),
+            max_response_size: ResponseSizeLimit::try_new(BYTES_10MB).unwrap(),
             request_timeout: Duration::from_secs(5),
             ring_buffer: RingBufferConfig::default(),
         };
@@ -97,7 +97,10 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8081/")
+            .header(
+                "X-Target-Url",
+                format!("http://localhost:{}/", TEST_PORT_BASE + 1),
+            )
             .body(Body::empty())
             .unwrap();
 

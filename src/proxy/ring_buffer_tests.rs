@@ -237,12 +237,12 @@ proptest! {
 fn test_ring_buffer_memory_layout() {
     // Test that our memory layout assumptions are correct
     let config = RingBufferConfig {
-        buffer_size: BufferSize::try_new(1024).unwrap(),
-        slot_size: SlotSize::try_new(128).unwrap(),
+        buffer_size: BufferSize::try_new(BYTES_1KB).unwrap(),
+        slot_size: SlotSize::try_new(SLOT_SIZE_SMALL).unwrap(),
     };
 
     let ring_buffer = RingBuffer::new(&config);
-    let _expected_slots = 1024 / 128; // 8 slots
+    let _expected_slots = BYTES_1KB / SLOT_SIZE_SMALL; // 8 slots
 
     // Write to fill some slots
     let mut written_ids = Vec::new();
@@ -288,8 +288,8 @@ fn test_ring_buffer_memory_layout() {
 fn test_ring_buffer_concurrent_stress() {
     // Stress test with many concurrent writers and readers
     let config = RingBufferConfig {
-        buffer_size: BufferSize::try_new(1024 * 1024).unwrap(), // 1MB
-        slot_size: SlotSize::try_new(1024).unwrap(),            // 1KB slots
+        buffer_size: BufferSize::try_new(BYTES_1MB).unwrap(),
+        slot_size: SlotSize::try_new(BYTES_1KB).unwrap(),
     };
 
     let ring_buffer = Arc::new(RingBuffer::new(&config));
@@ -297,11 +297,11 @@ fn test_ring_buffer_concurrent_stress() {
     let mut read_handles = Vec::new();
 
     // Spawn writer threads
-    for thread_id in 0..10 {
+    for thread_id in 0..TEST_THREAD_COUNT {
         let rb = Arc::clone(&ring_buffer);
         let handle = thread::spawn(move || {
             let mut successful_writes = 0;
-            for i in 0..1000 {
+            for i in 0..TEST_ITERATIONS_LARGE {
                 let data = format!("thread-{thread_id}-msg-{i}").into_bytes();
                 let request_id = RequestId::new();
                 if rb.write(request_id, &data).is_ok() {

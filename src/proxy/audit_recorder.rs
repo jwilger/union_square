@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Size of chunks for streaming capture
-pub const CAPTURE_CHUNK_SIZE: usize = 16 * 1024; // 16KB chunks
+pub const CAPTURE_CHUNK_SIZE: usize = BYTES_16KB;
 
 /// Trait for common audit recording operations
 pub trait AuditRecorder {
@@ -171,7 +171,7 @@ impl ChunkCapture {
 
     /// Start a chunk capture task that receives chunks via mpsc and writes to audit
     pub fn start_capture_task(&self) -> mpsc::Sender<Bytes> {
-        let (tx, mut rx) = mpsc::channel::<Bytes>(16);
+        let (tx, mut rx) = mpsc::channel::<Bytes>(CHANNEL_BUFFER_SIZE);
         let recorder = self.recorder.clone();
         let request_id = self.request_id;
         let is_request = self.is_request;

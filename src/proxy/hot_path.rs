@@ -191,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn test_request_size_limits() {
         let config = ProxyConfig {
-            max_request_size: RequestSizeLimit::try_new(1024).expect("valid size"), // 1KB limit
+            max_request_size: RequestSizeLimit::try_new(BYTES_1KB).expect("valid size"), // 1KB limit
             ..Default::default()
         };
         let service = HotPathService::new(config);
@@ -203,7 +203,7 @@ mod tests {
     #[tokio::test]
     async fn test_response_size_limits() {
         let config = ProxyConfig {
-            max_response_size: ResponseSizeLimit::try_new(1024).expect("valid size"), // 1KB limit
+            max_response_size: ResponseSizeLimit::try_new(BYTES_1KB).expect("valid size"), // 1KB limit
             ..Default::default()
         };
         let service = HotPathService::new(config);
@@ -217,7 +217,7 @@ mod tests {
         use std::time::Duration;
 
         let config = ProxyConfig {
-            request_timeout: Duration::from_millis(100),
+            request_timeout: Duration::from_millis(TIMEOUT_SHORT_MS),
             ..Default::default()
         };
         let service = HotPathService::new(config);
@@ -248,7 +248,7 @@ mod tests {
         let duration = start.elapsed();
 
         // Even with connection refused, should fail quickly
-        assert!(duration.as_millis() < 100); // Less than 100ms
+        assert!(duration.as_millis() < TIMEOUT_SHORT_MS as u128); // Less than 100ms
     }
 
     #[tokio::test]
@@ -261,7 +261,7 @@ mod tests {
         // Create multiple concurrent requests
         let mut futures = vec![];
 
-        for i in 0..10 {
+        for i in 0..TEST_THREAD_COUNT {
             let service_clone = service.clone();
             let future = async move {
                 let request = Request::builder()
