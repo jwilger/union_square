@@ -1,6 +1,6 @@
-# Chunked Payload Support for Ring Buffer
+# ADR-0017: Chunked Payload Support for Ring Buffer
 
-- Status: proposed
+- Status: accepted
 - Deciders: John Wilger, Claude
 - Date: 2025-07-15
 
