@@ -1,6 +1,6 @@
 //! Main proxy service implementation
 
-use crate::proxy::streaming_simple::StreamingHotPathService;
+use crate::proxy::hot_path::StreamingHotPathService;
 use crate::proxy::{
     audit_path::AuditPathProcessor, middleware as proxy_middleware, ring_buffer::RingBuffer,
     types::*, url_resolver::UrlResolver,

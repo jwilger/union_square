@@ -7,13 +7,10 @@
 pub mod audit_path;
 pub mod audit_recorder;
 pub mod hot_path;
-pub mod hot_path_streaming;
 pub mod middleware;
 pub mod ring_buffer;
 pub mod ring_buffer_performance_test;
 pub mod service;
-pub mod streaming;
-pub mod streaming_simple;
 pub mod types;
 pub mod url_resolver;
 
