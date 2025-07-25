@@ -66,6 +66,7 @@ impl ProxyMiddlewareStack {
 
 /// Configuration for the entire middleware stack
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // These fields will be used in future middleware enhancements
 pub struct ProxyMiddlewareConfig {
     /// Authentication configuration
     pub auth: AuthConfig,
@@ -87,7 +88,12 @@ impl Default for ProxyMiddlewareConfig {
 
 impl ProxyMiddlewareConfig {
     /// Create middleware stack from configuration
+    #[allow(dead_code)] // Will be used when configuration-based setup is needed
     pub fn build_stack(self) -> ProxyMiddlewareStack {
+        // In the future, enable_logging and detailed_errors could be used
+        // to conditionally apply middleware or configure error handling
+        let _ = self.enable_logging; // Will be used for conditional logging
+        let _ = self.detailed_errors; // Will be used for error detail level
         ProxyMiddlewareStack::new(self.auth)
     }
 }

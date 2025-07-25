@@ -1,8 +1,8 @@
 //! Tests for error handling and edge cases
 
-use crate::proxy::middleware::AuthConfig;
 use crate::proxy::service::ProxyService;
 use crate::proxy::types::*;
+use crate::proxy::AuthConfig;
 use axum::http::StatusCode;
 use std::time::Duration;
 

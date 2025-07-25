@@ -8,7 +8,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 use union_square::proxy::{
-    hot_path::StreamingHotPathService, middleware::AuthConfig, ring_buffer::RingBuffer, types::*,
+    paths::StreamingHotPathService, storage::RingBuffer, types::*, AuthConfig,
 };
 
 /// Benchmark ring buffer write performance - this is the critical hot path operation

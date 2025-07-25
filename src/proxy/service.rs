@@ -51,10 +51,7 @@ impl ProxyService {
     }
 
     /// Create an Axum router for the proxy service with middleware
-    pub fn into_router(
-        mut self,
-        auth_config: crate::proxy::middleware::AuthConfig,
-    ) -> axum::Router {
+    pub fn into_router(mut self, auth_config: crate::proxy::AuthConfig) -> axum::Router {
         // Start the audit processor before creating the router
         self.start_audit_processor();
 

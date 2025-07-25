@@ -52,7 +52,7 @@ mod proxy_service_tests {
     async fn test_proxy_service_router_creation() {
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let auth_config = crate::proxy::AuthConfig::default();
         let router = service.into_router(auth_config);
 
         // Router should be created successfully
@@ -161,7 +161,7 @@ mod streaming_tests {
         // Service should handle streaming request without buffering entire body
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let auth_config = crate::proxy::AuthConfig::default();
         let app = service.into_router(auth_config);
 
         // We can't test actual streaming without a backend, but we ensure
@@ -180,7 +180,7 @@ mod streaming_tests {
 
         // The implementation should stream responses without buffering
         // This is a compile-time test to ensure our types support streaming
-        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let auth_config = crate::proxy::AuthConfig::default();
         let _app = service.into_router(auth_config);
     }
 
@@ -245,7 +245,7 @@ mod streaming_tests {
 
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let auth_config = crate::proxy::AuthConfig::default();
         let app = service.into_router(auth_config);
 
         // Service should handle streaming errors gracefully

@@ -1,8 +1,8 @@
 //! Integration tests for end-to-end proxy flow
 
-use crate::proxy::middleware::AuthConfig;
 use crate::proxy::service::ProxyService;
 use crate::proxy::types::*;
+use crate::proxy::AuthConfig;
 use axum::body::Body;
 use axum::extract::Request as ExtractRequest;
 use axum::http::{Request, StatusCode};
