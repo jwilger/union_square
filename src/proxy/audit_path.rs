@@ -120,7 +120,6 @@ impl AuditPathProcessor {
 mod tests {
     use super::*;
     use crate::proxy::types::{RequestId, RingBufferConfig, SessionId};
-    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_audit_processor_creation() {
@@ -166,14 +165,14 @@ mod tests {
 
         // Write an audit event to the ring buffer
         let event = AuditEvent {
-            request_id: unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            request_id: RequestId::new(),
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::RequestReceived {
-                method: "GET".to_string(),
-                uri: "/test".to_string(),
-                headers: vec![],
-                body_size: 0,
+                method: HttpMethod::try_new(METHOD_GET.to_string()).unwrap(),
+                uri: RequestUri::try_new("/test".to_string()).unwrap(),
+                headers: Headers::new(),
+                body_size: BodySize::from(0),
             },
         };
 
@@ -199,7 +198,7 @@ mod tests {
         let ring_buffer = Arc::new(RingBuffer::new(&config));
 
         // Write invalid data to the ring buffer
-        let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let request_id = RequestId::new();
         ring_buffer.write(request_id, b"invalid json").unwrap();
 
         let (mut processor, _shutdown_tx) = AuditPathProcessor::new(ring_buffer);

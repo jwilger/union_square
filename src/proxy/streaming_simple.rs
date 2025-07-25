@@ -6,7 +6,6 @@ use axum::body::Body;
 use hyper::{Request, Response};
 use std::sync::Arc;
 use std::time::Instant;
-use uuid::Uuid;
 
 /// Streaming hot path service for zero-copy forwarding
 #[derive(Clone)]
@@ -64,19 +63,23 @@ impl StreamingHotPathService {
             .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
 
         // Record request metadata in ring buffer
+        let headers_vec: Vec<(String, String)> = parts
+            .headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+            .collect();
+
         let request_event = AuditEvent {
             request_id,
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::RequestReceived {
-                method: parts.method.to_string(),
-                uri: parts.uri.to_string(),
-                headers: parts
-                    .headers
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                    .collect(),
-                body_size: 0, // We don't know the size in streaming mode
+                method: HttpMethod::try_new(parts.method.to_string())
+                    .unwrap_or_else(|_| HttpMethod::try_new("UNKNOWN".to_string()).unwrap()),
+                uri: RequestUri::try_new(parts.uri.to_string())
+                    .unwrap_or_else(|_| RequestUri::try_new("/".to_string()).unwrap()),
+                headers: Headers::from_vec(headers_vec).unwrap_or_default(),
+                body_size: BodySize::from(0), // We don't know the size in streaming mode
             },
         };
 
@@ -104,19 +107,22 @@ impl StreamingHotPathService {
         let (response_parts, response_body) = response.into_parts();
 
         // Record response metadata
+        let headers_vec: Vec<(String, String)> = response_parts
+            .headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+            .collect();
+
         let response_event = AuditEvent {
             request_id,
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::ResponseReceived {
-                status: response_parts.status.as_u16(),
-                headers: response_parts
-                    .headers
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                    .collect(),
-                body_size: 0, // We don't know the size in streaming mode
-                duration_ms,
+                status: HttpStatusCode::try_new(response_parts.status.as_u16())
+                    .unwrap_or_else(|_| HttpStatusCode::try_new(500).unwrap()),
+                headers: Headers::from_vec(headers_vec).unwrap_or_default(),
+                body_size: BodySize::from(0), // We don't know the size in streaming mode
+                duration_ms: DurationMillis::from(duration_ms),
             },
         };
 

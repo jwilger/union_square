@@ -13,7 +13,6 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use uuid::Uuid;
 
 /// Main proxy service combining hot and audit paths
 pub struct ProxyService {
@@ -83,7 +82,7 @@ async fn proxy_handler(
     request: Request<Body>,
 ) -> Result<Response, ProxyError> {
     // Generate request ID for correlation
-    let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+    let request_id = RequestId::new();
 
     // TODO: Extract target URL from request headers or path
     let target_url = TargetUrl::try_new("https://api.example.com")

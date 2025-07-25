@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod proxy_service_tests {
+    use crate::proxy::types::{BufferSize, RequestSizeLimit, ResponseSizeLimit, SlotSize};
     use crate::proxy::{ProxyConfig, ProxyService};
     use std::time::Duration;
 
@@ -21,30 +22,30 @@ mod proxy_service_tests {
     fn test_proxy_config_defaults() {
         let config = ProxyConfig::default();
 
-        assert_eq!(config.max_request_size, 10 * 1024 * 1024);
-        assert_eq!(config.max_response_size, 10 * 1024 * 1024);
+        assert_eq!(*config.max_request_size.as_ref(), 10 * 1024 * 1024);
+        assert_eq!(*config.max_response_size.as_ref(), 10 * 1024 * 1024);
         assert_eq!(config.request_timeout, Duration::from_secs(30));
-        assert_eq!(config.ring_buffer.buffer_size, 1024 * 1024 * 1024);
-        assert_eq!(config.ring_buffer.slot_size, 64 * 1024);
+        assert_eq!(*config.ring_buffer.buffer_size.as_ref(), 1024 * 1024 * 1024);
+        assert_eq!(*config.ring_buffer.slot_size.as_ref(), 64 * 1024);
     }
 
     #[test]
     fn test_custom_proxy_config() {
         let config = ProxyConfig {
-            max_request_size: 1024 * 1024,      // 1MB
-            max_response_size: 2 * 1024 * 1024, // 2MB
+            max_request_size: RequestSizeLimit::try_new(1024 * 1024).expect("valid size"), // 1MB
+            max_response_size: ResponseSizeLimit::try_new(2 * 1024 * 1024).expect("valid size"), // 2MB
             request_timeout: Duration::from_secs(60),
             ring_buffer: crate::proxy::types::RingBufferConfig {
-                buffer_size: 512 * 1024 * 1024, // 512MB
-                slot_size: 32 * 1024,           // 32KB
+                buffer_size: BufferSize::try_new(512 * 1024 * 1024).expect("valid size"), // 512MB
+                slot_size: SlotSize::try_new(32 * 1024).expect("valid size"),             // 32KB
             },
         };
 
         let _service = ProxyService::new(config.clone());
 
         // Service should be created with custom config
-        assert_eq!(config.max_request_size, 1024 * 1024);
-        assert_eq!(config.ring_buffer.buffer_size, 512 * 1024 * 1024);
+        assert_eq!(*config.max_request_size.as_ref(), 1024 * 1024);
+        assert_eq!(*config.ring_buffer.buffer_size.as_ref(), 512 * 1024 * 1024);
     }
 
     #[tokio::test]
@@ -67,14 +68,14 @@ mod type_tests {
 
     #[test]
     fn test_request_id_creation() {
-        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let id = RequestId::new();
         let uuid: &Uuid = id.as_ref();
         assert_eq!(uuid.get_version_num(), 7);
     }
 
     #[test]
     fn test_session_id_creation() {
-        let id = unsafe { SessionId::new_unchecked(Uuid::now_v7()) };
+        let id = SessionId::new();
         let uuid: &Uuid = id.as_ref();
         assert_eq!(uuid.get_version_num(), 7);
     }
@@ -104,14 +105,18 @@ mod type_tests {
     #[test]
     fn test_audit_event_serialization() {
         let event = AuditEvent {
-            request_id: unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            request_id: RequestId::new(),
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::RequestReceived {
-                method: "POST".to_string(),
-                uri: "/v1/chat/completions".to_string(),
-                headers: vec![("content-type".to_string(), "application/json".to_string())],
-                body_size: 1024,
+                method: HttpMethod::try_new(METHOD_POST.to_string()).unwrap(),
+                uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
+                headers: Headers::from_vec(vec![(
+                    "content-type".to_string(),
+                    "application/json".to_string(),
+                )])
+                .unwrap_or_default(),
+                body_size: BodySize::from(1024),
             },
         };
 
@@ -127,6 +132,7 @@ mod type_tests {
 
 #[cfg(test)]
 mod streaming_tests {
+    use crate::proxy::types::{BufferSize, ResponseSizeLimit, SlotSize};
     use crate::proxy::{ProxyConfig, ProxyService};
     use axum::{body::Body, http::StatusCode};
     use bytes::Bytes;
@@ -167,7 +173,7 @@ mod streaming_tests {
     async fn test_zero_copy_streaming() {
         // Test that we don't buffer the entire response in memory
         let config = ProxyConfig {
-            max_response_size: 10 * 1024 * 1024, // 10MB
+            max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).expect("valid size"), // 10MB
             ..Default::default()
         };
         let service = ProxyService::new(config);
@@ -197,8 +203,8 @@ mod streaming_tests {
         // Test handling of responses larger than single ring buffer slot
         let config = ProxyConfig {
             ring_buffer: crate::proxy::types::RingBufferConfig {
-                buffer_size: 1024 * 1024, // 1MB buffer
-                slot_size: 64 * 1024,     // 64KB slots
+                buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"), // 1MB buffer
+                slot_size: SlotSize::try_new(64 * 1024).expect("valid size"),       // 64KB slots
             },
             ..Default::default()
         };

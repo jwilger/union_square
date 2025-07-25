@@ -6,7 +6,6 @@ use axum::body::Body;
 use http_body::Body as HttpBody;
 use hyper::{Request, Response};
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Hot path service for streaming requests with minimal overhead
 #[derive(Clone)]
@@ -64,17 +63,22 @@ impl StreamingHotPathService {
         // Record request metadata immediately (hot path write)
         let request_event = AuditEvent {
             request_id,
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::RequestReceived {
-                method: parts.method.to_string(),
-                uri: parts.uri.to_string(),
-                headers: parts
-                    .headers
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                    .collect(),
-                body_size: body.size_hint().upper().unwrap_or(0) as usize,
+                method: HttpMethod::try_new(parts.method.to_string())
+                    .unwrap_or_else(|_| HttpMethod::try_new("UNKNOWN".to_string()).unwrap()),
+                uri: RequestUri::try_new(parts.uri.to_string())
+                    .unwrap_or_else(|_| RequestUri::try_new("/".to_string()).unwrap()),
+                headers: Headers::from_vec(
+                    parts
+                        .headers
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+                        .collect(),
+                )
+                .unwrap_or_default(),
+                body_size: BodySize::from(body.size_hint().upper().unwrap_or(0) as usize),
             },
         };
 
@@ -102,17 +106,21 @@ impl StreamingHotPathService {
         // Record response metadata
         let response_event = AuditEvent {
             request_id,
-            session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+            session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::ResponseReceived {
-                status: response_parts.status.as_u16(),
-                headers: response_parts
-                    .headers
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                    .collect(),
-                body_size: response_body.size_hint().upper().unwrap_or(0) as usize,
-                duration_ms: 0, // TODO: Properly calculate duration
+                status: HttpStatusCode::try_new(response_parts.status.as_u16())
+                    .unwrap_or_else(|_| HttpStatusCode::try_new(500).unwrap()),
+                headers: Headers::from_vec(
+                    response_parts
+                        .headers
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+                        .collect(),
+                )
+                .unwrap_or_default(),
+                body_size: BodySize::from(response_body.size_hint().upper().unwrap_or(0) as usize),
+                duration_ms: DurationMillis::from(0), // TODO: Properly calculate duration
             },
         };
 

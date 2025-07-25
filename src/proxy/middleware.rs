@@ -17,16 +17,16 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 pub struct AuthConfig {
     /// Valid API keys
-    pub api_keys: HashSet<String>,
+    pub api_keys: HashSet<ApiKey>,
     /// Paths that bypass authentication
-    pub bypass_paths: HashSet<String>,
+    pub bypass_paths: HashSet<BypassPath>,
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
         let mut bypass_paths = HashSet::new();
-        bypass_paths.insert("/health".to_string());
-        bypass_paths.insert("/metrics".to_string());
+        bypass_paths.insert(BypassPath::try_new(HEALTH_PATH.to_string()).unwrap());
+        bypass_paths.insert(BypassPath::try_new(METRICS_PATH.to_string()).unwrap());
 
         Self {
             api_keys: HashSet::new(),
@@ -41,7 +41,7 @@ pub async fn request_id_middleware(
     next: Next,
 ) -> Result<Response, ProxyError> {
     // Check if request already has an ID
-    let request_id = if let Some(existing_id) = request.headers().get("x-request-id") {
+    let request_id = if let Some(existing_id) = request.headers().get(REQUEST_ID_HEADER) {
         // Validate and use existing ID
         existing_id
             .to_str()
@@ -63,7 +63,7 @@ pub async fn request_id_middleware(
     let request_id_clone = request_id.clone();
 
     // Add to request headers
-    request.headers_mut().insert("x-request-id", request_id);
+    request.headers_mut().insert(REQUEST_ID_HEADER, request_id);
 
     // Process request
     let mut response = next.run(request).await;
@@ -71,7 +71,7 @@ pub async fn request_id_middleware(
     // Add request ID to response
     response
         .headers_mut()
-        .insert("x-request-id", request_id_clone);
+        .insert(REQUEST_ID_HEADER, request_id_clone);
 
     Ok(response)
 }
@@ -84,8 +84,10 @@ pub async fn auth_middleware(
 ) -> Result<Response, ProxyError> {
     // Check if path should bypass auth
     let path = request.uri().path();
-    if auth_config.bypass_paths.contains(path) {
-        return Ok(next.run(request).await);
+    if let Ok(bypass_path) = BypassPath::try_new(path.to_string()) {
+        if auth_config.bypass_paths.contains(&bypass_path) {
+            return Ok(next.run(request).await);
+        }
     }
 
     // Extract bearer token from Authorization header
@@ -94,8 +96,10 @@ pub async fn auth_middleware(
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
 
-    let api_key = match auth_header {
-        Some(auth) if auth.starts_with("Bearer ") => auth.trim_start_matches("Bearer ").trim(),
+    let api_key_str = match auth_header {
+        Some(auth) if auth.starts_with(BEARER_PREFIX) => {
+            auth.trim_start_matches(BEARER_PREFIX).trim()
+        }
         _ => {
             warn!("Missing or invalid Authorization header");
             return Ok((
@@ -107,13 +111,15 @@ pub async fn auth_middleware(
     };
 
     // Validate API key
-    if !auth_config.api_keys.contains(api_key) {
-        warn!("Invalid API key attempted: {}", api_key);
-        return Ok((StatusCode::UNAUTHORIZED, "Invalid API key").into_response());
+    if let Ok(api_key) = ApiKey::try_new(api_key_str.to_string()) {
+        if auth_config.api_keys.contains(&api_key) {
+            // Process authenticated request
+            return Ok(next.run(request).await);
+        }
     }
 
-    // Process authenticated request
-    Ok(next.run(request).await)
+    warn!("Invalid API key attempted: {}", api_key_str);
+    Ok((StatusCode::UNAUTHORIZED, "Invalid API key").into_response())
 }
 
 /// Logging middleware - logs request/response details with timing
@@ -125,7 +131,7 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
     let uri = request.uri().clone();
     let request_id = request
         .headers()
-        .get("x-request-id")
+        .get(REQUEST_ID_HEADER)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
@@ -158,7 +164,7 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
 pub async fn error_handling_middleware(request: Request, next: Next) -> Response {
     let request_id = request
         .headers()
-        .get("x-request-id")
+        .get(REQUEST_ID_HEADER)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
         .unwrap_or_else(|| "unknown".to_string());
@@ -176,7 +182,9 @@ pub async fn error_handling_middleware(request: Request, next: Next) -> Response
             // Ensure request ID is in error response
             let mut response = error_response;
             if let Ok(header_value) = HeaderValue::from_str(&request_id) {
-                response.headers_mut().insert("x-request-id", header_value);
+                response
+                    .headers_mut()
+                    .insert(REQUEST_ID_HEADER, header_value);
             }
             response
         }
@@ -199,14 +207,14 @@ mod tests {
         let handler = tower::service_fn(|req: Request| async move {
             let request_id = req
                 .headers()
-                .get("x-request-id")
+                .get(REQUEST_ID_HEADER)
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("missing");
 
             Ok::<_, std::convert::Infallible>(
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header("x-request-id", request_id)
+                    .header(REQUEST_ID_HEADER, request_id)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -225,9 +233,9 @@ mod tests {
             .unwrap();
 
         let response = service.clone().oneshot(request).await.unwrap();
-        assert!(response.headers().contains_key("x-request-id"));
+        assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-        let request_id = response.headers().get("x-request-id").unwrap();
+        let request_id = response.headers().get(REQUEST_ID_HEADER).unwrap();
         let uuid = Uuid::parse_str(request_id.to_str().unwrap()).unwrap();
         assert_eq!(uuid.get_version_num(), 7);
     }
@@ -235,7 +243,9 @@ mod tests {
     #[tokio::test]
     async fn test_auth_middleware_valid_key() {
         let mut auth_config = AuthConfig::default();
-        auth_config.api_keys.insert("valid-key-123".to_string());
+        auth_config
+            .api_keys
+            .insert(ApiKey::try_new("valid-key-123".to_string()).unwrap());
 
         let handler = tower::service_fn(|_req: Request| async move {
             Ok::<_, std::convert::Infallible>(
@@ -308,7 +318,7 @@ mod tests {
 
         let request = Request::builder()
             .method("GET")
-            .uri("/health")
+            .uri(HEALTH_PATH)
             .body(Body::empty())
             .unwrap();
 

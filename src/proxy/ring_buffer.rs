@@ -31,19 +31,19 @@ impl From<u8> for SlotState {
 pub struct Slot {
     state: AtomicU8,
     size: AtomicU32,
-    timestamp: u64,
-    request_id: [u8; 16], // UUID bytes
+    timestamp: TimestampNanos,
+    request_id: [u8; UUID_SIZE_BYTES], // UUID bytes
     data: Vec<u8>,
 }
 
 impl Slot {
-    fn new(slot_size: usize) -> Self {
+    fn new(slot_size: SlotSize) -> Self {
         Self {
             state: AtomicU8::new(SlotState::Empty as u8),
             size: AtomicU32::new(0),
-            timestamp: 0,
-            request_id: [0; 16],
-            data: vec![0; slot_size],
+            timestamp: TimestampNanos::from(0),
+            request_id: [0; UUID_SIZE_BYTES],
+            data: vec![0; *slot_size.as_ref()],
         }
     }
 }
@@ -51,8 +51,8 @@ impl Slot {
 /// Lock-free ring buffer for audit event handoff
 pub struct RingBuffer {
     slots: Vec<Slot>,
-    slot_count: usize,
-    slot_size: usize,
+    slot_count: SlotCount,
+    slot_size: SlotSize,
     write_position: AtomicU64,
     read_position: AtomicU64,
     overflow_count: AtomicU64,
@@ -61,11 +61,13 @@ pub struct RingBuffer {
 impl RingBuffer {
     /// Create a new ring buffer with the given configuration
     pub fn new(config: &RingBufferConfig) -> Self {
-        let slot_count = config.buffer_size / config.slot_size;
+        let calculated_slot_count = *config.buffer_size.as_ref() / *config.slot_size.as_ref();
         // Ensure power of 2 for efficient modulo
-        let slot_count = slot_count.next_power_of_two();
+        let slot_count_value = calculated_slot_count.next_power_of_two();
+        let slot_count =
+            SlotCount::try_new(slot_count_value).expect("calculated slot count should be valid");
 
-        let slots: Vec<Slot> = (0..slot_count)
+        let slots: Vec<Slot> = (0..slot_count_value)
             .map(|_| Slot::new(config.slot_size))
             .collect();
 
@@ -83,7 +85,7 @@ impl RingBuffer {
     pub fn write(&self, request_id: RequestId, data: &[u8]) -> Result<(), u64> {
         // Get next write position
         let position = self.write_position.fetch_add(1, Ordering::Relaxed);
-        let slot_index = (position & (self.slot_count as u64 - 1)) as usize;
+        let slot_index = (position & (*self.slot_count.as_ref() as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Try to claim the slot
@@ -104,13 +106,14 @@ impl RingBuffer {
             Ok(_) => {
                 // We have exclusive access to the slot
                 // Copy data (with truncation if needed)
-                let copy_size = data.len().min(self.slot_size);
+                let copy_size = data.len().min(*self.slot_size.as_ref());
                 unsafe {
                     // Safe because we have exclusive access
                     let slot_ptr = slot as *const Slot as *mut Slot;
                     (&mut (*slot_ptr).data)[..copy_size].copy_from_slice(&data[..copy_size]);
-                    (*slot_ptr).timestamp =
+                    let timestamp_value =
                         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
+                    (*slot_ptr).timestamp = TimestampNanos::from(timestamp_value);
                     (*slot_ptr)
                         .request_id
                         .copy_from_slice(request_id.as_ref().as_bytes());
@@ -135,7 +138,7 @@ impl RingBuffer {
     /// Read the next available slot (audit path operation)
     pub fn read(&self) -> Option<(RequestId, Vec<u8>)> {
         let position = self.read_position.load(Ordering::Relaxed);
-        let slot_index = (position & (self.slot_count as u64 - 1)) as usize;
+        let slot_index = (position & (*self.slot_count.as_ref() as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Check if slot is ready
@@ -156,8 +159,11 @@ impl RingBuffer {
                 let size = slot.size.load(Ordering::Acquire) as usize;
                 let data = slot.data[..size].to_vec();
                 let request_id_bytes = slot.request_id;
-                let request_id =
-                    unsafe { RequestId::new_unchecked(Uuid::from_bytes(request_id_bytes)) };
+                let uuid = Uuid::from_bytes(request_id_bytes);
+                let request_id = RequestId::try_new(uuid).unwrap_or_else(|_| {
+                    // This should never happen since we only store v7 UUIDs
+                    RequestId::new()
+                });
 
                 // Mark as empty for reuse
                 slot.state.store(SlotState::Empty as u8, Ordering::Release);
@@ -188,8 +194,8 @@ mod tests {
     #[test]
     fn test_ring_buffer_creation() {
         let config = RingBufferConfig {
-            buffer_size: 1024 * 1024, // 1MB
-            slot_size: 1024,          // 1KB
+            buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"), // 1MB
+            slot_size: SlotSize::try_new(1024).expect("valid size"),            // 1KB
         };
 
         let buffer = RingBuffer::new(&config);
@@ -198,19 +204,20 @@ mod tests {
         assert_eq!(buffer.overflow_count(), 0);
 
         // Should have power-of-2 slots
-        assert!(buffer.slot_count.is_power_of_two());
-        assert!(buffer.slot_count >= config.buffer_size / config.slot_size);
+        assert!(buffer.slot_count.as_ref().is_power_of_two());
+        let expected_min_slots = *config.buffer_size.as_ref() / *config.slot_size.as_ref();
+        assert!(*buffer.slot_count.as_ref() >= expected_min_slots);
     }
 
     #[test]
     fn test_write_and_read_single_event() {
         let config = RingBufferConfig {
-            buffer_size: 1024 * 1024,
-            slot_size: 1024,
+            buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"),
+            slot_size: SlotSize::try_new(1024).expect("valid size"),
         };
 
         let buffer = RingBuffer::new(&config);
-        let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let request_id = RequestId::new();
         let data = b"test event data";
 
         // Write should succeed
@@ -229,24 +236,15 @@ mod tests {
     #[test]
     fn test_multiple_writes_and_reads() {
         let config = RingBufferConfig {
-            buffer_size: 1024 * 1024,
-            slot_size: 1024,
+            buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"),
+            slot_size: SlotSize::try_new(1024).expect("valid size"),
         };
 
         let buffer = RingBuffer::new(&config);
         let events = vec![
-            (
-                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
-                b"event 1".to_vec(),
-            ),
-            (
-                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
-                b"event 2".to_vec(),
-            ),
-            (
-                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
-                b"event 3".to_vec(),
-            ),
+            (RequestId::new(), b"event 1".to_vec()),
+            (RequestId::new(), b"event 2".to_vec()),
+            (RequestId::new(), b"event 3".to_vec()),
         ];
 
         // Write all events
@@ -268,12 +266,12 @@ mod tests {
     #[test]
     fn test_data_truncation() {
         let config = RingBufferConfig {
-            buffer_size: 1024,
-            slot_size: 64, // Small slots for testing
+            buffer_size: BufferSize::try_new(1024).expect("valid size"),
+            slot_size: SlotSize::try_new(64).expect("valid size"), // Small slots for testing
         };
 
         let buffer = RingBuffer::new(&config);
-        let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let request_id = RequestId::new();
         let large_data = vec![0u8; 128]; // Larger than slot size
 
         // Write should succeed (data will be truncated)
@@ -289,22 +287,22 @@ mod tests {
     #[test]
     fn test_overflow_handling() {
         let config = RingBufferConfig {
-            buffer_size: 256, // Very small buffer
-            slot_size: 64,
+            buffer_size: BufferSize::try_new(256).expect("valid size"), // Very small buffer
+            slot_size: SlotSize::try_new(64).expect("valid size"),
         };
 
         let buffer = RingBuffer::new(&config);
         let slot_count = buffer.slot_count;
 
         // Fill the buffer
-        for i in 0..slot_count {
-            let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        for i in 0..*slot_count.as_ref() {
+            let id = RequestId::new();
             let data = format!("event {i}");
             assert!(buffer.write(id, data.as_bytes()).is_ok());
         }
 
         // Next write should fail with overflow
-        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let id = RequestId::new();
         let result = buffer.write(id, b"overflow event");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), 1);
@@ -317,8 +315,8 @@ mod tests {
         use std::thread;
 
         let config = RingBufferConfig {
-            buffer_size: 1024 * 1024,
-            slot_size: 1024,
+            buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"),
+            slot_size: SlotSize::try_new(1024).expect("valid size"),
         };
 
         let buffer = Arc::new(RingBuffer::new(&config));
@@ -331,7 +329,7 @@ mod tests {
                 thread::spawn(move || {
                     let mut successful_writes = 0;
                     for i in 0..writes_per_thread {
-                        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+                        let id = RequestId::new();
                         let data = format!("thread {thread_id} event {i}");
                         if buffer_clone.write(id, data.as_bytes()).is_ok() {
                             successful_writes += 1;
@@ -359,16 +357,16 @@ mod tests {
     #[test]
     fn test_wrap_around() {
         let config = RingBufferConfig {
-            buffer_size: 256,
-            slot_size: 64,
+            buffer_size: BufferSize::try_new(256).expect("valid size"),
+            slot_size: SlotSize::try_new(64).expect("valid size"),
         };
 
         let buffer = RingBuffer::new(&config);
         let slot_count = buffer.slot_count;
 
         // Write and read to advance positions
-        for i in 0..slot_count * 2 {
-            let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        for i in 0..*slot_count.as_ref() * 2 {
+            let id = RequestId::new();
             let data = format!("event {i}");
 
             // Write
@@ -396,8 +394,8 @@ mod tests {
     #[test]
     fn test_slot_state_transitions() {
         let config = RingBufferConfig {
-            buffer_size: 256,
-            slot_size: 64,
+            buffer_size: BufferSize::try_new(256).expect("valid size"),
+            slot_size: SlotSize::try_new(64).expect("valid size"),
         };
 
         let buffer = RingBuffer::new(&config);
@@ -408,7 +406,7 @@ mod tests {
         }
 
         // Write one event
-        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let id = RequestId::new();
         buffer.write(id, b"test").unwrap();
 
         // First slot should be ready

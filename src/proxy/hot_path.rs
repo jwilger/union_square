@@ -78,13 +78,13 @@ impl HotPathService {
             .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
 
         // Collect the body into bytes (with size limit)
-        let body_bytes = http_body_util::Limited::new(body, self.config.max_request_size)
+        let body_bytes = http_body_util::Limited::new(body, *self.config.max_request_size.as_ref())
             .collect()
             .await
             .map_err(|e| {
                 if e.is::<http_body_util::LengthLimitError>() {
                     ProxyError::RequestTooLarge {
-                        size: self.config.max_request_size + 1,
+                        size: BodySize::from(*self.config.max_request_size.as_ref() + 1),
                         max_size: self.config.max_request_size,
                     }
                 } else {
@@ -110,13 +110,13 @@ impl HotPathService {
 
         // Collect response body with size limit
         let response_bytes =
-            http_body_util::Limited::new(response_body, self.config.max_response_size)
+            http_body_util::Limited::new(response_body, *self.config.max_response_size.as_ref())
                 .collect()
                 .await
                 .map_err(|e| {
                     if e.is::<http_body_util::LengthLimitError>() {
                         ProxyError::ResponseTooLarge {
-                            size: self.config.max_response_size + 1,
+                            size: BodySize::from(*self.config.max_response_size.as_ref() + 1),
                             max_size: self.config.max_response_size,
                         }
                     } else {
@@ -191,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn test_request_size_limits() {
         let config = ProxyConfig {
-            max_request_size: 1024, // 1KB limit
+            max_request_size: RequestSizeLimit::try_new(1024).expect("valid size"), // 1KB limit
             ..Default::default()
         };
         let service = HotPathService::new(config);
@@ -203,7 +203,7 @@ mod tests {
     #[tokio::test]
     async fn test_response_size_limits() {
         let config = ProxyConfig {
-            max_response_size: 1024, // 1KB limit
+            max_response_size: ResponseSizeLimit::try_new(1024).expect("valid size"), // 1KB limit
             ..Default::default()
         };
         let service = HotPathService::new(config);

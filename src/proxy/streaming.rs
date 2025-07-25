@@ -11,7 +11,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc;
-use uuid::Uuid;
 
 /// Size of chunks for streaming capture
 const CAPTURE_CHUNK_SIZE: usize = 16 * 1024; // 16KB chunks
@@ -42,19 +41,19 @@ where
             if buffer.len() >= CAPTURE_CHUNK_SIZE {
                 let event = if is_request {
                     AuditEventType::RequestChunk {
-                        offset: total_size - buffer.len(),
+                        offset: ChunkOffset::from(total_size - buffer.len()),
                         data: buffer.clone(),
                     }
                 } else {
                     AuditEventType::ResponseChunk {
-                        offset: total_size - buffer.len(),
+                        offset: ChunkOffset::from(total_size - buffer.len()),
                         data: buffer.clone(),
                     }
                 };
 
                 let audit_event = AuditEvent {
                     request_id,
-                    session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+                    session_id: SessionId::new(),
                     timestamp: chrono::Utc::now(),
                     event_type: event,
                 };
@@ -71,19 +70,19 @@ where
         if !buffer.is_empty() {
             let event = if is_request {
                 AuditEventType::RequestChunk {
-                    offset: total_size - buffer.len(),
+                    offset: ChunkOffset::from(total_size - buffer.len()),
                     data: buffer,
                 }
             } else {
                 AuditEventType::ResponseChunk {
-                    offset: total_size - buffer.len(),
+                    offset: ChunkOffset::from(total_size - buffer.len()),
                     data: buffer,
                 }
             };
 
             let audit_event = AuditEvent {
                 request_id,
-                session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+                session_id: SessionId::new(),
                 timestamp: chrono::Utc::now(),
                 event_type: event,
             };
@@ -142,19 +141,19 @@ where
                 if buffer.len() >= CAPTURE_CHUNK_SIZE {
                     let event = if is_request {
                         AuditEventType::RequestChunk {
-                            offset: total_size - buffer.len(),
+                            offset: ChunkOffset::from(total_size - buffer.len()),
                             data: buffer.clone(),
                         }
                     } else {
                         AuditEventType::ResponseChunk {
-                            offset: total_size - buffer.len(),
+                            offset: ChunkOffset::from(total_size - buffer.len()),
                             data: buffer.clone(),
                         }
                     };
 
                     let audit_event = AuditEvent {
                         request_id: request_id_clone,
-                        session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+                        session_id: SessionId::new(),
                         timestamp: chrono::Utc::now(),
                         event_type: event,
                     };
@@ -170,19 +169,19 @@ where
             if !buffer.is_empty() {
                 let event = if is_request {
                     AuditEventType::RequestChunk {
-                        offset: total_size - buffer.len(),
+                        offset: ChunkOffset::from(total_size - buffer.len()),
                         data: buffer,
                     }
                 } else {
                     AuditEventType::ResponseChunk {
-                        offset: total_size - buffer.len(),
+                        offset: ChunkOffset::from(total_size - buffer.len()),
                         data: buffer,
                     }
                 };
 
                 let audit_event = AuditEvent {
                     request_id: request_id_clone,
-                    session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) },
+                    session_id: SessionId::new(),
                     timestamp: chrono::Utc::now(),
                     event_type: event,
                 };
