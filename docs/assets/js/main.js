@@ -166,3 +166,56 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+// Fetch and display latest GitHub release
+async function fetchLatestRelease() {
+    try {
+        const response = await fetch('https://api.github.com/repos/jwilger/union_square/releases/latest');
+
+        if (response.status === 404) {
+            // No releases yet
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const release = await response.json();
+
+        // Update release card with actual release data
+        const releaseCard = document.querySelector('.release-card');
+        if (!releaseCard) return;
+
+        const releaseDate = new Date(release.published_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        releaseCard.innerHTML = `
+            <div class="release-status">
+                <span class="status-badge">${release.prerelease ? 'Pre-release' : 'Latest'}</span>
+                <span class="release-date">${releaseDate}</span>
+            </div>
+            <h3 class="release-title">${release.name || release.tag_name}</h3>
+            <div class="release-description">${marked.parse(release.body || 'No release notes available.')}</div>
+            <div class="release-actions">
+                <a href="${release.html_url}" class="btn btn-outline">View Release</a>
+                <a href="https://github.com/jwilger/union_square/releases" class="btn btn-outline">All Releases</a>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error fetching release:', error);
+        // Keep the default content on error
+    }
+}
+
+// Load marked.js for markdown parsing
+const script = document.createElement('script');
+script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+script.onload = () => {
+    // Fetch release once marked.js is loaded
+    fetchLatestRelease();
+};
+document.head.appendChild(script);
