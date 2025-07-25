@@ -8,7 +8,6 @@ use crate::proxy::{
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use std::sync::Arc;
@@ -90,40 +89,14 @@ async fn proxy_handler(
         .await
 }
 
-/// Error conversion for Axum responses
+/// Error conversion for Axum responses using standardized format
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
-        let (status, message) = match &self {
-            ProxyError::RequestTooLarge { .. } => (StatusCode::PAYLOAD_TOO_LARGE, self.to_string()),
-            ProxyError::ResponseTooLarge { .. } => {
-                (StatusCode::INSUFFICIENT_STORAGE, self.to_string())
-            }
-            ProxyError::RequestTimeout(_) => (StatusCode::REQUEST_TIMEOUT, self.to_string()),
-            ProxyError::InvalidTargetUrl(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            ProxyError::InvalidHttpMethod(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            ProxyError::InvalidRequestUri(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            ProxyError::InvalidHttpStatusCode(_) => (StatusCode::BAD_GATEWAY, self.to_string()),
-            ProxyError::InvalidHeader { .. } => (StatusCode::BAD_REQUEST, self.to_string()),
-            ProxyError::HttpError(_) | ProxyError::HyperError(_) => {
-                (StatusCode::BAD_GATEWAY, self.to_string())
-            }
-            ProxyError::AuditEventCreationFailed(_) => {
-                // Audit failures shouldn't affect the client
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal server error".to_string(),
-                )
-            }
-            ProxyError::Internal(msg) if msg.contains("Network error") => {
-                (StatusCode::BAD_GATEWAY, "Bad gateway".to_string())
-            }
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal server error".to_string(),
-            ),
-        };
+        use crate::proxy::error_response::ErrorResponseExt;
 
-        (status, message).into_response()
+        let status = self.status_code();
+        let error_response = self.to_error_response();
+        error_response.into_response_with_status(status)
     }
 }
 

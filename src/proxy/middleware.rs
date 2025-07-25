@@ -116,12 +116,18 @@ pub async fn auth_middleware(
             auth.trim_start_matches(BEARER_PREFIX).trim()
         }
         _ => {
+            use crate::proxy::error_response::{extract_request_id, ErrorResponse};
+
             warn!("Missing or invalid Authorization header");
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                "Missing or invalid Authorization header",
-            )
-                .into_response());
+            let request_id = extract_request_id(request.headers());
+            let error =
+                ErrorResponse::new("UNAUTHORIZED", "Missing or invalid Authorization header");
+            let error = if let Some(id) = request_id {
+                error.with_request_id(id)
+            } else {
+                error
+            };
+            return Ok(error.into_response_with_status(StatusCode::UNAUTHORIZED));
         }
     };
 
@@ -133,8 +139,17 @@ pub async fn auth_middleware(
         }
     }
 
+    use crate::proxy::error_response::{extract_request_id, ErrorResponse};
+
     warn!("Invalid API key attempted: {}", api_key_str);
-    Ok((StatusCode::UNAUTHORIZED, "Invalid API key").into_response())
+    let request_id = extract_request_id(request.headers());
+    let error = ErrorResponse::new("UNAUTHORIZED", "Invalid API key");
+    let error = if let Some(id) = request_id {
+        error.with_request_id(id)
+    } else {
+        error
+    };
+    Ok(error.into_response_with_status(StatusCode::UNAUTHORIZED))
 }
 
 /// Logging middleware - logs request/response details with timing
@@ -177,31 +192,24 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
 
 /// Error handling wrapper that converts ProxyError to HTTP responses
 pub async fn error_handling_middleware(request: Request, next: Next) -> Response {
-    let request_id = request
-        .headers()
-        .get(REQUEST_ID_HEADER)
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    use crate::proxy::error_response::{extract_request_id, standard_error_response};
+
+    let request_id = extract_request_id(request.headers());
 
     match next.run(request).await.into_response() {
         response if response.status().is_success() => response,
         error_response => {
+            let status = error_response.status();
+
             // Log error with request ID
             error!(
-                request_id = request_id,
-                status = error_response.status().as_u16(),
+                request_id = ?request_id,
+                status = status.as_u16(),
                 "Request failed"
             );
 
-            // Ensure request ID is in error response
-            let mut response = error_response;
-            if let Ok(header_value) = HeaderValue::from_str(&request_id) {
-                response
-                    .headers_mut()
-                    .insert(REQUEST_ID_HEADER, header_value);
-            }
-            response
+            // Return standardized error response
+            standard_error_response(status, request_id.as_deref())
         }
     }
 }

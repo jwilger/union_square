@@ -100,7 +100,7 @@ impl StreamingHotPathService {
         let response = tokio::time::timeout(timeout_duration, response_future)
             .await
             .map_err(|_| ProxyError::RequestTimeout(timeout_duration))?
-            .map_err(|e| ProxyError::Internal(format!("Network error: {e}")))?;
+            .map_err(|e| ProxyError::Internal(format!("Connection error: {e}")))?;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 

@@ -61,7 +61,7 @@ mod tests {
                     size: BodySize::from(2000),
                     max_size: ResponseSizeLimit::try_new(1000).unwrap(),
                 },
-                StatusCode::INSUFFICIENT_STORAGE,
+                StatusCode::BAD_GATEWAY,
             ),
             (
                 ProxyError::RequestTimeout(Duration::from_secs(30)),
