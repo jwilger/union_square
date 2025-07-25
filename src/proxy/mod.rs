@@ -4,6 +4,7 @@
 //! - Hot path: Minimal latency forwarding (<5ms overhead)
 //! - Audit path: Async processing via ring buffer
 
+pub mod audit_path;
 pub mod hot_path;
 pub mod ring_buffer;
 pub mod service;

@@ -1,6 +1,8 @@
 //! Main proxy service implementation
 
-use crate::proxy::{hot_path::HotPathService, ring_buffer::RingBuffer, types::*};
+use crate::proxy::{
+    audit_path::AuditPathProcessor, hot_path::HotPathService, ring_buffer::RingBuffer, types::*,
+};
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -8,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Main proxy service combining hot and audit paths
@@ -16,6 +19,7 @@ pub struct ProxyService {
     config: Arc<ProxyConfig>,
     hot_path: HotPathService,
     ring_buffer: Arc<RingBuffer>,
+    audit_shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl ProxyService {
@@ -28,6 +32,7 @@ impl ProxyService {
             config: Arc::new(config),
             hot_path,
             ring_buffer,
+            audit_shutdown_tx: None,
         }
     }
 
@@ -36,8 +41,23 @@ impl ProxyService {
         Arc::clone(&self.ring_buffer)
     }
 
+    /// Start the audit path processor
+    pub fn start_audit_processor(&mut self) {
+        let (processor, shutdown_tx) = AuditPathProcessor::new(Arc::clone(&self.ring_buffer));
+
+        // Start the processor in a background task
+        tokio::spawn(async move {
+            processor.run().await;
+        });
+
+        self.audit_shutdown_tx = Some(shutdown_tx);
+    }
+
     /// Create an Axum router for the proxy service
-    pub fn into_router(self) -> axum::Router {
+    pub fn into_router(mut self) -> axum::Router {
+        // Start the audit processor before creating the router
+        self.start_audit_processor();
+
         axum::Router::new()
             .fallback(proxy_handler)
             .with_state(Arc::new(self))

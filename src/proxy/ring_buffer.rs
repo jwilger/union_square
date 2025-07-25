@@ -179,3 +179,251 @@ impl RingBuffer {
         self.overflow_count.load(Ordering::Relaxed)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proxy::types::{RequestId, RingBufferConfig};
+
+    #[test]
+    fn test_ring_buffer_creation() {
+        let config = RingBufferConfig {
+            buffer_size: 1024 * 1024, // 1MB
+            slot_size: 1024,          // 1KB
+        };
+
+        let buffer = RingBuffer::new(&config);
+
+        // Should start with zero overflow
+        assert_eq!(buffer.overflow_count(), 0);
+
+        // Should have power-of-2 slots
+        assert!(buffer.slot_count.is_power_of_two());
+        assert!(buffer.slot_count >= config.buffer_size / config.slot_size);
+    }
+
+    #[test]
+    fn test_write_and_read_single_event() {
+        let config = RingBufferConfig {
+            buffer_size: 1024 * 1024,
+            slot_size: 1024,
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let data = b"test event data";
+
+        // Write should succeed
+        let write_result = buffer.write(request_id, data);
+        assert!(write_result.is_ok());
+
+        // Read should return the same data
+        let read_result = buffer.read();
+        assert!(read_result.is_some());
+
+        let (read_id, read_data) = read_result.unwrap();
+        assert_eq!(read_id.as_ref(), request_id.as_ref());
+        assert_eq!(&read_data[..], data);
+    }
+
+    #[test]
+    fn test_multiple_writes_and_reads() {
+        let config = RingBufferConfig {
+            buffer_size: 1024 * 1024,
+            slot_size: 1024,
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let events = vec![
+            (
+                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
+                b"event 1".to_vec(),
+            ),
+            (
+                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
+                b"event 2".to_vec(),
+            ),
+            (
+                unsafe { RequestId::new_unchecked(Uuid::now_v7()) },
+                b"event 3".to_vec(),
+            ),
+        ];
+
+        // Write all events
+        for (id, data) in &events {
+            assert!(buffer.write(*id, data).is_ok());
+        }
+
+        // Read all events back
+        for (expected_id, expected_data) in &events {
+            let (actual_id, actual_data) = buffer.read().expect("Should read event");
+            assert_eq!(actual_id.as_ref(), expected_id.as_ref());
+            assert_eq!(actual_data, *expected_data);
+        }
+
+        // No more events to read
+        assert!(buffer.read().is_none());
+    }
+
+    #[test]
+    fn test_data_truncation() {
+        let config = RingBufferConfig {
+            buffer_size: 1024,
+            slot_size: 64, // Small slots for testing
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let large_data = vec![0u8; 128]; // Larger than slot size
+
+        // Write should succeed (data will be truncated)
+        assert!(buffer.write(request_id, &large_data).is_ok());
+
+        // Read should return truncated data
+        let (read_id, read_data) = buffer.read().expect("Should read event");
+        assert_eq!(read_id.as_ref(), request_id.as_ref());
+        assert_eq!(read_data.len(), 64); // Truncated to slot size
+        assert_eq!(&read_data[..], &large_data[..64]);
+    }
+
+    #[test]
+    fn test_overflow_handling() {
+        let config = RingBufferConfig {
+            buffer_size: 256, // Very small buffer
+            slot_size: 64,
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let slot_count = buffer.slot_count;
+
+        // Fill the buffer
+        for i in 0..slot_count {
+            let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+            let data = format!("event {i}");
+            assert!(buffer.write(id, data.as_bytes()).is_ok());
+        }
+
+        // Next write should fail with overflow
+        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        let result = buffer.write(id, b"overflow event");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), 1);
+        assert_eq!(buffer.overflow_count(), 1);
+    }
+
+    #[test]
+    fn test_concurrent_writes() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let config = RingBufferConfig {
+            buffer_size: 1024 * 1024,
+            slot_size: 1024,
+        };
+
+        let buffer = Arc::new(RingBuffer::new(&config));
+        let thread_count = 10;
+        let writes_per_thread = 100;
+
+        let handles: Vec<_> = (0..thread_count)
+            .map(|thread_id| {
+                let buffer_clone = Arc::clone(&buffer);
+                thread::spawn(move || {
+                    let mut successful_writes = 0;
+                    for i in 0..writes_per_thread {
+                        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+                        let data = format!("thread {thread_id} event {i}");
+                        if buffer_clone.write(id, data.as_bytes()).is_ok() {
+                            successful_writes += 1;
+                        }
+                    }
+                    successful_writes
+                })
+            })
+            .collect();
+
+        let total_successful: usize = handles.into_iter().map(|h| h.join().unwrap()).sum();
+
+        // All writes should succeed (buffer is large enough)
+        assert_eq!(total_successful, thread_count * writes_per_thread);
+
+        // Read all events
+        let mut read_count = 0;
+        while buffer.read().is_some() {
+            read_count += 1;
+        }
+
+        assert_eq!(read_count, total_successful);
+    }
+
+    #[test]
+    fn test_wrap_around() {
+        let config = RingBufferConfig {
+            buffer_size: 256,
+            slot_size: 64,
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let slot_count = buffer.slot_count;
+
+        // Write and read to advance positions
+        for i in 0..slot_count * 2 {
+            let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+            let data = format!("event {i}");
+
+            // Write
+            assert!(buffer.write(id, data.as_bytes()).is_ok());
+
+            // Read immediately
+            let (read_id, read_data) = buffer.read().expect("Should read");
+            assert_eq!(read_id.as_ref(), id.as_ref());
+            assert_eq!(String::from_utf8(read_data).unwrap(), data);
+        }
+
+        // Buffer should still be functional after wrap-around
+        assert_eq!(buffer.overflow_count(), 0);
+    }
+
+    #[test]
+    fn test_empty_read() {
+        let config = RingBufferConfig::default();
+        let buffer = RingBuffer::new(&config);
+
+        // Reading from empty buffer should return None
+        assert!(buffer.read().is_none());
+    }
+
+    #[test]
+    fn test_slot_state_transitions() {
+        let config = RingBufferConfig {
+            buffer_size: 256,
+            slot_size: 64,
+        };
+
+        let buffer = RingBuffer::new(&config);
+
+        // Initially all slots should be empty
+        for slot in &buffer.slots {
+            assert_eq!(slot.state.load(Ordering::Acquire), SlotState::Empty as u8);
+        }
+
+        // Write one event
+        let id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
+        buffer.write(id, b"test").unwrap();
+
+        // First slot should be ready
+        assert_eq!(
+            buffer.slots[0].state.load(Ordering::Acquire),
+            SlotState::Ready as u8
+        );
+
+        // Read the event
+        buffer.read().unwrap();
+
+        // First slot should be empty again
+        assert_eq!(
+            buffer.slots[0].state.load(Ordering::Acquire),
+            SlotState::Empty as u8
+        );
+    }
+}
