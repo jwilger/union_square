@@ -26,7 +26,7 @@ pub mod http {
 
 // Middleware components
 pub use middleware::*;
-pub use middleware_stack::ProxyMiddlewareStack;
+pub use middleware_stack::{ProxyMiddlewareConfig, ProxyMiddlewareStack};
 
 // Path implementations
 pub mod paths {

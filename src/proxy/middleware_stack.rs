@@ -4,6 +4,7 @@
 //! making it easier to maintain and test the middleware pipeline.
 
 use crate::proxy::middleware::*;
+use crate::proxy::types::BypassPath;
 use axum::{
     middleware::{from_fn, from_fn_with_state},
     Router,
@@ -66,7 +67,6 @@ impl ProxyMiddlewareStack {
 
 /// Configuration for the entire middleware stack
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // These fields will be used in future middleware enhancements
 pub struct ProxyMiddlewareConfig {
     /// Authentication configuration
     pub auth: AuthConfig,
@@ -74,6 +74,12 @@ pub struct ProxyMiddlewareConfig {
     pub enable_logging: bool,
     /// Whether to enable detailed error responses (for debugging)
     pub detailed_errors: bool,
+    /// Whether to enable request ID generation
+    pub enable_request_id: bool,
+    /// Whether to enable health check endpoint
+    pub enable_health_check: bool,
+    /// Whether to enable metrics endpoint
+    pub enable_metrics: bool,
 }
 
 impl Default for ProxyMiddlewareConfig {
@@ -82,19 +88,60 @@ impl Default for ProxyMiddlewareConfig {
             auth: AuthConfig::default(),
             enable_logging: true,
             detailed_errors: false,
+            enable_request_id: true,
+            enable_health_check: true,
+            enable_metrics: true,
         }
     }
 }
 
 impl ProxyMiddlewareConfig {
     /// Create middleware stack from configuration
-    #[allow(dead_code)] // Will be used when configuration-based setup is needed
     pub fn build_stack(self) -> ProxyMiddlewareStack {
-        // In the future, enable_logging and detailed_errors could be used
-        // to conditionally apply middleware or configure error handling
-        let _ = self.enable_logging; // Will be used for conditional logging
-        let _ = self.detailed_errors; // Will be used for error detail level
-        ProxyMiddlewareStack::new(self.auth)
+        // Update auth config with health/metrics bypass paths based on configuration
+        let mut auth_config = self.auth;
+
+        if self.enable_health_check {
+            auth_config.bypass_paths.insert(
+                BypassPath::try_new(crate::proxy::headers::paths::HEALTH.to_string())
+                    .expect("HEALTH path should be valid"),
+            );
+        }
+
+        if self.enable_metrics {
+            auth_config.bypass_paths.insert(
+                BypassPath::try_new(crate::proxy::headers::paths::METRICS.to_string())
+                    .expect("METRICS path should be valid"),
+            );
+        }
+
+        // Create stack with configured auth
+        // In the future, other flags can be used to conditionally apply middleware
+        ProxyMiddlewareStack::new(auth_config)
+    }
+
+    /// Builder method to disable health check endpoint
+    pub fn disable_health_check(mut self) -> Self {
+        self.enable_health_check = false;
+        self
+    }
+
+    /// Builder method to disable metrics endpoint
+    pub fn disable_metrics(mut self) -> Self {
+        self.enable_metrics = false;
+        self
+    }
+
+    /// Builder method to disable request logging
+    pub fn disable_logging(mut self) -> Self {
+        self.enable_logging = false;
+        self
+    }
+
+    /// Builder method to enable detailed error responses
+    pub fn enable_detailed_errors(mut self) -> Self {
+        self.detailed_errors = true;
+        self
     }
 }
 
@@ -104,6 +151,7 @@ mod tests {
     use crate::proxy::headers::{paths, X_REQUEST_ID};
     use crate::proxy::types::ApiKey;
     use axum::{body::Body, http::StatusCode, response::IntoResponse};
+    use std::collections::HashSet;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -178,9 +226,64 @@ mod tests {
             auth: AuthConfig::default(),
             enable_logging: true,
             detailed_errors: false,
+            enable_request_id: true,
+            enable_health_check: true,
+            enable_metrics: true,
         };
 
         let stack = config.build_stack();
         assert!(Arc::strong_count(&stack.auth_config) == 1);
+    }
+
+    #[test]
+    fn test_middleware_config_builder_methods() {
+        let config = ProxyMiddlewareConfig::default()
+            .disable_health_check()
+            .disable_metrics()
+            .enable_detailed_errors();
+
+        assert!(!config.enable_health_check);
+        assert!(!config.enable_metrics);
+        assert!(config.detailed_errors);
+        assert!(config.enable_logging); // Still true by default
+    }
+
+    #[test]
+    fn test_middleware_config_bypass_paths() {
+        // Test that bypass paths are added based on configuration
+        let mut config = ProxyMiddlewareConfig::default();
+        config
+            .auth
+            .api_keys
+            .insert(ApiKey::try_new("test-key".to_string()).unwrap());
+
+        let stack = config.build_stack();
+        // The auth config should have health and metrics in bypass paths
+        assert_eq!(stack.auth_config.bypass_paths.len(), 2);
+    }
+
+    #[test]
+    fn test_middleware_config_no_bypass_paths() {
+        // Test that bypass paths are not added when disabled
+        let mut auth_config = AuthConfig {
+            api_keys: HashSet::new(),
+            bypass_paths: HashSet::new(), // Start with empty bypass paths
+        };
+        auth_config
+            .api_keys
+            .insert(ApiKey::try_new("test-key".to_string()).unwrap());
+
+        let config = ProxyMiddlewareConfig {
+            auth: auth_config,
+            enable_logging: true,
+            detailed_errors: false,
+            enable_request_id: true,
+            enable_health_check: false, // Disabled
+            enable_metrics: false,      // Disabled
+        };
+
+        let stack = config.build_stack();
+        // The auth config should have no bypass paths since we disabled them
+        assert_eq!(stack.auth_config.bypass_paths.len(), 0);
     }
 }
