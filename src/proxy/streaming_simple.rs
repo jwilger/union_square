@@ -6,6 +6,7 @@ use crate::proxy::audit_recorder::{
 };
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
+use crate::proxy::url_resolver::UrlResolver;
 use axum::body::Body;
 use http_body_util::BodyExt;
 use hyper::{Request, Response};
@@ -53,35 +54,9 @@ impl StreamingHotPathService {
         // Extract parts from the incoming request
         let (mut parts, body) = request.into_parts();
 
-        // Parse the target URL to handle cases where it already contains a path
-        let target_uri: hyper::Uri = target_url
-            .as_ref()
-            .parse()
-            .map_err(|_| ProxyError::InvalidTargetUrl(target_url.as_ref().to_string()))?;
-
-        // If the target URL has a path, use it as-is
-        // If it doesn't, append the path from the original request
-        let full_uri = if target_uri.path() != "/" {
-            // Target URL already has a path, use it directly
-            target_url.as_ref().to_string()
-        } else {
-            // Target URL is just the base, append the original path
-            let path_and_query = parts
-                .uri
-                .path_and_query()
-                .map(|pq| pq.as_str())
-                .unwrap_or("/");
-
-            format!(
-                "{}{}",
-                target_url.as_ref().trim_end_matches('/'),
-                path_and_query
-            )
-        };
-
-        parts.uri = full_uri
-            .parse()
-            .map_err(|_| ProxyError::InvalidTargetUrl(full_uri.clone()))?;
+        // Resolve the target URI using centralized strategy
+        let resolved_uri = UrlResolver::resolve_target_uri(&target_url, &parts.uri)?;
+        parts.uri = resolved_uri;
 
         // Record request metadata using shared audit recorder
         let headers_vec = extract_headers_vec(&parts.headers);

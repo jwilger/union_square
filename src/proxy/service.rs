@@ -3,7 +3,7 @@
 use crate::proxy::streaming_simple::StreamingHotPathService;
 use crate::proxy::{
     audit_path::AuditPathProcessor, middleware as proxy_middleware, ring_buffer::RingBuffer,
-    types::*,
+    types::*, url_resolver::UrlResolver,
 };
 use axum::{
     body::Body,
@@ -86,15 +86,8 @@ async fn proxy_handler(
     // Generate request ID for correlation
     let request_id = RequestId::new();
 
-    // Extract target URL from X-Target-Url header
-    let target_url = request
-        .headers()
-        .get("X-Target-Url")
-        .and_then(|h| h.to_str().ok())
-        .ok_or_else(|| ProxyError::InvalidTargetUrl("Missing X-Target-Url header".to_string()))?;
-
-    let target_url = TargetUrl::try_new(target_url.to_string())
-        .map_err(|e| ProxyError::InvalidTargetUrl(e.to_string()))?;
+    // Extract target URL using centralized resolver
+    let target_url = UrlResolver::extract_target_url(&request)?;
 
     // Forward the request using streaming hot path
     proxy

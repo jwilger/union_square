@@ -6,6 +6,8 @@
 #[cfg(test)]
 use crate::proxy::types::*;
 #[cfg(test)]
+use crate::proxy::url_resolver::UrlResolver;
+#[cfg(test)]
 use bytes::Bytes;
 #[cfg(test)]
 use http_body_util::{BodyExt, Full};
@@ -54,28 +56,9 @@ impl HotPathService {
         // Extract parts from the incoming request
         let (mut parts, body) = request.into_parts();
 
-        // Update the URI with the target URL
-        let _target_uri = target_url
-            .as_ref()
-            .parse::<hyper::Uri>()
-            .map_err(|_| ProxyError::InvalidTargetUrl(target_url.as_ref().to_string()))?;
-
-        // Preserve the path and query from the original request
-        let path_and_query = parts
-            .uri
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/");
-
-        // Build the full target URI
-        let full_uri = format!(
-            "{}{}",
-            target_url.as_ref().trim_end_matches('/'),
-            path_and_query
-        );
-        parts.uri = full_uri
-            .parse()
-            .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
+        // Resolve the target URI using centralized strategy
+        let resolved_uri = UrlResolver::resolve_target_uri(&target_url, &parts.uri)?;
+        parts.uri = resolved_uri;
 
         // Collect the body into bytes (with size limit)
         let body_bytes = http_body_util::Limited::new(body, *self.config.max_request_size.as_ref())

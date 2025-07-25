@@ -2,6 +2,7 @@
 
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
+use crate::proxy::url_resolver::UrlResolver;
 use axum::body::Body;
 use http_body::Body as HttpBody;
 use hyper::{Request, Response};
@@ -44,21 +45,9 @@ impl StreamingHotPathService {
         // Extract parts from the incoming request
         let (mut parts, body) = request.into_parts();
 
-        // Update the URI with the target URL
-        let path_and_query = parts
-            .uri
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/");
-
-        let full_uri = format!(
-            "{}{}",
-            target_url.as_ref().trim_end_matches('/'),
-            path_and_query
-        );
-        parts.uri = full_uri
-            .parse()
-            .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
+        // Resolve the target URI using centralized strategy
+        let resolved_uri = UrlResolver::resolve_target_uri(&target_url, &parts.uri)?;
+        parts.uri = resolved_uri;
 
         // Record request metadata immediately (hot path write)
         // Create audit event, recording any parsing errors

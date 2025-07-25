@@ -14,6 +14,7 @@ pub mod service;
 pub mod streaming;
 pub mod streaming_simple;
 pub mod types;
+pub mod url_resolver;
 
 #[cfg(test)]
 mod tests;
