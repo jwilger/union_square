@@ -46,6 +46,8 @@ tempfile = "3.0"
 rstest = "0.25"
 proptest = "1.4"
 eventcore-memory = "0.1.8"
+criterion = { version = "0.6", features = ["async_tokio"] }
+mockito = "1.6"
 
 [[bin]]
 name = "union_square"
@@ -70,3 +72,7 @@ panic = "abort"
 [profile.test]
 opt-level = 1
 debug = true
+
+[[bench]]
+name = "proxy_performance"
+harness = false
