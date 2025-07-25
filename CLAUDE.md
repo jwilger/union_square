@@ -183,8 +183,9 @@ cargo init --lib
 cargo install cargo-nextest --locked  # Fast test runner
 cargo install cargo-llvm-cov --locked # Code coverage
 
-# IMPORTANT: Always check for latest versions before adding dependencies
-# Use: cargo search <crate_name> to find latest version
+# IMPORTANT: Always use cargo add to add dependencies
+# This ensures we get the latest compatible versions automatically
+# cargo add will handle version resolution and update Cargo.toml correctly
 
 # Core dependencies (example - adjust based on project needs)
 cargo add tokio --features full
