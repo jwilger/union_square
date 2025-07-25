@@ -156,6 +156,14 @@ pub enum AuditEventType {
         content: Vec<u8>,
         truncated: bool,
     },
+    RequestChunk {
+        offset: usize,
+        data: Vec<u8>,
+    },
+    ResponseChunk {
+        offset: usize,
+        data: Vec<u8>,
+    },
     Error {
         error: String,
         phase: ErrorPhase,

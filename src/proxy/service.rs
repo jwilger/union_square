@@ -1,8 +1,7 @@
 //! Main proxy service implementation
 
-use crate::proxy::{
-    audit_path::AuditPathProcessor, hot_path::HotPathService, ring_buffer::RingBuffer, types::*,
-};
+use crate::proxy::streaming_simple::StreamingHotPathService;
+use crate::proxy::{audit_path::AuditPathProcessor, ring_buffer::RingBuffer, types::*};
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -17,7 +16,7 @@ use uuid::Uuid;
 #[allow(dead_code)]
 pub struct ProxyService {
     config: Arc<ProxyConfig>,
-    hot_path: HotPathService,
+    hot_path: StreamingHotPathService,
     ring_buffer: Arc<RingBuffer>,
     audit_shutdown_tx: Option<mpsc::Sender<()>>,
 }
@@ -26,7 +25,7 @@ impl ProxyService {
     /// Create a new proxy service
     pub fn new(config: ProxyConfig) -> Self {
         let ring_buffer = Arc::new(RingBuffer::new(&config.ring_buffer));
-        let hot_path = HotPathService::new(config.clone());
+        let hot_path = StreamingHotPathService::new(config.clone(), ring_buffer.clone());
 
         Self {
             config: Arc::new(config),
@@ -73,37 +72,14 @@ async fn proxy_handler(
     let request_id = unsafe { RequestId::new_unchecked(Uuid::now_v7()) };
 
     // TODO: Extract target URL from request headers or path
-    let _target_url = TargetUrl::try_new("https://api.example.com")
+    let target_url = TargetUrl::try_new("https://api.example.com")
         .map_err(|e| ProxyError::InvalidTargetUrl(e.to_string()))?;
 
-    // Record request received event (fire-and-forget to ring buffer)
-    let event = AuditEvent {
-        request_id,
-        session_id: unsafe { SessionId::new_unchecked(Uuid::now_v7()) }, // TODO: Extract from headers/context
-        timestamp: chrono::Utc::now(),
-        event_type: AuditEventType::RequestReceived {
-            method: request.method().to_string(),
-            uri: request.uri().to_string(),
-            headers: request
-                .headers()
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                .collect(),
-            body_size: 0, // TODO: Calculate from content-length
-        },
-    };
-
-    // Write to ring buffer (ignore overflow for hot path)
-    let _ = proxy
-        .ring_buffer
-        .write(request_id, &serde_json::to_vec(&event).unwrap_or_default());
-
-    // TODO: Implement proper body conversion
-    // For now, just return a placeholder response
-    Ok(Response::builder()
-        .status(200)
-        .body(Body::from("Proxy placeholder"))
-        .unwrap())
+    // Forward the request using streaming hot path
+    proxy
+        .hot_path
+        .forward_request(request, target_url, request_id)
+        .await
 }
 
 /// Error conversion for Axum responses

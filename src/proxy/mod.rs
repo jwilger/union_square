@@ -6,8 +6,11 @@
 
 pub mod audit_path;
 pub mod hot_path;
+pub mod hot_path_streaming;
 pub mod ring_buffer;
 pub mod service;
+pub mod streaming;
+pub mod streaming_simple;
 pub mod types;
 
 #[cfg(test)]

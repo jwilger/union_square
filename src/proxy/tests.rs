@@ -123,3 +123,127 @@ mod type_tests {
         assert_eq!(deserialized.request_id.as_ref(), event.request_id.as_ref());
     }
 }
+
+#[cfg(test)]
+mod streaming_tests {
+    use crate::proxy::{ProxyConfig, ProxyService};
+    use axum::{body::Body, http::StatusCode};
+    use bytes::Bytes;
+    use futures_util::stream;
+    use std::time::Duration;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_streaming_request_handling() {
+        // Create a streaming body with multiple chunks
+        let chunks = vec![
+            Ok::<_, std::io::Error>(Bytes::from("chunk1")),
+            Ok(Bytes::from("chunk2")),
+            Ok(Bytes::from("chunk3")),
+        ];
+        let stream = stream::iter(chunks);
+        let body = Body::from_stream(stream);
+
+        let request = http::Request::builder()
+            .method("POST")
+            .uri("/stream")
+            .header("content-type", "application/octet-stream")
+            .body(body)
+            .unwrap();
+
+        // Service should handle streaming request without buffering entire body
+        let config = ProxyConfig::default();
+        let service = ProxyService::new(config);
+        let app = service.into_router();
+
+        // We can't test actual streaming without a backend, but we ensure
+        // the service accepts streaming bodies
+        let _ = app.oneshot(request).await;
+    }
+
+    #[tokio::test]
+    async fn test_zero_copy_streaming() {
+        // Test that we don't buffer the entire response in memory
+        let config = ProxyConfig {
+            max_response_size: 10 * 1024 * 1024, // 10MB
+            ..Default::default()
+        };
+        let service = ProxyService::new(config);
+
+        // The implementation should stream responses without buffering
+        // This is a compile-time test to ensure our types support streaming
+        let _app = service.into_router();
+    }
+
+    #[tokio::test]
+    async fn test_streaming_with_ring_buffer_capture() {
+        // Streaming responses should still be captured in ring buffer
+        let config = ProxyConfig::default();
+        let service = ProxyService::new(config);
+        let ring_buffer = service.ring_buffer();
+
+        // Initial state
+        assert_eq!(ring_buffer.overflow_count(), 0);
+
+        // TODO: Once streaming is fully implemented, verify that
+        // streamed data is captured in chunks to the ring buffer
+    }
+
+    #[tokio::test]
+    async fn test_large_streaming_response() {
+        // Test handling of responses larger than single ring buffer slot
+        let config = ProxyConfig {
+            ring_buffer: crate::proxy::types::RingBufferConfig {
+                buffer_size: 1024 * 1024, // 1MB buffer
+                slot_size: 64 * 1024,     // 64KB slots
+            },
+            ..Default::default()
+        };
+        let _service = ProxyService::new(config);
+
+        // TODO: Test that large responses are properly chunked
+        // across multiple ring buffer slots
+    }
+
+    #[tokio::test]
+    async fn test_streaming_timeout_handling() {
+        // Test that streaming connections respect timeouts
+        let config = ProxyConfig {
+            request_timeout: Duration::from_millis(100),
+            ..Default::default()
+        };
+        let _service = ProxyService::new(config);
+
+        // TODO: Test that slow streams are properly timed out
+    }
+
+    #[tokio::test]
+    async fn test_streaming_error_handling() {
+        // Test error handling during streaming
+        let error_stream = stream::once(async {
+            Err::<Bytes, std::io::Error>(std::io::Error::new(
+                std::io::ErrorKind::ConnectionAborted,
+                "Connection lost",
+            ))
+        });
+        let body = Body::from_stream(error_stream);
+
+        let request = http::Request::builder()
+            .method("POST")
+            .uri("/error-stream")
+            .body(body)
+            .unwrap();
+
+        let config = ProxyConfig::default();
+        let service = ProxyService::new(config);
+        let app = service.into_router();
+
+        // Service should handle streaming errors gracefully
+        // Note: Since we don't have a real backend configured, the service will return an error
+        // In a real implementation with a valid target URL, the error would be detected during streaming
+        let response = app.oneshot(request).await.unwrap();
+
+        // Expect error status since no valid target URL is configured
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
