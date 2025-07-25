@@ -1,4 +1,53 @@
 //! Type definitions for the proxy module
+//!
+//! This module defines all the domain types used throughout the proxy service.
+//! All types use the `nutype` crate for validation, ensuring that invalid states
+//! are impossible to represent.
+//!
+//! ## Type Categories
+//!
+//! ### Size and Capacity Types
+//! Types for representing various sizes and capacities with validation:
+//! - `RequestSizeLimit`, `ResponseSizeLimit`: Maximum sizes for HTTP payloads
+//! - `BufferSize`, `SlotSize`: Ring buffer dimensions
+//! - `BodySize`, `DataSize`: Actual data sizes
+//!
+//! ### Identifier Types
+//! Unique identifiers with specific formats:
+//! - `RequestId`: V7 UUID for request correlation
+//! - `SessionId`: V7 UUID for session tracking
+//! - `ApiKey`: Non-empty string for authentication
+//!
+//! ### HTTP Types
+//! HTTP-specific types with validation:
+//! - `HttpMethod`, `HttpStatusCode`: Standard HTTP elements
+//! - `TargetUrl`: Validated URL for proxying
+//! - `RequestUri`: Valid URI path
+//!
+//! ### Audit Types
+//! Types for the audit system:
+//! - `AuditEvent`: Events captured during request processing
+//! - `AuditEventType`: Different types of audit events
+//! - `ErrorPhase`: When errors occurred in processing
+//!
+//! ## Example Usage
+//!
+//! ```rust,ignore
+//! use union_square::proxy::types::*;
+//!
+//! // Create validated types
+//! let request_size = RequestSizeLimit::try_new(1024 * 1024)?; // 1MB
+//! let request_id = RequestId::new(); // Generates V7 UUID
+//! let api_key = ApiKey::try_new("sk-123456")?;
+//!
+//! // Types ensure validation at compile time
+//! let config = ProxyConfig {
+//!     max_request_size: request_size,
+//!     max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024)?,
+//!     request_timeout: Duration::from_secs(30),
+//!     ring_buffer: RingBufferConfig::default(),
+//! };
+//! ```
 
 use nutype::nutype;
 use serde::{Deserialize, Serialize};

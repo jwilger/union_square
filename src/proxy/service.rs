@@ -1,4 +1,33 @@
 //! Main proxy service implementation
+//!
+//! The `ProxyService` is the main entry point for the Union Square proxy.
+//! It orchestrates the hot path, audit path, and middleware stack to provide
+//! a complete LLM API proxy solution.
+//!
+//! ## Service Lifecycle
+//!
+//! ```rust,ignore
+//! use union_square::proxy::{ProxyService, ProxyConfig, AuthConfig};
+//!
+//! // 1. Create service with configuration
+//! let config = ProxyConfig::default();
+//! let service = ProxyService::new(config);
+//!
+//! // 2. Convert to Axum router (starts audit processor)
+//! let auth_config = AuthConfig::default();
+//! let router = service.into_router(auth_config);
+//!
+//! // 3. Serve with Axum
+//! let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+//! axum::serve(listener, router).await?;
+//! ```
+//!
+//! ## Components
+//!
+//! - **Hot Path**: Handles request/response streaming with minimal latency
+//! - **Ring Buffer**: Lock-free buffer for passing events to audit path
+//! - **Audit Processor**: Background task consuming events from ring buffer
+//! - **Middleware Stack**: Tower middleware for auth, logging, etc.
 
 use crate::proxy::hot_path::StreamingHotPathService;
 use crate::proxy::{

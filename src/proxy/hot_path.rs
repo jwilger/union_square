@@ -2,6 +2,34 @@
 //!
 //! This module implements the streaming hot path that provides <5ms latency
 //! for request forwarding while capturing audit data asynchronously.
+//!
+//! ## Design Goals
+//!
+//! 1. **Minimal Latency**: <5ms overhead for request/response forwarding
+//! 2. **Zero-Copy Streaming**: Direct byte streaming without buffering
+//! 3. **Fire-and-Forget Auditing**: Non-blocking writes to ring buffer
+//! 4. **Error Resilience**: Graceful handling of upstream failures
+//!
+//! ## Architecture
+//!
+//! ```text
+//! ┌─────────┐    Stream    ┌──────────┐    Stream    ┌──────────┐
+//! │ Client  │─────────────▶│ Hot Path │─────────────▶│ Upstream │
+//! └─────────┘              └────┬─────┘              └──────────┘
+//!                               │
+//!                               │ Fire & Forget
+//!                               ▼
+//!                         ┌─────────────┐
+//!                         │ Ring Buffer │
+//!                         └─────────────┘
+//! ```
+//!
+//! ## Implementation Details
+//!
+//! - Uses `StreamingHotPathService` for zero-copy forwarding
+//! - Captures request/response chunks asynchronously via channels
+//! - Writes audit events to ring buffer without blocking hot path
+//! - Handles connection errors and timeouts gracefully
 
 use crate::proxy::audit_recorder::{
     extract_headers_vec, parse_http_method, parse_http_status, parse_request_uri, AuditRecorder,

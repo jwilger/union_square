@@ -2,6 +2,50 @@
 //!
 //! This module provides a builder pattern for composing the Tower middleware stack,
 //! making it easier to maintain and test the middleware pipeline.
+//!
+//! ## Middleware Ordering
+//!
+//! The middleware stack is applied in a specific order to ensure proper functionality:
+//!
+//! ```text
+//! Request Flow (outer to inner):
+//! ┌─────────────────────┐
+//! │ Request ID          │ ← Ensures all requests have correlation ID
+//! ├─────────────────────┤
+//! │ Logging            │ ← Logs with request ID
+//! ├─────────────────────┤
+//! │ Error Handling     │ ← Catches and formats errors
+//! ├─────────────────────┤
+//! │ Authentication     │ ← Validates API keys
+//! ├─────────────────────┤
+//! │ Rate Limiting*     │ ← Per-key rate limits (future)
+//! ├─────────────────────┤
+//! │ Proxy Handler      │ ← Core proxy logic
+//! └─────────────────────┘
+//! ```
+//!
+//! ## Configuration
+//!
+//! The `ProxyMiddlewareConfig` struct provides centralized configuration:
+//!
+//! ```rust,ignore
+//! use union_square::proxy::ProxyMiddlewareConfig;
+//!
+//! let config = ProxyMiddlewareConfig::default()
+//!     .disable_health_check()     // Remove /health from bypass
+//!     .enable_detailed_errors()   // Include stack traces in errors
+//!     .disable_logging();         // Disable request logging
+//!
+//! let stack = config.build_stack();
+//! ```
+//!
+//! ## Extending the Stack
+//!
+//! To add new middleware:
+//! 1. Create the middleware function following Tower conventions
+//! 2. Add configuration flag to `ProxyMiddlewareConfig`
+//! 3. Update `apply_to_router` to conditionally apply based on config
+//! 4. Maintain proper ordering (see diagram above)
 
 use crate::proxy::middleware::*;
 use crate::proxy::types::BypassPath;
