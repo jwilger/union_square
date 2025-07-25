@@ -1,6 +1,7 @@
 //! Middleware implementations for the proxy service
 
 use crate::proxy::headers::{self, BEARER_PREFIX, X_REQUEST_ID};
+use crate::proxy::http_types::HttpPath;
 use crate::proxy::types::*;
 use axum::{
     extract::{Request, State},
@@ -99,8 +100,8 @@ pub async fn auth_middleware(
     next: Next,
 ) -> Result<Response, ProxyError> {
     // Check if path should bypass auth
-    let path = request.uri().path();
-    if let Ok(bypass_path) = BypassPath::try_new(path.to_string()) {
+    let http_path = HttpPath::from_uri(request.uri());
+    if let Ok(bypass_path) = BypassPath::try_new(http_path.to_string()) {
         if auth_config.bypass_paths.contains(&bypass_path) {
             return Ok(next.run(request).await);
         }
@@ -158,8 +159,8 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
     let start = Instant::now();
 
     // Extract request details before passing ownership
-    let method = request.method().clone();
-    let uri = request.uri().clone();
+    let method = crate::proxy::http_types::SafeHttpMethod::from_method(request.method().clone());
+    let path = HttpPath::from_uri(request.uri());
     let request_id = request
         .headers()
         .get(X_REQUEST_ID)
@@ -170,7 +171,7 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
     info!(
         request_id = request_id,
         method = %method,
-        path = %uri.path(),
+        path = %path,
         "Incoming request"
     );
 
@@ -182,7 +183,7 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
     info!(
         request_id = request_id,
         method = %method,
-        path = %uri.path(),
+        path = %path,
         status = response.status().as_u16(),
         duration_ms = duration.as_millis(),
         "Request completed"

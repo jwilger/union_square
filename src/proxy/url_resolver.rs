@@ -1,6 +1,7 @@
 //! Target URL resolution and path handling for proxy requests
 
-use crate::proxy::headers::{paths, X_TARGET_URL};
+use crate::proxy::headers::X_TARGET_URL;
+use crate::proxy::http_types::PathAndQuery;
 use crate::proxy::types::*;
 use hyper::{Request, Uri};
 
@@ -41,15 +42,12 @@ impl UrlResolver {
             target_url.as_ref().to_string()
         } else {
             // Target URL is just the base, append the original path
-            let path_and_query = original_uri
-                .path_and_query()
-                .map(|pq| pq.as_str())
-                .unwrap_or(paths::DEFAULT);
+            let path_and_query = PathAndQuery::from_uri(original_uri);
 
             format!(
                 "{}{}",
                 target_url.as_ref().trim_end_matches('/'),
-                path_and_query
+                path_and_query.as_str()
             )
         };
 
