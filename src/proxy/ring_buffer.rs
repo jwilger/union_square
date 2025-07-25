@@ -200,11 +200,11 @@ impl RingBuffer {
                 // Copy data (with truncation if needed)
                 let copy_size = data.len().min(*self.slot_size.as_ref());
 
-                // SAFETY: We have exclusive access to the slot's non-atomic fields because:
-                // 1. We successfully transitioned the state from Empty to Writing
-                // 2. Only one thread can win the compare_exchange operation
-                // 3. No other thread will access these fields until state becomes Ready
-                // 4. The data Vec is pre-allocated so no reallocation occurs
+                // SAFETY: Exclusive access guaranteed by successful CAS transition from Empty to Writing.
+                // - We successfully transitioned the state from Empty to Writing using a CAS operation
+                // - Only one thread can win the compare_exchange operation, ensuring exclusive access
+                // - The state machine guarantees no other thread accesses these fields until Ready state
+                // - The data Vec is pre-allocated, so no reallocation or memory race occurs
                 unsafe {
                     let data_ref = &mut *slot.data.get();
                     data_ref[..copy_size].copy_from_slice(&data[..copy_size]);
@@ -273,11 +273,12 @@ impl RingBuffer {
 
                 let size = slot.size.load(Ordering::Acquire) as usize;
 
-                // SAFETY: We have exclusive access to the slot's non-atomic fields because:
-                // 1. We successfully transitioned the state from Ready to Reading
-                // 2. The writer has completed and marked the slot as Ready
-                // 3. No other thread will access these fields until we mark as Empty
-                // 4. Memory ordering ensures we see all writes from the Writing phase
+                // SAFETY: Exclusive access guaranteed by successful CAS transition from Ready to Reading.
+                // - The CAS operation successfully transitioned from Ready to Reading, ensuring only
+                //   this thread can proceed with reading. Other threads would fail the CAS
+                // - The writer completed and marked the slot Ready, all writes are finalized
+                // - The state machine enforces no other thread accesses during Reading state
+                // - Memory ordering with Acquire ensures we observe all writes from Writing phase
                 let (request_id, data) = unsafe {
                     let request_id_bytes = *slot.request_id.get();
                     let uuid = Uuid::from_bytes(request_id_bytes);

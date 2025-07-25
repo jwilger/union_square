@@ -323,8 +323,8 @@ pub struct RequestId(Uuid);
 impl RequestId {
     /// Create a new RequestId with a v7 UUID
     pub fn new() -> Self {
-        // Uuid::now_v7() always creates a valid v7 UUID
-        Self::try_new(Uuid::now_v7()).expect("Uuid::now_v7() should always produce a valid v7 UUID")
+        // Uuid::now_v7() always creates a valid v7 UUID, so unwrap() is safe here
+        Self::try_new(Uuid::now_v7()).unwrap()
     }
 }
 
@@ -361,8 +361,8 @@ pub struct SessionId(Uuid);
 impl SessionId {
     /// Create a new SessionId with a v7 UUID
     pub fn new() -> Self {
-        // Uuid::now_v7() always creates a valid v7 UUID
-        Self::try_new(Uuid::now_v7()).expect("Uuid::now_v7() should always produce a valid v7 UUID")
+        // Uuid::now_v7() always creates a valid v7 UUID, so unwrap() is safe here
+        Self::try_new(Uuid::now_v7()).unwrap()
     }
 }
 

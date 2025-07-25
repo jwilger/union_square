@@ -215,29 +215,10 @@ pub fn extract_headers_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> 
 pub fn parse_http_method(method: &hyper::Method) -> Result<HttpMethod, String> {
     let method_str = method.to_string();
 
-    // First try the standard validation
-    match HttpMethod::try_new(method_str.clone()) {
-        Ok(http_method) => Ok(http_method),
-        Err(_) => {
-            // Fallback strategy for edge cases:
-            // If the method string is empty (which shouldn't happen with hyper::Method),
-            // use "UNKNOWN" as a fallback
-            if method_str.is_empty() {
-                match HttpMethod::try_new("UNKNOWN".to_string()) {
-                    Ok(fallback_method) => Ok(fallback_method),
-                    Err(e) => Err(format!(
-                        "Invalid HTTP method '{method}' and fallback failed: {e}"
-                    )),
-                }
-            } else {
-                // This case should be very rare since HttpMethod only validates non-empty strings
-                // and hyper::Method should always produce valid method strings
-                Err(format!(
-                    "Invalid HTTP method '{method}': failed validation (this should not happen)"
-                ))
-            }
-        }
-    }
+    // Try to create the HTTP method - this should always succeed since hyper::Method
+    // guarantees valid HTTP methods and never produces empty strings
+    HttpMethod::try_new(method_str.clone())
+        .map_err(|_| format!("Invalid HTTP method '{method_str}': failed validation"))
 }
 
 /// Helper function to parse request URI with detailed error message

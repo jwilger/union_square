@@ -24,6 +24,14 @@ impl UrlResolver {
         })
     }
 
+    /// Check if a URI has a meaningful path (not just root "/")
+    ///
+    /// Returns true if the URI has a path component beyond just the root,
+    /// indicating that the target URL includes a specific endpoint path.
+    fn has_meaningful_path(uri: &Uri) -> bool {
+        uri.path() != "/" && !uri.path().is_empty()
+    }
+
     /// Resolve the final URI for the outgoing request
     ///
     /// This handles the logic for combining the target URL with the original request path:
@@ -37,7 +45,7 @@ impl UrlResolver {
             .map_err(|_| ProxyError::InvalidTargetUrl(target_url.as_ref().to_string()))?;
 
         // Determine the final URI based on target URL structure
-        let final_uri_str = if target_uri.path() != "/" && !target_uri.path().is_empty() {
+        let final_uri_str = if Self::has_meaningful_path(&target_uri) {
             // Target URL already has a path, use it directly
             target_url.as_ref().to_string()
         } else {

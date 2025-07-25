@@ -104,6 +104,7 @@ impl StreamingHotPathService {
 
         // Apply request size limit by collecting the body first
         // TODO: This is a temporary implementation for MVP - we should implement true streaming size limits
+        //       See issue #126 and ADR-0017 for details on the planned enhancement
         let body_bytes = http_body_util::Limited::new(body, *self.config.max_request_size.as_ref())
             .collect()
             .await
