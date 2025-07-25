@@ -68,6 +68,12 @@ mod middleware_tests;
 #[cfg(test)]
 mod integration_tests;
 
+#[cfg(test)]
+pub mod test_utils;
+
+#[cfg(test)]
+pub mod middleware_test_helpers;
+
 // Main public exports
 pub use service::ProxyService;
 pub use types::{ProxyConfig, ProxyError, ProxyResult};
