@@ -8,7 +8,6 @@ npm-debug.log*
 
 # Rust
 target/
-Cargo.lock
 **/*.rs.bk
 
 # IDE
