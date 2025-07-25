@@ -1,7 +1,10 @@
 //! Main proxy service implementation
 
 use crate::proxy::streaming_simple::StreamingHotPathService;
-use crate::proxy::{audit_path::AuditPathProcessor, ring_buffer::RingBuffer, types::*};
+use crate::proxy::{
+    audit_path::AuditPathProcessor, middleware as proxy_middleware, ring_buffer::RingBuffer,
+    types::*,
+};
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -52,13 +55,27 @@ impl ProxyService {
         self.audit_shutdown_tx = Some(shutdown_tx);
     }
 
-    /// Create an Axum router for the proxy service
-    pub fn into_router(mut self) -> axum::Router {
+    /// Create an Axum router for the proxy service with middleware
+    pub fn into_router(mut self, auth_config: proxy_middleware::AuthConfig) -> axum::Router {
         // Start the audit processor before creating the router
         self.start_audit_processor();
 
+        // Create the router with middleware stack
         axum::Router::new()
             .fallback(proxy_handler)
+            .layer(axum::middleware::from_fn(
+                proxy_middleware::request_id_middleware,
+            ))
+            .layer(axum::middleware::from_fn(
+                proxy_middleware::logging_middleware,
+            ))
+            .layer(axum::middleware::from_fn(
+                proxy_middleware::error_handling_middleware,
+            ))
+            .layer(axum::middleware::from_fn_with_state(
+                Arc::new(auth_config),
+                proxy_middleware::auth_middleware,
+            ))
             .with_state(Arc::new(self))
     }
 }

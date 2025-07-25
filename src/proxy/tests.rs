@@ -51,7 +51,8 @@ mod proxy_service_tests {
     async fn test_proxy_service_router_creation() {
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let router = service.into_router();
+        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let router = service.into_router(auth_config);
 
         // Router should be created successfully
         // We can't easily test the router directly, but we can ensure it compiles
@@ -154,7 +155,8 @@ mod streaming_tests {
         // Service should handle streaming request without buffering entire body
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let app = service.into_router();
+        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let app = service.into_router(auth_config);
 
         // We can't test actual streaming without a backend, but we ensure
         // the service accepts streaming bodies
@@ -172,7 +174,8 @@ mod streaming_tests {
 
         // The implementation should stream responses without buffering
         // This is a compile-time test to ensure our types support streaming
-        let _app = service.into_router();
+        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let _app = service.into_router(auth_config);
     }
 
     #[tokio::test]
@@ -236,14 +239,15 @@ mod streaming_tests {
 
         let config = ProxyConfig::default();
         let service = ProxyService::new(config);
-        let app = service.into_router();
+        let auth_config = crate::proxy::middleware::AuthConfig::default();
+        let app = service.into_router(auth_config);
 
         // Service should handle streaming errors gracefully
         // Note: Since we don't have a real backend configured, the service will return an error
         // In a real implementation with a valid target URL, the error would be detected during streaming
         let response = app.oneshot(request).await.unwrap();
 
-        // Expect error status since no valid target URL is configured
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // Expect unauthorized status since no auth header is provided
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

@@ -7,6 +7,7 @@
 pub mod audit_path;
 pub mod hot_path;
 pub mod hot_path_streaming;
+pub mod middleware;
 pub mod ring_buffer;
 pub mod service;
 pub mod streaming;
@@ -15,6 +16,9 @@ pub mod types;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod middleware_tests;
 
 pub use service::ProxyService;
 pub use types::{ProxyConfig, ProxyError, ProxyResult};
