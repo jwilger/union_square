@@ -211,10 +211,33 @@ pub fn extract_headers_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> 
         .collect()
 }
 
-/// Helper function to parse HTTP method with detailed error message
+/// Helper function to parse HTTP method with detailed error message and fallback
 pub fn parse_http_method(method: &hyper::Method) -> Result<HttpMethod, String> {
-    HttpMethod::try_new(method.to_string())
-        .map_err(|e| format!("Invalid HTTP method '{method}': {e}"))
+    let method_str = method.to_string();
+
+    // First try the standard validation
+    match HttpMethod::try_new(method_str.clone()) {
+        Ok(http_method) => Ok(http_method),
+        Err(_) => {
+            // Fallback strategy for edge cases:
+            // If the method string is empty (which shouldn't happen with hyper::Method),
+            // use "UNKNOWN" as a fallback
+            if method_str.is_empty() {
+                match HttpMethod::try_new("UNKNOWN".to_string()) {
+                    Ok(fallback_method) => Ok(fallback_method),
+                    Err(e) => Err(format!(
+                        "Invalid HTTP method '{method}' and fallback failed: {e}"
+                    )),
+                }
+            } else {
+                // This case should be very rare since HttpMethod only validates non-empty strings
+                // and hyper::Method should always produce valid method strings
+                Err(format!(
+                    "Invalid HTTP method '{method}': failed validation (this should not happen)"
+                ))
+            }
+        }
+    }
 }
 
 /// Helper function to parse request URI with detailed error message
@@ -265,5 +288,24 @@ mod tests {
         assert!(parse_http_method(&method).is_ok());
         assert!(parse_request_uri(&uri).is_ok());
         assert!(parse_http_status(status).is_ok());
+    }
+
+    #[test]
+    fn test_http_method_fallback() {
+        // Test standard HTTP methods
+        let get_method = hyper::Method::GET;
+        let post_method = hyper::Method::POST;
+        let patch_method = hyper::Method::PATCH;
+
+        assert!(parse_http_method(&get_method).is_ok());
+        assert!(parse_http_method(&post_method).is_ok());
+        assert!(parse_http_method(&patch_method).is_ok());
+
+        // Test custom HTTP methods
+        let custom_method = hyper::Method::from_bytes(b"CUSTOM").unwrap();
+        assert!(parse_http_method(&custom_method).is_ok());
+
+        // All these should succeed since hyper::Method ensures valid method strings
+        // and our HttpMethod type only validates non-empty strings
     }
 }

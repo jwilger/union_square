@@ -1,6 +1,7 @@
 //! Ring buffer implementation for audit path handoff
 
 use crate::proxy::types::*;
+use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use uuid::Uuid;
 
@@ -31,19 +32,24 @@ impl From<u8> for SlotState {
 pub struct Slot {
     state: AtomicU8,
     size: AtomicU32,
-    timestamp: TimestampNanos,
-    request_id: [u8; UUID_SIZE_BYTES], // UUID bytes
-    data: Vec<u8>,
+    timestamp: UnsafeCell<TimestampNanos>,
+    request_id: UnsafeCell<[u8; UUID_SIZE_BYTES]>, // UUID bytes
+    data: UnsafeCell<Vec<u8>>,
 }
+
+// Safety: Slot is safe to send between threads because access to non-atomic fields
+// is coordinated via the atomic state field
+unsafe impl Send for Slot {}
+unsafe impl Sync for Slot {}
 
 impl Slot {
     fn new(slot_size: SlotSize) -> Self {
         Self {
             state: AtomicU8::new(SlotState::Empty as u8),
             size: AtomicU32::new(0),
-            timestamp: TimestampNanos::from(0),
-            request_id: [0; UUID_SIZE_BYTES],
-            data: vec![0; *slot_size.as_ref()],
+            timestamp: UnsafeCell::new(TimestampNanos::from(0)),
+            request_id: UnsafeCell::new([0; UUID_SIZE_BYTES]),
+            data: UnsafeCell::new(vec![0; *slot_size.as_ref()]),
         }
     }
 }
@@ -137,15 +143,15 @@ impl RingBuffer {
                 // Copy data (with truncation if needed)
                 let copy_size = data.len().min(*self.slot_size.as_ref());
                 unsafe {
-                    // Safe because we have exclusive access
-                    let slot_ptr = slot as *const Slot as *mut Slot;
-                    (&mut (*slot_ptr).data)[..copy_size].copy_from_slice(&data[..copy_size]);
+                    // Safe because we have exclusive access via atomic state transition
+                    let data_ref = &mut *slot.data.get();
+                    data_ref[..copy_size].copy_from_slice(&data[..copy_size]);
+
                     let timestamp_value =
                         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
-                    (*slot_ptr).timestamp = TimestampNanos::from(timestamp_value);
-                    (*slot_ptr)
-                        .request_id
-                        .copy_from_slice(request_id.as_ref().as_bytes());
+                    *slot.timestamp.get() = TimestampNanos::from(timestamp_value);
+
+                    (*slot.request_id.get()).copy_from_slice(request_id.as_ref().as_bytes());
                 }
 
                 // Store actual size
@@ -189,13 +195,18 @@ impl RingBuffer {
             Ok(_) => {
                 // We have exclusive access to read
                 let size = slot.size.load(Ordering::Acquire) as usize;
-                let data = slot.data[..size].to_vec();
-                let request_id_bytes = slot.request_id;
-                let uuid = Uuid::from_bytes(request_id_bytes);
-                let request_id = RequestId::try_new(uuid).unwrap_or_else(|_| {
-                    // This should never happen since we only store v7 UUIDs
-                    RequestId::new()
-                });
+                let (data, request_id) = unsafe {
+                    // Safe because we have exclusive access via atomic state transition
+                    let data_ref = &*slot.data.get();
+                    let request_id_bytes = *slot.request_id.get();
+                    let data = data_ref[..size].to_vec();
+                    let uuid = Uuid::from_bytes(request_id_bytes);
+                    let request_id = RequestId::try_new(uuid).unwrap_or_else(|_| {
+                        // This should never happen since we only store v7 UUIDs
+                        RequestId::new()
+                    });
+                    (data, request_id)
+                };
 
                 // Mark as empty for reuse
                 slot.state.store(SlotState::Empty as u8, Ordering::Release);
