@@ -241,7 +241,7 @@ impl Default for RingBufferConfig {
 
 /// Request ID for correlation between hot and audit paths
 #[nutype(
-    derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
+    derive(Clone, Copy, Debug, Display, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |id: &Uuid| id.get_version_num() == 7),
     new_unchecked,
 )]
@@ -419,3 +419,7 @@ pub enum ErrorPhase {
     ResponseReturning,
     AuditRecording,
 }
+
+#[cfg(test)]
+#[path = "error_handling_tests.rs"]
+mod error_handling_tests;

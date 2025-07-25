@@ -48,6 +48,13 @@ impl Slot {
     }
 }
 
+/// Statistics about ring buffer usage
+pub struct RingBufferStats {
+    pub total_writes: u64,
+    pub total_reads: u64,
+    pub dropped_events: DroppedEventCount,
+}
+
 /// Lock-free ring buffer for audit event handoff
 pub struct RingBuffer {
     slots: Vec<Slot>,
@@ -56,14 +63,34 @@ pub struct RingBuffer {
     write_position: AtomicU64,
     read_position: AtomicU64,
     overflow_count: AtomicU64,
+    successful_writes: AtomicU64,
+    successful_reads: AtomicU64,
 }
 
 impl RingBuffer {
+    /// Statistics about ring buffer usage
+    pub fn stats(&self) -> RingBufferStats {
+        RingBufferStats {
+            total_writes: self.successful_writes.load(Ordering::Relaxed),
+            total_reads: self.successful_reads.load(Ordering::Relaxed),
+            dropped_events: DroppedEventCount::from(self.overflow_count.load(Ordering::Relaxed)),
+        }
+    }
+
     /// Create a new ring buffer with the given configuration
     pub fn new(config: &RingBufferConfig) -> Self {
         let calculated_slot_count = *config.buffer_size.as_ref() / *config.slot_size.as_ref();
-        // Ensure power of 2 for efficient modulo
-        let slot_count_value = calculated_slot_count.next_power_of_two();
+        // Ensure power of 2 for efficient modulo, but don't exceed calculated count
+        let mut slot_count_value = calculated_slot_count.next_power_of_two();
+
+        // If rounding up to power of 2 would exceed buffer capacity, round down
+        if slot_count_value > calculated_slot_count {
+            slot_count_value /= 2;
+        }
+
+        // Ensure at least 1 slot
+        slot_count_value = slot_count_value.max(1);
+
         let slot_count =
             SlotCount::try_new(slot_count_value).expect("calculated slot count should be valid");
 
@@ -78,6 +105,8 @@ impl RingBuffer {
             write_position: AtomicU64::new(0),
             read_position: AtomicU64::new(0),
             overflow_count: AtomicU64::new(0),
+            successful_writes: AtomicU64::new(0),
+            successful_reads: AtomicU64::new(0),
         }
     }
 
@@ -125,6 +154,9 @@ impl RingBuffer {
                 // Mark as ready for reading
                 slot.state.store(SlotState::Ready as u8, Ordering::Release);
 
+                // Increment successful writes counter
+                self.successful_writes.fetch_add(1, Ordering::Relaxed);
+
                 Ok(())
             }
             Err(_) => {
@@ -170,6 +202,9 @@ impl RingBuffer {
 
                 // Advance read position
                 self.read_position.fetch_add(1, Ordering::Relaxed);
+
+                // Increment successful reads counter
+                self.successful_reads.fetch_add(1, Ordering::Relaxed);
 
                 Some((request_id, data))
             }
@@ -425,3 +460,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "ring_buffer_tests.rs"]
+mod ring_buffer_tests;
