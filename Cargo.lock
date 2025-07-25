@@ -3186,7 +3186,6 @@ dependencies = [
  "config",
  "criterion",
  "crossbeam",
- "crossbeam-queue",
  "derive_more",
  "eventcore",
  "eventcore-macros",

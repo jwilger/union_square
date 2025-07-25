@@ -168,29 +168,30 @@ proptest! {
         let ring_buffer = RingBuffer::new(&config);
         let slot_count = config.buffer_size.as_ref() / config.slot_size.as_ref();
 
-        // Write more data than the buffer can hold to force wraparound
+        // Write more data than the buffer can hold to force overflow
         let small_data = vec![1u8; 32]; // Small data to ensure it fits
+        let mut successful_writes = 0;
 
-        // With force_push, all writes succeed
+        // With original behavior, writes can fail when slots are busy
         for _ in 0..write_count {
             let request_id = RequestId::new();
-            ring_buffer.write(request_id, &small_data).ok(); // Always succeeds, may overwrite
+            if ring_buffer.write(request_id, &small_data).is_ok() {
+                successful_writes += 1;
+            }
         }
 
-        // All writes should have succeeded with ring buffer semantics
-        let stats = ring_buffer.stats();
-        prop_assert_eq!(stats.total_writes, write_count as u64);
+        // We should have written some data (exact count depends on timing/contention)
+        prop_assert!(successful_writes > 0);
+        prop_assert!(successful_writes <= write_count);
 
-        // Read back data - should get data up to the buffer capacity
+        // Read back data - should get the data that was successfully written
         let mut read_count = 0;
         while ring_buffer.read().is_some() {
             read_count += 1;
         }
 
-        // With ring buffer, we should be able to read up to the actual ArrayQueue capacity
-        // ArrayQueue rounds up to next power of 2, so actual capacity may be larger than slot_count
-        let actual_capacity = slot_count.next_power_of_two();
-        prop_assert!(read_count <= actual_capacity);
+        // Should read approximately one buffer's worth of data
+        prop_assert!(read_count <= slot_count);
         prop_assert!(read_count > 0);
     }
 
@@ -203,7 +204,7 @@ proptest! {
         ),
     ) {
         let ring_buffer = RingBuffer::new(&config);
-        let slot_count = config.buffer_size.as_ref() / config.slot_size.as_ref();
+        let _slot_count = config.buffer_size.as_ref() / config.slot_size.as_ref();
         let small_data = vec![1u8; 32];
 
         let initial_stats = ring_buffer.stats();
@@ -218,10 +219,9 @@ proptest! {
         for is_write in operations {
             if is_write {
                 let request_id = RequestId::new();
-                // With force_push, writes always succeed (never fail)
-                ring_buffer.write(request_id, &small_data).ok(); // May return Err on overwrite, but write always succeeds
-                expected_writes += 1;
-                if available_to_read < slot_count {
+                // With original behavior, writes can fail when slots are busy
+                if ring_buffer.write(request_id, &small_data).is_ok() {
+                    expected_writes += 1;
                     available_to_read += 1;
                 }
             } else if available_to_read > 0 && ring_buffer.read().is_some() {
@@ -345,7 +345,7 @@ fn test_ring_buffer_concurrent_stress() {
     }
 
     // Wait for all writer threads to complete
-    let total_writes: usize = write_handles.into_iter().map(|h| h.join().unwrap()).sum();
+    let _total_writes: usize = write_handles.into_iter().map(|h| h.join().unwrap()).sum();
 
     // Signal readers to start shutdown
     shutdown_flag.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -353,9 +353,10 @@ fn test_ring_buffer_concurrent_stress() {
     // Wait for all reader threads to complete
     let total_reads: usize = read_handles.into_iter().map(|h| h.join().unwrap()).sum();
 
-    // Check final stats - now reads should equal writes since readers drain everything
+    // Check final stats - with original behavior, some writes may fail due to contention
     let stats = ring_buffer.stats();
     assert!(stats.total_writes > 0);
     assert!(stats.total_reads > 0);
-    assert_eq!(total_reads, total_writes);
+    // Reads should equal successful writes (some writes may have failed due to slot contention)
+    assert_eq!(total_reads, stats.total_writes as usize);
 }

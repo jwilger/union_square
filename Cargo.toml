@@ -41,7 +41,6 @@ futures-util = "0.3.31"
 pin-project-lite = "0.2.16"
 crossbeam = "0.8.4"
 parking_lot = "0.12.4"
-crossbeam-queue = "0.3.12"
 
 [dev-dependencies]
 tokio-test = "0.4"
