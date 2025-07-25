@@ -95,7 +95,8 @@ impl ProxyMiddlewareConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proxy::types::{ApiKey, HEALTH_PATH, REQUEST_ID_HEADER};
+    use crate::proxy::headers::{paths, X_REQUEST_ID};
+    use crate::proxy::types::ApiKey;
     use axum::{body::Body, http::StatusCode, response::IntoResponse};
     use tower::ServiceExt;
 
@@ -133,7 +134,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+        assert!(response.headers().contains_key(X_REQUEST_ID));
     }
 
     #[tokio::test]
@@ -145,7 +146,7 @@ mod tests {
 
         // Build router with middleware stack
         let router = Router::new()
-            .route(HEALTH_PATH, axum::routing::get(handler))
+            .route(paths::HEALTH, axum::routing::get(handler))
             .with_state(());
 
         let stack = ProxyMiddlewareStack::minimal();
@@ -155,7 +156,7 @@ mod tests {
         let response = app
             .oneshot(
                 axum::http::Request::builder()
-                    .uri(HEALTH_PATH)
+                    .uri(paths::HEALTH)
                     .body(Body::empty())
                     .unwrap(),
             )

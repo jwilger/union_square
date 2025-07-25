@@ -4,7 +4,8 @@
 //! and handlers, ensuring proper request ID correlation and standardized
 //! error messages.
 
-use crate::proxy::types::{ProxyError, REQUEST_ID_HEADER};
+use crate::proxy::headers::X_REQUEST_ID;
+use crate::proxy::types::ProxyError;
 use axum::{
     http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -57,9 +58,7 @@ impl ErrorResponse {
         // Add request ID header if available
         if let Some(id) = request_id {
             if let Ok(header_value) = HeaderValue::from_str(&id) {
-                response
-                    .headers_mut()
-                    .insert(REQUEST_ID_HEADER, header_value);
+                response.headers_mut().insert(X_REQUEST_ID, header_value);
             }
         }
 
@@ -194,7 +193,7 @@ pub fn standard_error_response(status: StatusCode, request_id: Option<&str>) -> 
 /// Helper to extract request ID from headers
 pub fn extract_request_id(headers: &http::HeaderMap) -> Option<String> {
     headers
-        .get(REQUEST_ID_HEADER)
+        .get(X_REQUEST_ID)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
 }
@@ -237,6 +236,6 @@ mod tests {
     fn test_standard_error_responses() {
         let response = standard_error_response(StatusCode::NOT_FOUND, Some("req-123"));
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+        assert!(response.headers().contains_key(X_REQUEST_ID));
     }
 }

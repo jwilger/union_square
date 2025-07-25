@@ -1,5 +1,6 @@
 //! Middleware implementations for the proxy service
 
+use crate::proxy::headers::{self, BEARER_PREFIX, X_REQUEST_ID};
 use crate::proxy::types::*;
 use axum::{
     extract::{Request, State},
@@ -28,12 +29,12 @@ impl Default for AuthConfig {
         // These are hardcoded constants that we know are valid paths
         // If they fail validation, it's a programming error that should be caught during development
         bypass_paths.insert(
-            BypassPath::try_new(HEALTH_PATH.to_string())
-                .expect("HEALTH_PATH constant should be a valid path"),
+            BypassPath::try_new(headers::paths::HEALTH.to_string())
+                .expect("headers::paths::HEALTH constant should be a valid path"),
         );
         bypass_paths.insert(
-            BypassPath::try_new(METRICS_PATH.to_string())
-                .expect("METRICS_PATH constant should be a valid path"),
+            BypassPath::try_new(headers::paths::METRICS.to_string())
+                .expect("headers::paths::METRICS constant should be a valid path"),
         );
 
         Self {
@@ -49,7 +50,7 @@ pub async fn request_id_middleware(
     next: Next,
 ) -> Result<Response, ProxyError> {
     // Check if request already has an ID
-    let request_id = if let Some(existing_id) = request.headers().get(REQUEST_ID_HEADER) {
+    let request_id = if let Some(existing_id) = request.headers().get(X_REQUEST_ID) {
         // Validate and use existing ID
         existing_id
             .to_str()
@@ -78,7 +79,7 @@ pub async fn request_id_middleware(
     let request_id_clone = request_id.clone();
 
     // Add to request headers
-    request.headers_mut().insert(REQUEST_ID_HEADER, request_id);
+    request.headers_mut().insert(X_REQUEST_ID, request_id);
 
     // Process request
     let mut response = next.run(request).await;
@@ -86,7 +87,7 @@ pub async fn request_id_middleware(
     // Add request ID to response
     response
         .headers_mut()
-        .insert(REQUEST_ID_HEADER, request_id_clone);
+        .insert(X_REQUEST_ID, request_id_clone);
 
     Ok(response)
 }
@@ -161,7 +162,7 @@ pub async fn logging_middleware(request: Request, next: Next) -> Result<Response
     let uri = request.uri().clone();
     let request_id = request
         .headers()
-        .get(REQUEST_ID_HEADER)
+        .get(X_REQUEST_ID)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
@@ -230,14 +231,14 @@ mod tests {
         let handler = tower::service_fn(|req: Request| async move {
             let request_id = req
                 .headers()
-                .get(REQUEST_ID_HEADER)
+                .get(X_REQUEST_ID)
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("missing");
 
             Ok::<_, std::convert::Infallible>(
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header(REQUEST_ID_HEADER, request_id)
+                    .header(X_REQUEST_ID, request_id)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -256,9 +257,9 @@ mod tests {
             .unwrap();
 
         let response = service.clone().oneshot(request).await.unwrap();
-        assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+        assert!(response.headers().contains_key(X_REQUEST_ID));
 
-        let request_id = response.headers().get(REQUEST_ID_HEADER).unwrap();
+        let request_id = response.headers().get(X_REQUEST_ID).unwrap();
         let uuid = Uuid::parse_str(request_id.to_str().unwrap()).unwrap();
         assert_eq!(uuid.get_version_num(), 7);
     }
@@ -341,7 +342,7 @@ mod tests {
 
         let request = Request::builder()
             .method("GET")
-            .uri(HEALTH_PATH)
+            .uri(headers::paths::HEALTH)
             .body(Body::empty())
             .unwrap();
 

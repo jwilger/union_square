@@ -98,7 +98,7 @@ mod tests {
             .uri("http://localhost:8080/")
             .header("Authorization", "Bearer test-key")
             .header(
-                "X-Target-Url",
+                crate::proxy::headers::X_TARGET_URL,
                 format!("http://localhost:{}/", TEST_PORT_BASE + 1),
             )
             .body(Body::empty())
@@ -123,7 +123,10 @@ mod tests {
             .method("POST")
             .uri("http://localhost:8080/echo")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8081/echo")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8081/echo",
+            )
             .header("Content-Type", "text/plain")
             .body(Body::from(request_body))
             .unwrap();
@@ -140,7 +143,10 @@ mod tests {
         let request = Request::builder()
             .method("GET")
             .uri("http://localhost:8080/")
-            .header("X-Target-Url", "http://localhost:8081/")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8081/",
+            )
             .body(Body::empty())
             .unwrap();
 
@@ -179,7 +185,7 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "not-a-url")
+            .header(crate::proxy::headers::X_TARGET_URL, "not-a-url")
             .body(Body::empty())
             .unwrap();
 
@@ -191,7 +197,10 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/status/500")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8082/status/500")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8082/status/500",
+            )
             .body(Body::empty())
             .unwrap();
 
@@ -203,7 +212,10 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:9999/") // Non-existent port
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:9999/",
+            ) // Non-existent port
             .body(Body::empty())
             .unwrap();
 
@@ -239,7 +251,10 @@ mod tests {
             .method("POST")
             .uri("http://localhost:8080/echo")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8083/echo")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8083/echo",
+            )
             .header("Content-Type", "text/plain")
             .body(Body::from(large_body))
             .unwrap();
@@ -275,7 +290,10 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/large")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8084/large")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8084/large",
+            )
             .body(Body::empty())
             .unwrap();
 
@@ -312,7 +330,10 @@ mod tests {
             .method("GET")
             .uri("http://localhost:8080/slow")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8085/slow")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8085/slow",
+            )
             .body(Body::empty())
             .unwrap();
 
@@ -345,7 +366,10 @@ mod tests {
                     .method("POST")
                     .uri("http://localhost:8080/echo")
                     .header("Authorization", "Bearer test-key")
-                    .header("X-Target-Url", "http://localhost:8086/echo")
+                    .header(
+                        crate::proxy::headers::X_TARGET_URL,
+                        "http://localhost:8086/echo",
+                    )
                     .header("Content-Type", "text/plain")
                     .body(Body::from(format!("Request {i}")))
                     .unwrap();
@@ -398,7 +422,10 @@ mod tests {
             .method("POST")
             .uri("http://localhost:8080/echo")
             .header("Authorization", "Bearer test-key")
-            .header("X-Target-Url", "http://localhost:8087/echo")
+            .header(
+                crate::proxy::headers::X_TARGET_URL,
+                "http://localhost:8087/echo",
+            )
             .header("Content-Type", "text/plain")
             .body(Body::from("Test audit"))
             .unwrap();
@@ -448,7 +475,10 @@ mod tests {
                 .method(*method)
                 .uri("http://localhost:8080/")
                 .header("Authorization", "Bearer test-key")
-                .header("X-Target-Url", "http://localhost:8088/")
+                .header(
+                    crate::proxy::headers::X_TARGET_URL,
+                    "http://localhost:8088/",
+                )
                 .body(Body::empty())
                 .unwrap();
 

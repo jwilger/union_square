@@ -1,5 +1,6 @@
 //! Target URL resolution and path handling for proxy requests
 
+use crate::proxy::headers::{paths, X_TARGET_URL};
 use crate::proxy::types::*;
 use hyper::{Request, Uri};
 
@@ -11,7 +12,7 @@ impl UrlResolver {
     pub fn extract_target_url<B>(request: &Request<B>) -> ProxyResult<TargetUrl> {
         let target_url_str = request
             .headers()
-            .get("X-Target-Url")
+            .get(X_TARGET_URL)
             .and_then(|h| h.to_str().ok())
             .ok_or_else(|| {
                 ProxyError::InvalidTargetUrl("Missing X-Target-Url header".to_string())
@@ -43,7 +44,7 @@ impl UrlResolver {
             let path_and_query = original_uri
                 .path_and_query()
                 .map(|pq| pq.as_str())
-                .unwrap_or(DEFAULT_PATH);
+                .unwrap_or(paths::DEFAULT);
 
             format!(
                 "{}{}",
@@ -99,7 +100,7 @@ mod tests {
     #[test]
     fn test_extract_target_url_success() {
         let request = Request::builder()
-            .header("X-Target-Url", "https://api.example.com")
+            .header(X_TARGET_URL, "https://api.example.com")
             .body(Empty::<bytes::Bytes>::new())
             .unwrap();
 
@@ -124,7 +125,7 @@ mod tests {
     #[test]
     fn test_extract_target_url_invalid_url() {
         let request = Request::builder()
-            .header("X-Target-Url", "not-a-url")
+            .header(X_TARGET_URL, "not-a-url")
             .body(Empty::<bytes::Bytes>::new())
             .unwrap();
 

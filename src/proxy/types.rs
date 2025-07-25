@@ -174,21 +174,6 @@ pub const UUID_SIZE_BYTES: usize = 16;
 /// Cache line size for alignment
 pub const CACHE_LINE_SIZE: usize = 64;
 
-/// Default path when none is specified
-pub const DEFAULT_PATH: &str = "/";
-
-/// Authorization header prefix for bearer tokens
-pub const BEARER_PREFIX: &str = "Bearer ";
-
-/// Header name for request ID
-pub const REQUEST_ID_HEADER: &str = "x-request-id";
-
-/// Default health check path
-pub const HEALTH_PATH: &str = "/health";
-
-/// Default metrics path
-pub const METRICS_PATH: &str = "/metrics";
-
 /// Common HTTP methods
 pub const METHOD_GET: &str = "GET";
 pub const METHOD_POST: &str = "POST";

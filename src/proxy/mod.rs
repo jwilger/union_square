@@ -7,6 +7,7 @@
 pub mod audit_path;
 pub mod audit_recorder;
 pub mod error_response;
+pub mod headers;
 pub mod hot_path;
 pub mod middleware;
 pub mod middleware_stack;

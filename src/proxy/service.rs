@@ -60,8 +60,14 @@ impl ProxyService {
 
         // Create base router
         let router = axum::Router::new()
-            .route("/health", axum::routing::get(health_handler))
-            .route("/metrics", axum::routing::get(metrics_handler))
+            .route(
+                crate::proxy::headers::paths::HEALTH,
+                axum::routing::get(health_handler),
+            )
+            .route(
+                crate::proxy::headers::paths::METRICS,
+                axum::routing::get(metrics_handler),
+            )
             .fallback(proxy_handler)
             .with_state(Arc::new(self));
 
