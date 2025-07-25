@@ -2,8 +2,8 @@
 
 use crate::proxy::hot_path::StreamingHotPathService;
 use crate::proxy::{
-    audit_path::AuditPathProcessor, middleware as proxy_middleware, ring_buffer::RingBuffer,
-    types::*, url_resolver::UrlResolver,
+    audit_path::AuditPathProcessor, middleware_stack::ProxyMiddlewareStack,
+    ring_buffer::RingBuffer, types::*, url_resolver::UrlResolver,
 };
 use axum::{
     body::Body,
@@ -52,29 +52,23 @@ impl ProxyService {
     }
 
     /// Create an Axum router for the proxy service with middleware
-    pub fn into_router(mut self, auth_config: proxy_middleware::AuthConfig) -> axum::Router {
+    pub fn into_router(
+        mut self,
+        auth_config: crate::proxy::middleware::AuthConfig,
+    ) -> axum::Router {
         // Start the audit processor before creating the router
         self.start_audit_processor();
 
-        // Create the router with middleware stack
-        axum::Router::new()
+        // Create base router
+        let router = axum::Router::new()
             .route("/health", axum::routing::get(health_handler))
             .route("/metrics", axum::routing::get(metrics_handler))
             .fallback(proxy_handler)
-            .layer(axum::middleware::from_fn(
-                proxy_middleware::request_id_middleware,
-            ))
-            .layer(axum::middleware::from_fn(
-                proxy_middleware::logging_middleware,
-            ))
-            .layer(axum::middleware::from_fn(
-                proxy_middleware::error_handling_middleware,
-            ))
-            .layer(axum::middleware::from_fn_with_state(
-                Arc::new(auth_config),
-                proxy_middleware::auth_middleware,
-            ))
-            .with_state(Arc::new(self))
+            .with_state(Arc::new(self));
+
+        // Apply middleware stack using the builder
+        let middleware_stack = ProxyMiddlewareStack::new(auth_config);
+        middleware_stack.apply_to_router(router)
     }
 }
 

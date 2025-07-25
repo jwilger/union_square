@@ -8,6 +8,7 @@ pub mod audit_path;
 pub mod audit_recorder;
 pub mod hot_path;
 pub mod middleware;
+pub mod middleware_stack;
 pub mod ring_buffer;
 pub mod ring_buffer_performance_test;
 pub mod service;
