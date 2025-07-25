@@ -1,14 +1,23 @@
 //! Hot path implementation for minimal-latency request forwarding
+//!
+//! This module contains a non-streaming implementation used for testing
+//! and performance comparisons. The production code uses StreamingHotPathService.
 
+#[cfg(test)]
 use crate::proxy::types::*;
+#[cfg(test)]
 use bytes::Bytes;
+#[cfg(test)]
 use http_body_util::{BodyExt, Full};
+#[cfg(test)]
 use hyper::{Request, Response};
+#[cfg(test)]
 use std::sync::Arc;
 
 /// Hot path service for forwarding requests with minimal overhead
+/// (Test implementation - production code uses StreamingHotPathService)
+#[cfg(test)]
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct HotPathService {
     config: Arc<ProxyConfig>,
     client: hyper_util::client::legacy::Client<
@@ -17,6 +26,7 @@ pub struct HotPathService {
     >,
 }
 
+#[cfg(test)]
 impl HotPathService {
     /// Create a new hot path service
     pub fn new(config: ProxyConfig) -> Self {

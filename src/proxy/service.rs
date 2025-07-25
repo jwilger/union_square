@@ -16,9 +16,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Main proxy service combining hot and audit paths
-#[allow(dead_code)]
 pub struct ProxyService {
-    config: Arc<ProxyConfig>,
     hot_path: StreamingHotPathService,
     ring_buffer: Arc<RingBuffer>,
     audit_shutdown_tx: Option<mpsc::Sender<()>>,
@@ -31,7 +29,6 @@ impl ProxyService {
         let hot_path = StreamingHotPathService::new(config.clone(), ring_buffer.clone());
 
         Self {
-            config: Arc::new(config),
             hot_path,
             ring_buffer,
             audit_shutdown_tx: None,
