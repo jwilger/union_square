@@ -20,5 +20,8 @@ mod tests;
 #[cfg(test)]
 mod middleware_tests;
 
+#[cfg(test)]
+mod integration_tests;
+
 pub use service::ProxyService;
 pub use types::{ProxyConfig, ProxyError, ProxyResult};

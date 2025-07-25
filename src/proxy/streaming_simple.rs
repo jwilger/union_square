@@ -3,6 +3,7 @@
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
 use axum::body::Body;
+use http_body_util::BodyExt;
 use hyper::{Request, Response};
 use std::sync::Arc;
 use std::time::Instant;
@@ -46,21 +47,35 @@ impl StreamingHotPathService {
         // Extract parts from the incoming request
         let (mut parts, body) = request.into_parts();
 
-        // Update the URI with the target URL
-        let path_and_query = parts
-            .uri
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/");
+        // Parse the target URL to handle cases where it already contains a path
+        let target_uri: hyper::Uri = target_url
+            .as_ref()
+            .parse()
+            .map_err(|_| ProxyError::InvalidTargetUrl(target_url.as_ref().to_string()))?;
 
-        let full_uri = format!(
-            "{}{}",
-            target_url.as_ref().trim_end_matches('/'),
-            path_and_query
-        );
+        // If the target URL has a path, use it as-is
+        // If it doesn't, append the path from the original request
+        let full_uri = if target_uri.path() != "/" {
+            // Target URL already has a path, use it directly
+            target_url.as_ref().to_string()
+        } else {
+            // Target URL is just the base, append the original path
+            let path_and_query = parts
+                .uri
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or("/");
+
+            format!(
+                "{}{}",
+                target_url.as_ref().trim_end_matches('/'),
+                path_and_query
+            )
+        };
+
         parts.uri = full_uri
             .parse()
-            .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
+            .map_err(|_| ProxyError::InvalidTargetUrl(full_uri.clone()))?;
 
         // Record request metadata in ring buffer
         let headers_vec: Vec<(String, String)> = parts
@@ -102,9 +117,24 @@ impl StreamingHotPathService {
             let _ = self.ring_buffer.write(request_id, &serialized);
         }
 
-        // Create outgoing request with the streaming body
-        // For MVP, we forward the body as-is without capturing chunks
-        let outgoing_request = Request::from_parts(parts, body);
+        // Apply request size limit by collecting the body first
+        // TODO: This is a temporary implementation for MVP - we should implement true streaming size limits
+        let body_bytes = http_body_util::Limited::new(body, *self.config.max_request_size.as_ref())
+            .collect()
+            .await
+            .map_err(|e| {
+                if e.is::<http_body_util::LengthLimitError>() {
+                    ProxyError::RequestTooLarge {
+                        size: BodySize::from(*self.config.max_request_size.as_ref() + 1),
+                        max_size: self.config.max_request_size,
+                    }
+                } else {
+                    ProxyError::Internal(format!("Body collection error: {e}"))
+                }
+            })?;
+
+        // Create outgoing request with the collected body
+        let outgoing_request = Request::from_parts(parts, Body::from(body_bytes.to_bytes()));
 
         // Forward the request with timeout
         let response_future = self.client.request(outgoing_request);
@@ -113,7 +143,7 @@ impl StreamingHotPathService {
         let response = tokio::time::timeout(timeout_duration, response_future)
             .await
             .map_err(|_| ProxyError::RequestTimeout(timeout_duration))?
-            .map_err(|e| ProxyError::Internal(format!("Client error: {e}")))?;
+            .map_err(|e| ProxyError::Internal(format!("Network error: {e}")))?;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 

@@ -58,6 +58,8 @@ impl ProxyService {
 
         // Create the router with middleware stack
         axum::Router::new()
+            .route("/health", axum::routing::get(health_handler))
+            .route("/metrics", axum::routing::get(metrics_handler))
             .fallback(proxy_handler)
             .layer(axum::middleware::from_fn(
                 proxy_middleware::request_id_middleware,
@@ -84,8 +86,14 @@ async fn proxy_handler(
     // Generate request ID for correlation
     let request_id = RequestId::new();
 
-    // TODO: Extract target URL from request headers or path
-    let target_url = TargetUrl::try_new("https://api.example.com")
+    // Extract target URL from X-Target-Url header
+    let target_url = request
+        .headers()
+        .get("X-Target-Url")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ProxyError::InvalidTargetUrl("Missing X-Target-Url header".to_string()))?;
+
+    let target_url = TargetUrl::try_new(target_url.to_string())
         .map_err(|e| ProxyError::InvalidTargetUrl(e.to_string()))?;
 
     // Forward the request using streaming hot path
@@ -119,6 +127,9 @@ impl IntoResponse for ProxyError {
                     "Internal server error".to_string(),
                 )
             }
+            ProxyError::Internal(msg) if msg.contains("Network error") => {
+                (StatusCode::BAD_GATEWAY, "Bad gateway".to_string())
+            }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
@@ -127,4 +138,14 @@ impl IntoResponse for ProxyError {
 
         (status, message).into_response()
     }
+}
+
+/// Health check handler
+async fn health_handler() -> &'static str {
+    "OK"
+}
+
+/// Metrics handler - placeholder for now
+async fn metrics_handler() -> &'static str {
+    "metrics: placeholder"
 }
