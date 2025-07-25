@@ -74,10 +74,15 @@ impl StreamingHotPathService {
             session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new(parts.method.to_string())
-                    .unwrap_or_else(|_| HttpMethod::try_new("UNKNOWN".to_string()).unwrap()),
-                uri: RequestUri::try_new(parts.uri.to_string())
-                    .unwrap_or_else(|_| RequestUri::try_new("/".to_string()).unwrap()),
+                method: HttpMethod::try_new(parts.method.to_string()).unwrap_or_else(|_| {
+                    // "UNKNOWN" is a valid non-empty string, so this should never fail
+                    HttpMethod::try_new("UNKNOWN".to_string())
+                        .expect("UNKNOWN is a valid HTTP method")
+                }),
+                uri: RequestUri::try_new(parts.uri.to_string()).unwrap_or_else(|_| {
+                    // "/" is a valid non-empty URI, so this should never fail
+                    RequestUri::try_new("/".to_string()).expect("/ is a valid URI")
+                }),
                 headers: Headers::from_vec(headers_vec).unwrap_or_default(),
                 body_size: BodySize::from(0), // We don't know the size in streaming mode
             },
@@ -118,8 +123,12 @@ impl StreamingHotPathService {
             session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
             event_type: AuditEventType::ResponseReceived {
-                status: HttpStatusCode::try_new(response_parts.status.as_u16())
-                    .unwrap_or_else(|_| HttpStatusCode::try_new(500).unwrap()),
+                status: HttpStatusCode::try_new(response_parts.status.as_u16()).unwrap_or_else(
+                    |_| {
+                        // 500 is a valid status code, so this should never fail
+                        HttpStatusCode::try_new(500).expect("500 is a valid HTTP status code")
+                    },
+                ),
                 headers: Headers::from_vec(headers_vec).unwrap_or_default(),
                 body_size: BodySize::from(0), // We don't know the size in streaming mode
                 duration_ms: DurationMillis::from(duration_ms),

@@ -25,8 +25,16 @@ pub struct AuthConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         let mut bypass_paths = HashSet::new();
-        bypass_paths.insert(BypassPath::try_new(HEALTH_PATH.to_string()).unwrap());
-        bypass_paths.insert(BypassPath::try_new(METRICS_PATH.to_string()).unwrap());
+        // These are hardcoded constants that we know are valid paths
+        // If they fail validation, it's a programming error that should be caught during development
+        bypass_paths.insert(
+            BypassPath::try_new(HEALTH_PATH.to_string())
+                .expect("HEALTH_PATH constant should be a valid path"),
+        );
+        bypass_paths.insert(
+            BypassPath::try_new(METRICS_PATH.to_string())
+                .expect("METRICS_PATH constant should be a valid path"),
+        );
 
         Self {
             api_keys: HashSet::new(),
@@ -47,16 +55,23 @@ pub async fn request_id_middleware(
             .to_str()
             .ok()
             .and_then(|s| Uuid::parse_str(s).ok())
-            .map(|uuid| HeaderValue::from_str(&uuid.to_string()).unwrap())
+            .and_then(|uuid| {
+                // UUID strings are always valid header values, but handle gracefully
+                HeaderValue::from_str(&uuid.to_string()).ok()
+            })
             .unwrap_or_else(|| {
                 // Generate new ID if invalid
                 let new_id = Uuid::now_v7();
-                HeaderValue::from_str(&new_id.to_string()).unwrap()
+                // UUID v7 strings are always valid ASCII, but handle the theoretical error case
+                HeaderValue::from_str(&new_id.to_string())
+                    .expect("UUID v7 should always produce valid header value")
             })
     } else {
         // Generate new request ID
         let new_id = Uuid::now_v7();
-        HeaderValue::from_str(&new_id.to_string()).unwrap()
+        // UUID v7 strings are always valid ASCII, but handle the theoretical error case
+        HeaderValue::from_str(&new_id.to_string())
+            .expect("UUID v7 should always produce valid header value")
     };
 
     // Clone for response header
