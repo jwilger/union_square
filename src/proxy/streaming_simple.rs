@@ -1,5 +1,9 @@
 //! Simplified streaming implementation for zero-copy request/response forwarding
 
+use crate::proxy::audit_recorder::{
+    extract_headers_vec, parse_http_method, parse_http_status, parse_request_uri, AuditRecorder,
+    RingBufferAuditRecorder,
+};
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
 use axum::body::Body;
@@ -12,7 +16,7 @@ use std::time::Instant;
 #[derive(Clone)]
 pub struct StreamingHotPathService {
     config: Arc<ProxyConfig>,
-    ring_buffer: Arc<RingBuffer>,
+    audit_recorder: Arc<RingBufferAuditRecorder>,
     client: hyper_util::client::legacy::Client<
         hyper_util::client::legacy::connect::HttpConnector,
         Body,
@@ -28,9 +32,11 @@ impl StreamingHotPathService {
                 .http1_preserve_header_case(true)
                 .build_http();
 
+        let audit_recorder = Arc::new(RingBufferAuditRecorder::new(ring_buffer));
+
         Self {
             config: Arc::new(config),
-            ring_buffer,
+            audit_recorder,
             client,
         }
     }
@@ -77,45 +83,18 @@ impl StreamingHotPathService {
             .parse()
             .map_err(|_| ProxyError::InvalidTargetUrl(full_uri.clone()))?;
 
-        // Record request metadata in ring buffer
-        let headers_vec: Vec<(String, String)> = parts
-            .headers
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-            .collect();
+        // Record request metadata using shared audit recorder
+        let headers_vec = extract_headers_vec(&parts.headers);
+        let method_result = parse_http_method(&parts.method);
+        let uri_result = parse_request_uri(&parts.uri);
 
-        // Create audit event, recording any parsing errors
-        let event_type = match (
-            HttpMethod::try_new(parts.method.to_string()),
-            RequestUri::try_new(parts.uri.to_string()),
-        ) {
-            (Ok(method), Ok(uri)) => AuditEventType::RequestReceived {
-                method,
-                uri,
-                headers: Headers::from_vec(headers_vec).unwrap_or_default(),
-                body_size: BodySize::from(0), // We don't know the size in streaming mode
-            },
-            (Err(method_err), _) => AuditEventType::Error {
-                error: format!("Invalid HTTP method '{}': {}", parts.method, method_err),
-                phase: ErrorPhase::RequestParsing,
-            },
-            (_, Err(uri_err)) => AuditEventType::Error {
-                error: format!("Invalid request URI '{}': {}", parts.uri, uri_err),
-                phase: ErrorPhase::RequestParsing,
-            },
-        };
-
-        let request_event = AuditEvent {
+        self.audit_recorder.record_request_event(
             request_id,
-            session_id: SessionId::new(),
-            timestamp: chrono::Utc::now(),
-            event_type,
-        };
-
-        // Fire-and-forget write to ring buffer
-        if let Ok(serialized) = serde_json::to_vec(&request_event) {
-            let _ = self.ring_buffer.write(request_id, &serialized);
-        }
+            method_result,
+            uri_result,
+            headers_vec,
+            BodySize::from(0), // We don't know the size in streaming mode
+        );
 
         // Apply request size limit by collecting the body first
         // TODO: This is a temporary implementation for MVP - we should implement true streaming size limits
@@ -150,41 +129,17 @@ impl StreamingHotPathService {
         // Extract response parts
         let (response_parts, response_body) = response.into_parts();
 
-        // Record response metadata
-        let headers_vec: Vec<(String, String)> = response_parts
-            .headers
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-            .collect();
+        // Record response metadata using shared audit recorder
+        let headers_vec = extract_headers_vec(&response_parts.headers);
+        let status_result = parse_http_status(response_parts.status);
 
-        // Create response event, recording any parsing errors
-        let event_type = match HttpStatusCode::try_new(response_parts.status.as_u16()) {
-            Ok(status) => AuditEventType::ResponseReceived {
-                status,
-                headers: Headers::from_vec(headers_vec).unwrap_or_default(),
-                body_size: BodySize::from(0), // We don't know the size in streaming mode
-                duration_ms: DurationMillis::from(duration_ms),
-            },
-            Err(_) => AuditEventType::Error {
-                error: format!(
-                    "Invalid HTTP status code '{}' received from upstream",
-                    response_parts.status.as_u16()
-                ),
-                phase: ErrorPhase::ResponseReceiving,
-            },
-        };
-
-        let response_event = AuditEvent {
+        self.audit_recorder.record_response_event(
             request_id,
-            session_id: SessionId::new(),
-            timestamp: chrono::Utc::now(),
-            event_type,
-        };
-
-        // Fire-and-forget write to ring buffer
-        if let Ok(serialized) = serde_json::to_vec(&response_event) {
-            let _ = self.ring_buffer.write(request_id, &serialized);
-        }
+            status_result,
+            headers_vec,
+            BodySize::from(0), // We don't know the size in streaming mode
+            DurationMillis::from(duration_ms),
+        );
 
         // For MVP, return the streaming response as-is
         // TODO: Add chunked capture to ring buffer while streaming

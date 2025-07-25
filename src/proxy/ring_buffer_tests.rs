@@ -316,36 +316,43 @@ fn test_ring_buffer_concurrent_stress() {
         write_handles.push(handle);
     }
 
-    // Spawn reader threads
+    // Create a shutdown signal for coordinated termination
+    let shutdown_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Spawn reader threads that continue until shutdown
     for _ in 0..5 {
         let rb = Arc::clone(&ring_buffer);
+        let shutdown = Arc::clone(&shutdown_flag);
         let handle = thread::spawn(move || {
             let mut read_count = 0;
-            for _ in 0..2000 {
+            while !shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                 if rb.read().is_some() {
                     read_count += 1;
                 }
                 // Small delay to simulate processing
                 thread::yield_now();
             }
+            // Continue draining until no more data
+            while rb.read().is_some() {
+                read_count += 1;
+            }
             read_count
         });
         read_handles.push(handle);
     }
 
-    // Wait for all threads
+    // Wait for all writer threads to complete
     let total_writes: usize = write_handles.into_iter().map(|h| h.join().unwrap()).sum();
+
+    // Signal readers to start shutdown
+    shutdown_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    // Wait for all reader threads to complete
     let total_reads: usize = read_handles.into_iter().map(|h| h.join().unwrap()).sum();
 
-    // Drain any remaining data
-    let mut drain_count = 0;
-    while ring_buffer.read().is_some() {
-        drain_count += 1;
-    }
-
-    // Check final stats
+    // Check final stats - now reads should equal writes since readers drain everything
     let stats = ring_buffer.stats();
     assert!(stats.total_writes > 0);
     assert!(stats.total_reads > 0);
-    assert_eq!(total_reads + drain_count, total_writes);
+    assert_eq!(total_reads, total_writes);
 }

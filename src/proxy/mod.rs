@@ -5,6 +5,7 @@
 //! - Audit path: Async processing via ring buffer
 
 pub mod audit_path;
+pub mod audit_recorder;
 pub mod hot_path;
 pub mod hot_path_streaming;
 pub mod middleware;

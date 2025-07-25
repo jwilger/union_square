@@ -1,6 +1,6 @@
 //! Streaming implementation for zero-copy request/response forwarding
 
-use crate::proxy::ring_buffer::RingBuffer;
+use crate::proxy::audit_recorder::{AuditRecorder, ChunkCapture};
 use crate::proxy::types::*;
 use axum::body::Body;
 use bytes::Bytes;
@@ -12,86 +12,19 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc;
 
-/// Size of chunks for streaming capture
-const CAPTURE_CHUNK_SIZE: usize = 16 * 1024; // 16KB chunks
-
 /// Create a streaming body that captures data to ring buffer while forwarding
 pub fn create_capturing_stream<S>(
     stream: S,
-    ring_buffer: Arc<RingBuffer>,
+    recorder: Arc<dyn AuditRecorder + Send + Sync>,
     request_id: RequestId,
     is_request: bool,
 ) -> impl Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>>
 where
     S: Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
 {
-    let (tx, mut rx) = mpsc::channel::<Bytes>(16);
-    let ring_buffer_clone = ring_buffer.clone();
-
-    // Spawn task to capture chunks to ring buffer
-    tokio::spawn(async move {
-        let mut buffer = Vec::with_capacity(CAPTURE_CHUNK_SIZE);
-        let mut total_size = 0usize;
-
-        while let Some(chunk) = rx.recv().await {
-            buffer.extend_from_slice(&chunk);
-            total_size += chunk.len();
-
-            // Write to ring buffer when we have enough data or stream ends
-            if buffer.len() >= CAPTURE_CHUNK_SIZE {
-                let event = if is_request {
-                    AuditEventType::RequestChunk {
-                        offset: ChunkOffset::from(total_size - buffer.len()),
-                        data: buffer.clone(),
-                    }
-                } else {
-                    AuditEventType::ResponseChunk {
-                        offset: ChunkOffset::from(total_size - buffer.len()),
-                        data: buffer.clone(),
-                    }
-                };
-
-                let audit_event = AuditEvent {
-                    request_id,
-                    session_id: SessionId::new(),
-                    timestamp: chrono::Utc::now(),
-                    event_type: event,
-                };
-
-                // Fire-and-forget write to ring buffer
-                if let Ok(serialized) = serde_json::to_vec(&audit_event) {
-                    let _ = ring_buffer_clone.write(request_id, &serialized);
-                }
-                buffer.clear();
-            }
-        }
-
-        // Write any remaining data
-        if !buffer.is_empty() {
-            let event = if is_request {
-                AuditEventType::RequestChunk {
-                    offset: ChunkOffset::from(total_size - buffer.len()),
-                    data: buffer,
-                }
-            } else {
-                AuditEventType::ResponseChunk {
-                    offset: ChunkOffset::from(total_size - buffer.len()),
-                    data: buffer,
-                }
-            };
-
-            let audit_event = AuditEvent {
-                request_id,
-                session_id: SessionId::new(),
-                timestamp: chrono::Utc::now(),
-                event_type: event,
-            };
-
-            if let Ok(serialized) = serde_json::to_vec(&audit_event) {
-                let _ = ring_buffer_clone.write(request_id, &serialized);
-            }
-        }
-    });
+    // Use shared chunk capture functionality
+    let chunk_capture = ChunkCapture::new(recorder, request_id, is_request);
+    let tx = chunk_capture.start_capture_task();
 
     // Return a stream that forwards data and sends copies to the capture task
     stream.map(move |result| {
@@ -108,9 +41,6 @@ pin_project! {
     pub struct CapturingBody<B> {
         #[pin]
         inner: B,
-        ring_buffer: Arc<RingBuffer>,
-        request_id: RequestId,
-        is_request: bool,
         tx: Option<mpsc::Sender<Bytes>>,
     }
 }
@@ -121,82 +51,16 @@ where
 {
     pub fn new(
         body: B,
-        ring_buffer: Arc<RingBuffer>,
+        recorder: Arc<dyn AuditRecorder + Send + Sync>,
         request_id: RequestId,
         is_request: bool,
     ) -> Self {
-        let (tx, mut rx) = mpsc::channel::<Bytes>(16);
-        let ring_buffer_clone = ring_buffer.clone();
-        let request_id_clone = request_id;
-
-        // Spawn capture task
-        tokio::spawn(async move {
-            let mut buffer = Vec::with_capacity(CAPTURE_CHUNK_SIZE);
-            let mut total_size = 0usize;
-
-            while let Some(chunk) = rx.recv().await {
-                buffer.extend_from_slice(&chunk);
-                total_size += chunk.len();
-
-                if buffer.len() >= CAPTURE_CHUNK_SIZE {
-                    let event = if is_request {
-                        AuditEventType::RequestChunk {
-                            offset: ChunkOffset::from(total_size - buffer.len()),
-                            data: buffer.clone(),
-                        }
-                    } else {
-                        AuditEventType::ResponseChunk {
-                            offset: ChunkOffset::from(total_size - buffer.len()),
-                            data: buffer.clone(),
-                        }
-                    };
-
-                    let audit_event = AuditEvent {
-                        request_id: request_id_clone,
-                        session_id: SessionId::new(),
-                        timestamp: chrono::Utc::now(),
-                        event_type: event,
-                    };
-
-                    if let Ok(serialized) = serde_json::to_vec(&audit_event) {
-                        let _ = ring_buffer_clone.write(request_id_clone, &serialized);
-                    }
-                    buffer.clear();
-                }
-            }
-
-            // Write remaining data
-            if !buffer.is_empty() {
-                let event = if is_request {
-                    AuditEventType::RequestChunk {
-                        offset: ChunkOffset::from(total_size - buffer.len()),
-                        data: buffer,
-                    }
-                } else {
-                    AuditEventType::ResponseChunk {
-                        offset: ChunkOffset::from(total_size - buffer.len()),
-                        data: buffer,
-                    }
-                };
-
-                let audit_event = AuditEvent {
-                    request_id: request_id_clone,
-                    session_id: SessionId::new(),
-                    timestamp: chrono::Utc::now(),
-                    event_type: event,
-                };
-
-                if let Ok(serialized) = serde_json::to_vec(&audit_event) {
-                    let _ = ring_buffer_clone.write(request_id_clone, &serialized);
-                }
-            }
-        });
+        // Use shared chunk capture functionality
+        let chunk_capture = ChunkCapture::new(recorder, request_id, is_request);
+        let tx = chunk_capture.start_capture_task();
 
         Self {
             inner: body,
-            ring_buffer,
-            request_id,
-            is_request,
             tx: Some(tx),
         }
     }
@@ -250,7 +114,7 @@ where
 /// Create a streaming response that doesn't buffer entire body
 pub async fn create_streaming_response<B>(
     response: Response<B>,
-    _ring_buffer: Arc<RingBuffer>,
+    _recorder: Arc<dyn AuditRecorder + Send + Sync>,
     _request_id: RequestId,
 ) -> Response<Body>
 where
