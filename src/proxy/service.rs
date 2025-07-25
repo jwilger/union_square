@@ -105,8 +105,19 @@ impl IntoResponse for ProxyError {
             }
             ProxyError::RequestTimeout(_) => (StatusCode::REQUEST_TIMEOUT, self.to_string()),
             ProxyError::InvalidTargetUrl(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            ProxyError::InvalidHttpMethod(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            ProxyError::InvalidRequestUri(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            ProxyError::InvalidHttpStatusCode(_) => (StatusCode::BAD_GATEWAY, self.to_string()),
+            ProxyError::InvalidHeader { .. } => (StatusCode::BAD_REQUEST, self.to_string()),
             ProxyError::HttpError(_) | ProxyError::HyperError(_) => {
                 (StatusCode::BAD_GATEWAY, self.to_string())
+            }
+            ProxyError::AuditEventCreationFailed(_) => {
+                // Audit failures shouldn't affect the client
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

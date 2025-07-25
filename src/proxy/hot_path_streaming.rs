@@ -61,30 +61,41 @@ impl StreamingHotPathService {
             .map_err(|_| ProxyError::InvalidTargetUrl(full_uri))?;
 
         // Record request metadata immediately (hot path write)
+        // Create audit event, recording any parsing errors
+        let event_type = match (
+            HttpMethod::try_new(parts.method.to_string()),
+            RequestUri::try_new(parts.uri.to_string()),
+        ) {
+            (Ok(method), Ok(uri)) => {
+                // Successfully parsed request metadata
+                let headers_vec: Vec<(String, String)> = parts
+                    .headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+                    .collect();
+
+                AuditEventType::RequestReceived {
+                    method,
+                    uri,
+                    headers: Headers::from_vec(headers_vec).unwrap_or_default(),
+                    body_size: BodySize::from(body.size_hint().upper().unwrap_or(0) as usize),
+                }
+            }
+            (Err(method_err), _) => AuditEventType::Error {
+                error: format!("Invalid HTTP method '{}': {}", parts.method, method_err),
+                phase: ErrorPhase::RequestParsing,
+            },
+            (_, Err(uri_err)) => AuditEventType::Error {
+                error: format!("Invalid request URI '{}': {}", parts.uri, uri_err),
+                phase: ErrorPhase::RequestParsing,
+            },
+        };
+
         let request_event = AuditEvent {
             request_id,
             session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
-            event_type: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new(parts.method.to_string()).unwrap_or_else(|_| {
-                    // "UNKNOWN" is a valid non-empty string, so this should never fail
-                    HttpMethod::try_new("UNKNOWN".to_string())
-                        .expect("UNKNOWN is a valid HTTP method")
-                }),
-                uri: RequestUri::try_new(parts.uri.to_string()).unwrap_or_else(|_| {
-                    // "/" is a valid non-empty URI, so this should never fail
-                    RequestUri::try_new("/".to_string()).expect("/ is a valid URI")
-                }),
-                headers: Headers::from_vec(
-                    parts
-                        .headers
-                        .iter()
-                        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                        .collect(),
-                )
-                .unwrap_or_default(),
-                body_size: BodySize::from(body.size_hint().upper().unwrap_or(0) as usize),
-            },
+            event_type,
         };
 
         // Fire-and-forget write to ring buffer (<1μs)
@@ -109,28 +120,38 @@ impl StreamingHotPathService {
         let (response_parts, response_body) = response.into_parts();
 
         // Record response metadata
+        let event_type = match HttpStatusCode::try_new(response_parts.status.as_u16()) {
+            Ok(status) => {
+                // Successfully parsed response metadata
+                let headers_vec: Vec<(String, String)> = response_parts
+                    .headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
+                    .collect();
+
+                AuditEventType::ResponseReceived {
+                    status,
+                    headers: Headers::from_vec(headers_vec).unwrap_or_default(),
+                    body_size: BodySize::from(
+                        response_body.size_hint().upper().unwrap_or(0) as usize
+                    ),
+                    duration_ms: DurationMillis::from(0), // TODO: Properly calculate duration
+                }
+            }
+            Err(_) => AuditEventType::Error {
+                error: format!(
+                    "Invalid HTTP status code '{}' received from upstream",
+                    response_parts.status.as_u16()
+                ),
+                phase: ErrorPhase::ResponseReceiving,
+            },
+        };
+
         let response_event = AuditEvent {
             request_id,
             session_id: SessionId::new(),
             timestamp: chrono::Utc::now(),
-            event_type: AuditEventType::ResponseReceived {
-                status: HttpStatusCode::try_new(response_parts.status.as_u16()).unwrap_or_else(
-                    |_| {
-                        // 500 is a valid status code, so this should never fail
-                        HttpStatusCode::try_new(500).expect("500 is a valid HTTP status code")
-                    },
-                ),
-                headers: Headers::from_vec(
-                    response_parts
-                        .headers
-                        .iter()
-                        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("<binary>").to_string()))
-                        .collect(),
-                )
-                .unwrap_or_default(),
-                body_size: BodySize::from(response_body.size_hint().upper().unwrap_or(0) as usize),
-                duration_ms: DurationMillis::from(0), // TODO: Properly calculate duration
-            },
+            event_type,
         };
 
         // Fire-and-forget write to ring buffer

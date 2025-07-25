@@ -337,6 +337,21 @@ pub enum ProxyError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Invalid HTTP method: {0}")]
+    InvalidHttpMethod(String),
+
+    #[error("Invalid request URI: {0}")]
+    InvalidRequestUri(String),
+
+    #[error("Invalid HTTP status code: {0}")]
+    InvalidHttpStatusCode(u16),
+
+    #[error("Invalid header: {name}")]
+    InvalidHeader { name: String },
+
+    #[error("Failed to create audit event: {0}")]
+    AuditEventCreationFailed(String),
 }
 
 /// Result type for proxy operations
