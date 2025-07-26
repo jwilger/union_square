@@ -107,23 +107,27 @@ pub async fn auth_middleware(
         }
     }
 
-    // Extract bearer token from Authorization header
-    let auth_header = request
+    // Extract API key from either X-API-Key header or Authorization header
+    // Priority: X-API-Key > Authorization Bearer token
+    let api_key_str = if let Some(api_key_header) = request
+        .headers()
+        .get(headers::X_API_KEY)
+        .and_then(|h| h.to_str().ok())
+    {
+        api_key_header.trim()
+    } else if let Some(auth_header) = request
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
-
-    let api_key_str = match auth_header {
-        Some(auth) if auth.starts_with(BEARER_PREFIX) => {
-            auth.trim_start_matches(BEARER_PREFIX).trim()
-        }
-        _ => {
+        .and_then(|h| h.to_str().ok())
+    {
+        if auth_header.starts_with(BEARER_PREFIX) {
+            auth_header.trim_start_matches(BEARER_PREFIX).trim()
+        } else {
+            // Not a Bearer token, so no proxy API key found
             use crate::proxy::error_response::{extract_request_id, ErrorResponse};
-
-            warn!("Missing or invalid Authorization header");
+            warn!("Missing or invalid API key");
             let request_id = extract_request_id(request.headers());
-            let error =
-                ErrorResponse::new("UNAUTHORIZED", "Missing or invalid Authorization header");
+            let error = ErrorResponse::new("UNAUTHORIZED", "Missing or invalid API key");
             let error = if let Some(id) = request_id {
                 error.with_request_id(id)
             } else {
@@ -131,6 +135,17 @@ pub async fn auth_middleware(
             };
             return Ok(error.into_response_with_status(StatusCode::UNAUTHORIZED));
         }
+    } else {
+        use crate::proxy::error_response::{extract_request_id, ErrorResponse};
+        warn!("Missing authentication");
+        let request_id = extract_request_id(request.headers());
+        let error = ErrorResponse::new("UNAUTHORIZED", "Authentication required");
+        let error = if let Some(id) = request_id {
+            error.with_request_id(id)
+        } else {
+            error
+        };
+        return Ok(error.into_response_with_status(StatusCode::UNAUTHORIZED));
     };
 
     // Validate API key

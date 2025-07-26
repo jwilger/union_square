@@ -104,6 +104,7 @@ mod hot_path;
 mod http_types;
 mod middleware;
 mod middleware_stack;
+mod provider_router;
 mod ring_buffer;
 mod url_resolver;
 
@@ -119,6 +120,9 @@ mod middleware_tests;
 
 #[cfg(test)]
 mod integration_tests;
+
+#[cfg(test)]
+mod provider_integration_tests;
 
 #[cfg(test)]
 pub mod test_utils;
