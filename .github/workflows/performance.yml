@@ -8,11 +8,6 @@ on:
     # Only run on release-plz PRs to document performance
     types: [ opened, synchronize ]
   workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Reason for manual run (e.g., "Release PR testing")'
-        required: false
-        type: string
 
 permissions:
   contents: read
