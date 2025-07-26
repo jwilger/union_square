@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/jwilger/union_square/compare/v0.1.1...v0.1.2) - 2025-07-26
+
+### Added
+
+- implement performance benchmarking framework ([#127](https://github.com/jwilger/union_square/pull/127))
+- implement Tower middleware stack for proxy ([#125](https://github.com/jwilger/union_square/pull/125))
+- improve GitHub Pages website UX and release display ([#121](https://github.com/jwilger/union_square/pull/121))
+- adjust logo glow to have white background inside shape ([#119](https://github.com/jwilger/union_square/pull/119))
+- add white glow effect to logo SVG ([#116](https://github.com/jwilger/union_square/pull/116))
+
+### Fixed
+
+- status and date on ADR-0007 ([#129](https://github.com/jwilger/union_square/pull/129))
+- correct ADR dates to match actual commit dates ([#124](https://github.com/jwilger/union_square/pull/124))
+- correct logo white background to fill only inside the rounded square ([#120](https://github.com/jwilger/union_square/pull/120))
+
+### Other
+
+- standardize ADR naming convention with numbered titles ([#128](https://github.com/jwilger/union_square/pull/128))
+- accept ADR-0017 and improve ADR documentation ([#123](https://github.com/jwilger/union_square/pull/123))
+- update log4brains from 1.0.1 to 1.1.0 ([#122](https://github.com/jwilger/union_square/pull/122))
+- remove logo backgrounds and increase logo sizes by 25% ([#118](https://github.com/jwilger/union_square/pull/118))
+
 ## [0.1.1](https://github.com/jwilger/union_square/compare/v0.1.0...v0.1.1) - 2025-07-24
 
 ### Other
