@@ -1,4 +1,4 @@
-# ADR-0012: Session Identification and Metadata Strategy
+# 0012. Session Identification and Metadata Strategy
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

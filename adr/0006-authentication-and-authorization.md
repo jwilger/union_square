@@ -1,4 +1,4 @@
-# Authentication and Authorization
+# 0006. Authentication and Authorization
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

@@ -1,4 +1,4 @@
-# ADR-0017: Chunked Payload Support for Ring Buffer
+# 0017. Chunked Payload Support for Ring Buffer
 
 - Status: accepted
 - Deciders: John Wilger, Claude

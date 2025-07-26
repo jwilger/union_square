@@ -1,4 +1,4 @@
-# Proxy Implementation Strategy
+# 0003. Proxy Implementation Strategy
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team
