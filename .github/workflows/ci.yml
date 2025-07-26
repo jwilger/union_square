@@ -7,6 +7,12 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
