@@ -51,6 +51,7 @@ proptest = "1.4"
 eventcore-memory = "0.1.8"
 criterion = { version = "0.6", features = ["async_tokio"] }
 mockito = "1.6"
+dhat = "0.3.3"
 
 [[bin]]
 name = "union_square"
@@ -78,4 +79,8 @@ debug = true
 
 [[bench]]
 name = "proxy_performance"
+harness = false
+
+[[bench]]
+name = "memory_profiling"
 harness = false

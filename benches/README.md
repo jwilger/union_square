@@ -13,6 +13,15 @@ cargo bench --bench proxy_performance
 
 # Quick mode for development
 cargo bench --bench proxy_performance -- --quick
+
+# Run memory profiling
+cargo bench --bench memory_profiling
+
+# Run load tests (requires release build for accurate results)
+cargo test --test load_testing --release -- --nocapture --test-threads=1
+
+# Run specific load test
+cargo test --test load_testing test_500_rps_sustained_load --release -- --nocapture
 ```
 
 ## Benchmark Results Summary
@@ -50,6 +59,31 @@ cargo bench --bench proxy_performance -- --quick
 - **Audit event creation**: 477ns (0.01% of budget)
 - **Total proxy overhead**: ~1.5µs (0.03% of budget)
 - **Available for network I/O**: ~4.998ms (99.97% of budget)
+
+### 🎯 MVP Load Testing Targets
+
+Per architect guidance, Union Square must handle:
+
+1. **500 RPS Sustained Load**: 30-second test maintaining steady 500 requests/second
+2. **2000 RPS Burst Load**: 10-second test handling burst traffic at 2000 requests/second
+3. **1000 Concurrent Users**: 20-second test with 1000 simultaneous connections
+
+Run load tests with:
+```bash
+cargo test --test load_testing --release -- --nocapture --test-threads=1
+```
+
+### 🔍 Memory Profiling
+
+Track memory allocations and identify potential memory leaks:
+```bash
+cargo bench --bench memory_profiling
+```
+
+This benchmark uses `dhat` to profile:
+- Ring buffer memory usage patterns
+- Audit event serialization overhead
+- Concurrent allocation behavior
 
 ## Benchmark Categories
 
