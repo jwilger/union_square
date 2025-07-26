@@ -1,3 +1,4 @@
+use crate::domain::types::{FinishReason, ModelId, Prompt, ResponseText};
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ impl LlmProvider {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
-    pub model_id: String, // Opaque identifier from the provider
+    pub model_id: ModelId, // Opaque identifier from the provider
 }
 
 /// LLM request represents a single request to an LLM provider
@@ -55,7 +56,7 @@ pub struct LlmRequest {
     pub id: RequestId,
     pub session_id: crate::domain::SessionId,
     pub model_version: ModelVersion,
-    pub prompt: String,
+    pub prompt: Prompt,
     pub parameters: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub status: RequestStatus,
@@ -65,7 +66,7 @@ pub struct LlmRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LlmResponse {
     pub request_id: RequestId,
-    pub response_text: String,
+    pub response_text: ResponseText,
     pub metadata: ResponseMetadata,
     pub created_at: DateTime<Utc>,
 }
@@ -86,15 +87,15 @@ pub struct ResponseMetadata {
     pub tokens_used: Option<u32>,
     pub cost_cents: Option<u32>,
     pub latency_ms: Option<u64>,
-    pub finish_reason: Option<String>,
-    pub model_used: Option<String>,
+    pub finish_reason: Option<FinishReason>,
+    pub model_used: Option<ModelId>,
 }
 
 impl LlmRequest {
     pub fn new(
         session_id: crate::domain::SessionId,
         model_version: ModelVersion,
-        prompt: String,
+        prompt: Prompt,
         parameters: serde_json::Value,
     ) -> Self {
         Self {
@@ -126,7 +127,11 @@ impl LlmRequest {
 }
 
 impl LlmResponse {
-    pub fn new(request_id: RequestId, response_text: String, metadata: ResponseMetadata) -> Self {
+    pub fn new(
+        request_id: RequestId,
+        response_text: ResponseText,
+        metadata: ResponseMetadata,
+    ) -> Self {
         Self {
             request_id,
             response_text,
@@ -154,18 +159,18 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let request = LlmRequest::new(
             session_id,
             model_version,
-            "Test prompt".to_string(),
+            Prompt::try_new("Test prompt".to_string()).unwrap(),
             serde_json::json!({"temperature": 0.7}),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
-        assert_eq!(request.prompt, "Test prompt");
+        assert_eq!(request.prompt.as_ref(), "Test prompt");
     }
 
     #[test]
@@ -173,13 +178,13 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         let mut request = LlmRequest::new(
             session_id,
             model_version,
-            "Test prompt".to_string(),
+            Prompt::try_new("Test prompt".to_string()).unwrap(),
             serde_json::json!({}),
         );
 
@@ -199,13 +204,17 @@ mod tests {
             tokens_used: Some(150),
             cost_cents: Some(5),
             latency_ms: Some(1200),
-            finish_reason: Some("stop".to_string()),
-            model_used: Some("gpt-4".to_string()),
+            finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
+            model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
         };
 
-        let response = LlmResponse::new(request_id, "Test response".to_string(), metadata);
+        let response = LlmResponse::new(
+            request_id,
+            ResponseText::try_new("Test response".to_string()).unwrap(),
+            metadata,
+        );
 
-        assert_eq!(response.response_text, "Test response");
+        assert_eq!(response.response_text.as_ref(), "Test response");
         assert_eq!(response.metadata.tokens_used, Some(150));
         assert_eq!(response.metadata.cost_cents, Some(5));
     }
@@ -237,7 +246,7 @@ mod tests {
 
             let model_version = ModelVersion {
                 provider: provider.clone(),
-                model_id: model_id.clone(),
+                model_id: ModelId::try_new(model_id.clone()).unwrap(),
             };
 
             let json = serde_json::to_string(&model_version).unwrap();
@@ -256,7 +265,7 @@ mod tests {
             let session_id = SessionId::generate();
             let model_version = ModelVersion {
                 provider: LlmProvider::OpenAI,
-                model_id,
+                model_id: ModelId::try_new(model_id).unwrap(),
             };
             // Round temperature to avoid floating point precision issues
             let rounded_temp = (temp * 1000.0).round() / 1000.0;
@@ -265,12 +274,16 @@ mod tests {
                 "max_tokens": max_tokens
             });
 
-            let request = LlmRequest::new(
-                session_id,
-                model_version,
-                prompt,
-                parameters
-            );
+            let request = if prompt.is_empty() {
+                return Ok(()); // Skip empty prompts as they're invalid
+            } else {
+                LlmRequest::new(
+                    session_id,
+                    model_version,
+                    Prompt::try_new(prompt).unwrap(),
+                    parameters
+                )
+            };
 
             let json = serde_json::to_string(&request).unwrap();
             let deserialized: LlmRequest = serde_json::from_str(&json).unwrap();
@@ -290,8 +303,8 @@ mod tests {
                 tokens_used: tokens,
                 cost_cents: cost,
                 latency_ms: latency,
-                finish_reason,
-                model_used,
+                finish_reason: finish_reason.and_then(|s| FinishReason::try_new(s).ok()),
+                model_used: model_used.and_then(|s| ModelId::try_new(s).ok()),
             };
 
             let json = serde_json::to_string(&metadata).unwrap();

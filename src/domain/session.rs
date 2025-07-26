@@ -1,3 +1,4 @@
+use crate::domain::types::{IpAddress, Tag, UserAgent};
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -81,9 +82,9 @@ pub enum SessionStatus {
 pub struct SessionMetadata {
     pub application_id: Option<ApplicationId>,
     pub environment_id: Option<EnvironmentId>,
-    pub user_agent: Option<String>,
-    pub ip_address: Option<String>,
-    pub tags: Vec<String>,
+    pub user_agent: Option<UserAgent>,
+    pub ip_address: Option<IpAddress>,
+    pub tags: Vec<Tag>,
 }
 
 impl Session {
@@ -230,9 +231,9 @@ mod tests {
             user_id_seed in prop::option::of(any::<u128>()),
             app_name in prop::option::of(".{1,100}"),
             env_name in prop::option::of("[a-z][a-z0-9-]*"),
-            user_agent in prop::option::of(any::<String>()),
-            ip in prop::option::of(any::<String>()),
-            tags in prop::collection::vec(any::<String>(), 0..10)
+            user_agent in prop::option::of("[a-zA-Z0-9 /;.()]+"),
+            ip in prop::option::of("(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"),
+            tags in prop::collection::vec("[a-zA-Z0-9][a-zA-Z0-9:._-]*", 0..10)
         ) {
             let user_id = user_id_seed.map(|_| crate::domain::UserId::generate());
             let mut session = Session::new(user_id);
@@ -243,9 +244,14 @@ mod tests {
             session.metadata.environment_id = env_name
                 .filter(|s| !s.is_empty() && !s.ends_with('-') && !s.contains("--"))
                 .and_then(|s| EnvironmentId::try_new(s).ok());
-            session.metadata.user_agent = user_agent;
-            session.metadata.ip_address = ip;
-            session.metadata.tags = tags;
+            session.metadata.user_agent = user_agent
+                .filter(|s| !s.is_empty())
+                .and_then(|s| UserAgent::try_new(s).ok());
+            session.metadata.ip_address = ip
+                .and_then(|s| IpAddress::try_new(s).ok());
+            session.metadata.tags = tags.into_iter()
+                .filter_map(|s| Tag::try_new(s).ok())
+                .collect();
 
             let json = serde_json::to_string(&session).unwrap();
             let deserialized: Session = serde_json::from_str(&json).unwrap();

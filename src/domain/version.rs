@@ -71,16 +71,16 @@ impl ModelVersion {
         } else {
             VersionComparison::Changed {
                 from_provider: self.provider.clone(),
-                from_model_id: self.model_id.clone(),
+                from_model_id: self.model_id.as_ref().to_string(),
                 to_provider: other.provider.clone(),
-                to_model_id: other.model_id.clone(),
+                to_model_id: other.model_id.as_ref().to_string(),
             }
         }
     }
 
     /// Create a version identifier string for display
     pub fn to_version_string(&self) -> String {
-        format!("{}/{}", self.provider.as_str(), self.model_id)
+        format!("{}/{}", self.provider.as_str(), self.model_id.as_ref())
     }
 }
 
@@ -156,13 +156,14 @@ impl VersionChangeEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::types::ModelId;
     use crate::domain::SessionId;
 
     #[test]
     fn test_version_comparison_same() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let v2 = v1.clone();
@@ -173,12 +174,12 @@ mod tests {
     fn test_version_comparison_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-3.5-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -196,12 +197,12 @@ mod tests {
     fn test_version_comparison_provider_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -219,7 +220,7 @@ mod tests {
     fn test_tracked_version_usage() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let mut tracked = TrackedVersion::new(version);
@@ -237,14 +238,14 @@ mod tests {
     fn test_version_string_formatting() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         assert_eq!(version.to_version_string(), "openai/gpt-4-turbo-2024-01");
 
         let version_anthropic = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -258,12 +259,12 @@ mod tests {
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-3.5-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let event = VersionChangeEvent::new(

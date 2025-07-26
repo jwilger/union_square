@@ -8,6 +8,7 @@ pub mod events;
 pub mod llm;
 pub mod session;
 pub mod test_case;
+pub mod types;
 pub mod user;
 pub mod version;
 

@@ -3,6 +3,9 @@
 //! This module defines entities for managing test cases and their execution,
 //! following the type-state pattern to ensure valid state transitions.
 
+use crate::domain::types::{
+    AssertionDescription, ErrorMessage, Pattern, PromptTemplate, ResponseText, TestCaseDescription,
+};
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -74,7 +77,7 @@ pub struct Completed;
 pub struct TestCase<State> {
     pub id: TestCaseId,
     pub name: TestCaseName,
-    pub description: String,
+    pub description: TestCaseDescription,
     pub expected_behavior: ExpectedBehavior,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -85,9 +88,9 @@ pub struct TestCase<State> {
 /// Expected behavior for a test case
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExpectedBehavior {
-    pub prompt_template: String,
-    pub expected_patterns: Vec<String>,
-    pub forbidden_patterns: Vec<String>,
+    pub prompt_template: PromptTemplate,
+    pub expected_patterns: Vec<Pattern>,
+    pub forbidden_patterns: Vec<Pattern>,
     pub metadata_assertions: serde_json::Value,
 }
 
@@ -104,14 +107,15 @@ pub enum ValidationError {
 
 impl TestCase<Draft> {
     /// Create a new test case in draft state
-    pub fn new(name: TestCaseName, description: String) -> Self {
+    pub fn new(name: TestCaseName, description: TestCaseDescription) -> Self {
         let now = Utc::now();
         Self {
             id: TestCaseId::generate(),
             name,
             description,
             expected_behavior: ExpectedBehavior {
-                prompt_template: String::new(),
+                // Use unsafe here as we're creating empty default - will be validated on finalize
+                prompt_template: unsafe { PromptTemplate::new_unchecked(String::new()) },
                 expected_patterns: Vec::new(),
                 forbidden_patterns: Vec::new(),
                 metadata_assertions: serde_json::Value::Object(serde_json::Map::new()),
@@ -132,7 +136,7 @@ impl TestCase<Draft> {
     /// Finalize the test case, moving it to Ready state
     pub fn finalize(self) -> Result<TestCase<Ready>, ValidationError> {
         // Validate the test case
-        if self.expected_behavior.prompt_template.is_empty() {
+        if self.expected_behavior.prompt_template.as_ref().is_empty() {
             return Err(ValidationError::EmptyPromptTemplate);
         }
         if self.expected_behavior.expected_patterns.is_empty() {
@@ -202,10 +206,10 @@ pub struct TestResult {
     pub session_id: crate::domain::SessionId,
     pub started_at: DateTime<Utc>,
     pub status: TestRunStatus,
-    pub actual_response: String,
-    pub assertions_passed: Vec<String>,
-    pub assertions_failed: Vec<String>,
-    pub error_message: Option<String>,
+    pub actual_response: ResponseText,
+    pub assertions_passed: Vec<AssertionDescription>,
+    pub assertions_failed: Vec<AssertionDescription>,
+    pub error_message: Option<ErrorMessage>,
 }
 
 /// Test run represents a single execution of a test case
@@ -217,10 +221,10 @@ pub struct TestRun {
     pub started_at: DateTime<Utc>,
     pub completed_at: DateTime<Utc>,
     pub status: TestRunStatus,
-    pub actual_response: String,
-    pub assertions_passed: Vec<String>,
-    pub assertions_failed: Vec<String>,
-    pub error_message: Option<String>,
+    pub actual_response: ResponseText,
+    pub assertions_passed: Vec<AssertionDescription>,
+    pub assertions_failed: Vec<AssertionDescription>,
+    pub error_message: Option<ErrorMessage>,
 }
 
 /// Status of a test run
@@ -292,13 +296,14 @@ mod tests {
     fn test_test_case_state_transitions() {
         // Create draft
         let name = TestCaseName::try_new("Test LLM Response".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, "Test description".to_string());
+        let description = TestCaseDescription::try_new("Test description".to_string()).unwrap();
+        let draft = TestCase::<Draft>::new(name, description);
 
         // Update expected behavior
         let behavior = ExpectedBehavior {
-            prompt_template: "Hello, {name}!".to_string(),
-            expected_patterns: vec!["greeting".to_string()],
-            forbidden_patterns: vec!["error".to_string()],
+            prompt_template: PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap(),
+            expected_patterns: vec![Pattern::try_new("greeting".to_string()).unwrap()],
+            forbidden_patterns: vec![Pattern::try_new("error".to_string()).unwrap()],
             metadata_assertions: serde_json::json!({"min_tokens": 10}),
         };
         let draft = draft.with_expected_behavior(behavior);
@@ -315,8 +320,10 @@ mod tests {
             session_id: crate::domain::SessionId::generate(),
             started_at: Utc::now(),
             status: TestRunStatus::Passed,
-            actual_response: "Hello! Nice to meet you.".to_string(),
-            assertions_passed: vec!["Contains greeting".to_string()],
+            actual_response: ResponseText::try_new("Hello! Nice to meet you.".to_string()).unwrap(),
+            assertions_passed: vec![
+                AssertionDescription::try_new("Contains greeting".to_string()).unwrap(),
+            ],
             assertions_failed: vec![],
             error_message: None,
         };
@@ -331,7 +338,8 @@ mod tests {
     #[test]
     fn test_validation_errors() {
         let name = TestCaseName::try_new("Test".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, "Description".to_string());
+        let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
+        let draft = TestCase::<Draft>::new(name, description);
 
         // Empty prompt template
         let result = draft.clone().finalize();
@@ -339,7 +347,7 @@ mod tests {
 
         // No expected patterns
         let behavior = ExpectedBehavior {
-            prompt_template: "Hello".to_string(),
+            prompt_template: PromptTemplate::try_new("Hello".to_string()).unwrap(),
             expected_patterns: vec![],
             forbidden_patterns: vec![],
             metadata_assertions: serde_json::Value::Null,
@@ -361,7 +369,7 @@ mod tests {
             started_at: started,
             completed_at: completed,
             status: TestRunStatus::Passed,
-            actual_response: "Response".to_string(),
+            actual_response: ResponseText::try_new("Response".to_string()).unwrap(),
             assertions_passed: vec![],
             assertions_failed: vec![],
             error_message: None,
@@ -394,10 +402,10 @@ mod tests {
 
         #[test]
         fn prop_test_run_serialization(
-            response in any::<String>(),
+            response in ".{0,10000}",
             passed_count in 0..10usize,
             failed_count in 0..10usize,
-            error_msg in prop::option::of(any::<String>()),
+            error_msg in prop::option::of(".{1,1000}"),
             status_choice in 0..4u8
         ) {
             let status = match status_choice {
@@ -414,10 +422,10 @@ mod tests {
                 started_at: Utc::now(),
                 completed_at: Utc::now(),
                 status,
-                actual_response: response,
-                assertions_passed: (0..passed_count).map(|i| format!("Passed {i}")).collect(),
-                assertions_failed: (0..failed_count).map(|i| format!("Failed {i}")).collect(),
-                error_message: error_msg,
+                actual_response: ResponseText::try_new(response).unwrap(),
+                assertions_passed: (0..passed_count).map(|i| AssertionDescription::try_new(format!("Passed {i}")).unwrap()).collect(),
+                assertions_failed: (0..failed_count).map(|i| AssertionDescription::try_new(format!("Failed {i}")).unwrap()).collect(),
+                error_message: error_msg.and_then(|s| ErrorMessage::try_new(s).ok()),
             };
 
             let json = serde_json::to_string(&test_run).unwrap();
@@ -427,18 +435,28 @@ mod tests {
 
         #[test]
         fn prop_expected_behavior_validation(
-            prompt in any::<String>(),
+            prompt in ".{0,1000}",
             expected_count in 0..10usize,
             forbidden_count in 0..10usize
         ) {
             let name = TestCaseName::try_new("Test".to_string()).unwrap();
-            let draft = TestCase::<Draft>::new(name, "Description".to_string());
+            let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
+            let draft = TestCase::<Draft>::new(name, description);
 
-            let behavior = ExpectedBehavior {
-                prompt_template: prompt.clone(),
-                expected_patterns: (0..expected_count).map(|i| format!("Pattern {i}")).collect(),
-                forbidden_patterns: (0..forbidden_count).map(|i| format!("Forbidden {i}")).collect(),
-                metadata_assertions: serde_json::json!({}),
+            let behavior = if prompt.is_empty() {
+                ExpectedBehavior {
+                    prompt_template: unsafe { PromptTemplate::new_unchecked(prompt.clone()) },
+                    expected_patterns: (0..expected_count).map(|i| Pattern::try_new(format!("Pattern {i}")).unwrap()).collect(),
+                    forbidden_patterns: (0..forbidden_count).map(|i| Pattern::try_new(format!("Forbidden {i}")).unwrap()).collect(),
+                    metadata_assertions: serde_json::json!({}),
+                }
+            } else {
+                ExpectedBehavior {
+                    prompt_template: PromptTemplate::try_new(prompt.clone()).unwrap(),
+                    expected_patterns: (0..expected_count).map(|i| Pattern::try_new(format!("Pattern {i}")).unwrap()).collect(),
+                    forbidden_patterns: (0..forbidden_count).map(|i| Pattern::try_new(format!("Forbidden {i}")).unwrap()).collect(),
+                    metadata_assertions: serde_json::json!({}),
+                }
             };
 
             let draft = draft.with_expected_behavior(behavior);

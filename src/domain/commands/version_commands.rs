@@ -275,6 +275,7 @@ impl CommandLogic for DeactivateVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::types::ModelId;
     use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
     use eventcore_memory::InMemoryEventStore;
 
@@ -283,7 +284,7 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
         let command = RecordVersionUsage::new(session_id, model_version.clone());
@@ -320,7 +321,7 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
         let event_store = InMemoryEventStore::new();
@@ -361,11 +362,11 @@ mod tests {
         let session_id = SessionId::generate();
         let from_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-3.5-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
         };
         let to_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
         let command = RecordVersionChange::new(
@@ -428,7 +429,7 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-4-deprecated".to_string(),
+            model_id: ModelId::try_new("gpt-4-deprecated".to_string()).unwrap(),
         };
 
         let event_store = InMemoryEventStore::new();
@@ -469,7 +470,7 @@ mod tests {
     async fn test_deactivate_nonexistent_version() {
         let model_version = ModelVersion {
             provider: crate::domain::llm::LlmProvider::OpenAI,
-            model_id: "gpt-4-nonexistent".to_string(),
+            model_id: ModelId::try_new("gpt-4-nonexistent".to_string()).unwrap(),
         };
 
         let command = DeactivateVersion::new(model_version, None);
