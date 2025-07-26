@@ -13,6 +13,15 @@ cargo bench --bench proxy_performance
 
 # Quick mode for development
 cargo bench --bench proxy_performance -- --quick
+
+# Run memory profiling
+cargo bench --bench memory_profiling
+
+# Run load tests (requires release build for accurate results)
+cargo test --test load_testing --release -- --nocapture --test-threads=1
+
+# Run specific load test
+cargo test --test load_testing test_500_rps_sustained_load --release -- --nocapture
 ```
 
 ## Benchmark Results Summary
@@ -50,6 +59,55 @@ cargo bench --bench proxy_performance -- --quick
 - **Audit event creation**: 477ns (0.01% of budget)
 - **Total proxy overhead**: ~1.5µs (0.03% of budget)
 - **Available for network I/O**: ~4.998ms (99.97% of budget)
+
+### 🎯 MVP Load Testing Targets
+
+Per architect guidance, Union Square must handle:
+
+1. **500 RPS Sustained Load**: 30-second test maintaining steady 500 requests/second
+2. **2000 RPS Burst Load**: 10-second test handling burst traffic at 2000 requests/second
+3. **1000 Concurrent Users**: 20-second test with 1000 simultaneous connections
+
+#### ⚠️ Important: Load Testing Infrastructure
+
+**Load tests should NOT be run on GitHub Actions** due to resource constraints:
+- GitHub Actions runners have only 2 CPU cores and 7GB RAM
+- This is insufficient for realistic load testing scenarios
+- Results from resource-constrained environments can be misleading
+
+**Recommended approach for load testing:**
+1. Run load tests locally on dedicated hardware or cloud instances
+2. Use production-like infrastructure with adequate resources
+3. Consider using dedicated load testing services (e.g., k6 Cloud, BlazeMeter)
+4. Document baseline performance metrics from representative hardware
+
+Run load tests locally with:
+```bash
+cargo test --test load_testing --release -- --nocapture --test-threads=1
+```
+
+### 🔍 Memory Profiling
+
+Track memory allocations and identify potential memory leaks:
+```bash
+cargo bench --bench memory_profiling
+```
+
+This benchmark uses `dhat` to profile:
+- Ring buffer memory usage patterns
+- Audit event serialization overhead
+- Concurrent allocation behavior
+
+### 📈 Performance Benchmarks on GitHub Actions
+
+The CPU-bound performance benchmarks (Criterion benchmarks) **ARE suitable for GitHub Actions** because:
+
+1. **Relative measurements**: We're tracking regressions, not absolute performance
+2. **Consistent environment**: GitHub Actions provides consistent (if limited) hardware
+3. **Statistical validity**: Multiple samples over 10-15 seconds provide reliable comparisons
+4. **No I/O dependency**: These benchmarks test algorithmic performance, not system capacity
+
+**Note**: Absolute timings may be slower on GitHub Actions than production hardware, but relative changes between commits remain meaningful for regression detection.
 
 ## Benchmark Categories
 
