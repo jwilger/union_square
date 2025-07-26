@@ -18,6 +18,7 @@ pub mod test_helpers {
             max_request_size: RequestSizeLimit::try_new(1024 * 1024).expect("1MB is valid"), // 1MB
             max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).expect("10MB is valid"), // 10MB
             ring_buffer: test_ring_buffer_config(),
+            bedrock_region: None,
         }
     }
 

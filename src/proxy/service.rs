@@ -29,7 +29,9 @@
 //! - **Audit Processor**: Background task consuming events from ring buffer
 //! - **Middleware Stack**: Tower middleware for auth, logging, etc.
 
+use crate::providers::ProviderRegistry;
 use crate::proxy::hot_path::StreamingHotPathService;
+use crate::proxy::provider_router::ProviderRouter;
 use crate::proxy::{
     audit_path::AuditPathProcessor, middleware_stack::ProxyMiddlewareStack,
     ring_buffer::RingBuffer, types::*, url_resolver::UrlResolver,
@@ -47,6 +49,7 @@ pub struct ProxyService {
     hot_path: StreamingHotPathService,
     ring_buffer: Arc<RingBuffer>,
     audit_shutdown_tx: Option<mpsc::Sender<()>>,
+    provider_router: Arc<ProviderRouter>,
 }
 
 impl ProxyService {
@@ -55,10 +58,35 @@ impl ProxyService {
         let ring_buffer = Arc::new(RingBuffer::new(&config.ring_buffer));
         let hot_path = StreamingHotPathService::new(config.clone(), ring_buffer.clone());
 
+        // Initialize provider registry with configured providers
+        let mut registry = ProviderRegistry::new();
+
+        // Register Bedrock provider (MVP provider)
+        use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
+
+        // Check for endpoint override (for testing)
+        if let Ok(endpoint_override) = std::env::var("BEDROCK_ENDPOINT_OVERRIDE") {
+            let bedrock_provider = Arc::new(BedrockProvider::with_base_url(endpoint_override));
+            registry.register(bedrock_provider);
+        } else {
+            let bedrock_region = config
+                .bedrock_region
+                .clone()
+                .unwrap_or_else(|| "us-east-1".to_string());
+            if let Ok(region) = AwsRegion::try_new(bedrock_region) {
+                let bedrock_provider = Arc::new(BedrockProvider::new(region));
+                registry.register(bedrock_provider);
+            }
+        }
+
+        // Create provider router
+        let provider_router = Arc::new(ProviderRouter::new(Arc::new(registry)));
+
         Self {
             hot_path,
             ring_buffer,
             audit_shutdown_tx: None,
+            provider_router,
         }
     }
 
@@ -111,14 +139,27 @@ async fn proxy_handler(
     // Generate request ID for correlation
     let request_id = RequestId::new();
 
-    // Extract target URL using centralized resolver
-    let target_url = UrlResolver::extract_target_url(&request)?;
+    // Check if this is a provider-routed request (URL-based routing)
+    let path = request.uri().path();
+    if path.starts_with("/bedrock/")
+        || path.starts_with("/openai/")
+        || path.starts_with("/anthropic/")
+    {
+        // Use provider-based routing
+        proxy
+            .provider_router
+            .route_request(request, request_id)
+            .await
+    } else {
+        // Fall back to header-based routing for backward compatibility
+        let target_url = UrlResolver::extract_target_url(&request)?;
 
-    // Forward the request using streaming hot path
-    proxy
-        .hot_path
-        .forward_request(request, target_url, request_id)
-        .await
+        // Forward the request using streaming hot path
+        proxy
+            .hot_path
+            .forward_request(request, target_url, request_id)
+            .await
+    }
 }
 
 /// Error conversion for Axum responses using standardized format

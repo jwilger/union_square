@@ -8,6 +8,7 @@ pub mod config;
 pub mod domain;
 pub mod error;
 pub mod infrastructure;
+pub mod providers;
 pub mod proxy;
 
 pub mod benchmark_types;
