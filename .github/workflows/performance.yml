@@ -1,0 +1,189 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    # Only run on release-plz PRs to document performance
+    types: [ opened, synchronize ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Performance thresholds
+  MAX_LATENCY_MS: 5
+  MAX_REGRESSION_PERCENT: 10
+
+jobs:
+  performance:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    # Run on pushes to main or on release-plz PRs only
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       (startsWith(github.head_ref, 'release-plz-') ||
+        github.event.pull_request.user.login == 'github-actions[bot]'))
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need history for baseline comparison
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-criterion
+      run: |
+        cargo install cargo-criterion --locked || true
+        cargo install critcmp --locked || true
+
+    - name: Run benchmark validation tests
+      run: cargo test --test benchmark_validation
+
+    - name: Get baseline benchmark results
+      if: github.event_name == 'pull_request'
+      run: |
+        # Checkout base branch for comparison
+        git fetch origin ${{ github.base_ref }}
+        git checkout origin/${{ github.base_ref }}
+
+        # Run benchmarks on base branch
+        cargo bench --bench proxy_performance -- --save-baseline base --sample-size 50
+
+        # Return to PR branch
+        git checkout -
+
+    - name: Run performance benchmarks
+      run: |
+        cargo bench --bench proxy_performance -- --save-baseline current --sample-size 50
+
+    - name: Compare benchmark results
+      if: github.event_name == 'pull_request'
+      id: benchmark_comparison
+      run: |
+        # Compare results
+        critcmp base current > comparison.txt || true
+
+        # Check for regressions - look for increases above threshold
+        # critcmp outputs format: "+12.34%" for regressions
+        REGRESSION_FOUND=false
+
+        # Extract percentage increases and check against threshold
+        while IFS= read -r line; do
+          if echo "$line" | grep -E '\+[0-9]+\.[0-9]+%' > /dev/null; then
+            # Extract the percentage value
+            PERCENT=$(echo "$line" | grep -oE '\+[0-9]+\.[0-9]+' | tr -d '+')
+
+            # Check if it exceeds our threshold using awk for float comparison
+            if awk -v p="$PERCENT" -v t="$MAX_REGRESSION_PERCENT" 'BEGIN { exit !(p >= t) }'; then
+              echo "Regression found: +${PERCENT}% exceeds threshold of ${MAX_REGRESSION_PERCENT}%"
+              REGRESSION_FOUND=true
+            fi
+          fi
+        done < comparison.txt
+
+        if [ "$REGRESSION_FOUND" = true ]; then
+          echo "Performance regression detected!"
+          echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+        else
+          echo "No significant regression detected"
+          echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+        fi
+
+        # Save comparison for PR comment
+        echo '```' > benchmark_report.md
+        cat comparison.txt >> benchmark_report.md
+        echo '```' >> benchmark_report.md
+
+    - name: Run memory profiling
+      run: |
+        cargo bench --bench memory_profiling > memory_profile.txt 2>&1 || true
+
+    - name: Post benchmark results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+
+          let comment = '## 📊 Performance Benchmark Results\n\n';
+
+          // Add comparison results if available
+          try {
+            const comparison = fs.readFileSync('benchmark_report.md', 'utf8');
+            comment += '### Benchmark Comparison (base vs current)\n';
+            comment += comparison + '\n\n';
+          } catch (e) {
+            comment += '### Benchmark Results\n';
+            comment += 'No baseline comparison available.\n\n';
+          }
+
+          // Add memory profile summary
+          try {
+            const memProfile = fs.readFileSync('memory_profile.txt', 'utf8');
+            const lines = memProfile.split('\n').slice(-20).join('\n');
+            comment += '### Memory Profile Summary\n';
+            comment += '```\n' + lines + '\n```\n\n';
+          } catch (e) {
+            console.log('No memory profile available');
+          }
+
+          // Check for regression
+          const regressionDetected = '${{ steps.benchmark_comparison.outputs.REGRESSION_DETECTED }}' === 'true';
+          if (regressionDetected) {
+            comment += '⚠️ **Performance regression detected!** Please review the benchmark comparison above.\n';
+            comment += 'Regressions exceeding ' + process.env.MAX_REGRESSION_PERCENT + '% require justification.\n';
+          } else {
+            comment += '✅ **No significant performance regressions detected.**\n';
+          }
+
+          comment += '\n<sub>All latency requirements (<' + process.env.MAX_LATENCY_MS + 'ms) are enforced by the test suite.</sub>';
+
+          // Find existing comment or create new one
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Performance Benchmark Results')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment,
+            });
+          }
+
+    - name: Fail if regression detected
+      if: steps.benchmark_comparison.outputs.REGRESSION_DETECTED == 'true'
+      run: |
+        echo "Performance regression detected! See PR comment for details."
+        exit 1

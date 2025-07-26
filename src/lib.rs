@@ -10,6 +10,8 @@ pub mod error;
 pub mod infrastructure;
 pub mod proxy;
 
+pub mod benchmark_types;
+
 pub use application::Application;
 pub use error::{Error, Result};
 
