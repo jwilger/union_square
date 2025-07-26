@@ -3,13 +3,14 @@
 //! This module implements the provider abstraction layer as defined in ADR-0011,
 //! supporting multiple LLM providers with URL-based routing and preserving API compatibility.
 
+pub mod bedrock;
+pub mod response_processor;
+
 use crate::proxy::types::ProxyError;
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Request, Response};
 use std::sync::Arc;
-
-pub mod bedrock;
 
 /// Registry of all available providers
 #[derive(Default)]

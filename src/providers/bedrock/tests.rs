@@ -690,6 +690,276 @@ mod error_handling_tests {
 }
 
 #[cfg(test)]
+mod recording_transformation_tests {
+    use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
+    use crate::providers::Provider;
+    use axum::body::Body;
+    use hyper::{Request, Response, StatusCode};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_extract_metadata_from_claude_response() {
+        let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
+
+        // Create a mock request
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/anthropic.claude-3-sonnet-20240229/invoke")
+            .body(Body::from(json!({"prompt": "Hello"}).to_string()))
+            .unwrap();
+
+        // Create a mock response with Claude format
+        let response_body = json!({
+            "id": "msg_123",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Hello!"}],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5
+            }
+        });
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("x-amzn-requestid", "test-request-123")
+            .body(Body::from(response_body.to_string()))
+            .unwrap();
+
+        // Extract metadata
+        let metadata = provider.extract_metadata(&request, &response);
+
+        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(
+            metadata.model_id,
+            Some("anthropic.claude-3-sonnet-20240229".to_string())
+        );
+        assert_eq!(
+            metadata.provider_request_id,
+            Some("test-request-123".to_string())
+        );
+
+        // Note: Token extraction happens during response body processing, not in extract_metadata
+        // These would be populated by the audit recorder after parsing the response body
+    }
+
+    #[tokio::test]
+    async fn test_extract_metadata_from_titan_response() {
+        let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/amazon.titan-text-express-v1/invoke")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("x-amzn-requestid", "titan-req-456")
+            .body(Body::empty())
+            .unwrap();
+
+        let metadata = provider.extract_metadata(&request, &response);
+
+        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(
+            metadata.model_id,
+            Some("amazon.titan-text-express-v1".to_string())
+        );
+        assert_eq!(
+            metadata.provider_request_id,
+            Some("titan-req-456".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_extract_metadata_from_error_response() {
+        let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test-model/invoke")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("x-amzn-requestid", "error-req-789")
+            .header("x-amzn-errortype", "ValidationException")
+            .body(Body::empty())
+            .unwrap();
+
+        let metadata = provider.extract_metadata(&request, &response);
+
+        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(metadata.model_id, Some("test-model".to_string()));
+        assert_eq!(
+            metadata.provider_request_id,
+            Some("error-req-789".to_string())
+        );
+        // No token data on errors
+        assert_eq!(metadata.request_tokens, None);
+        assert_eq!(metadata.response_tokens, None);
+    }
+
+    #[tokio::test]
+    async fn test_metadata_extraction_without_request_id() {
+        let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test/invoke")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .body(Body::empty())
+            .unwrap();
+
+        let metadata = provider.extract_metadata(&request, &response);
+
+        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(metadata.provider_request_id, None);
+    }
+}
+
+#[cfg(test)]
+mod cost_calculation_tests {
+    use crate::providers::bedrock::types::{ModelPricing, TokenUsage};
+    use crate::providers::ProviderMetadata;
+
+    #[test]
+    fn test_claude_3_sonnet_cost_calculation() {
+        let pricing = ModelPricing::for_model("anthropic.claude-3-sonnet-20240229").unwrap();
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+        };
+
+        let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
+
+        // Claude 3 Sonnet: $3/1M input, $15/1M output
+        // 1000 input tokens = $0.003
+        // 500 output tokens = $0.0075
+        // Total = $0.0105
+        assert!((cost - 0.0105).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_claude_3_haiku_cost_calculation() {
+        let pricing = ModelPricing::for_model("anthropic.claude-3-haiku-20240307").unwrap();
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+        };
+
+        let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
+
+        // Claude 3 Haiku: $0.25/1M input, $1.25/1M output
+        // 1000 input tokens = $0.00025
+        // 500 output tokens = $0.000625
+        // Total = $0.000875
+        assert_eq!(cost, 0.000875);
+    }
+
+    #[test]
+    fn test_claude_3_opus_cost_calculation() {
+        let pricing = ModelPricing::for_model("anthropic.claude-3-opus-20240229").unwrap();
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+        };
+
+        let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
+
+        // Claude 3 Opus: $15/1M input, $75/1M output
+        // 1000 input tokens = $0.015
+        // 500 output tokens = $0.0375
+        // Total = $0.0525
+        assert_eq!(cost, 0.0525);
+    }
+
+    #[test]
+    fn test_titan_express_cost_calculation() {
+        let pricing = ModelPricing::for_model("amazon.titan-text-express-v1").unwrap();
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+        };
+
+        let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
+
+        // Titan Express: $0.8/1M input, $1.6/1M output
+        // 1000 input tokens = $0.0008
+        // 500 output tokens = $0.0008
+        // Total = $0.0016
+        assert_eq!(cost, 0.0016);
+    }
+
+    #[test]
+    fn test_llama_3_cost_calculation() {
+        let pricing = ModelPricing::for_model("meta.llama3-8b-instruct-v1").unwrap();
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+        };
+
+        let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
+
+        // Llama 3 8B: $0.3/1M input, $0.6/1M output
+        // 1000 input tokens = $0.0003
+        // 500 output tokens = $0.0003
+        // Total = $0.0006
+        assert_eq!(cost, 0.0006);
+    }
+
+    #[test]
+    fn test_unknown_model_no_pricing() {
+        let pricing = ModelPricing::for_model("unknown.model");
+        assert!(pricing.is_none());
+    }
+
+    #[test]
+    fn test_metadata_with_cost_calculation() {
+        let mut metadata = ProviderMetadata {
+            provider_id: "bedrock".to_string(),
+            model_id: Some("anthropic.claude-3-sonnet-20240229".to_string()),
+            request_tokens: Some(1000),
+            response_tokens: Some(500),
+            total_tokens: Some(1500),
+            cost_estimate: None,
+            provider_request_id: None,
+        };
+
+        // Calculate cost based on model and tokens
+        if let (Some(model_id), Some(input), Some(output)) = (
+            &metadata.model_id,
+            metadata.request_tokens,
+            metadata.response_tokens,
+        ) {
+            if let Some(pricing) = ModelPricing::for_model(model_id) {
+                let usage = TokenUsage {
+                    input_tokens: input,
+                    output_tokens: output,
+                    total_tokens: input + output,
+                };
+                metadata.cost_estimate =
+                    Some(pricing.calculate_cost(usage.input_tokens, usage.output_tokens));
+            }
+        }
+
+        assert!(metadata.cost_estimate.is_some());
+        assert!((metadata.cost_estimate.unwrap() - 0.0105).abs() < f64::EPSILON);
+    }
+}
+
+#[cfg(test)]
 mod model_specific_tests {
     use crate::providers::bedrock::models::*;
     use crate::providers::bedrock::types::ModelFamily;

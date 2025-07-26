@@ -98,7 +98,7 @@ impl Provider for BedrockProvider {
     fn extract_metadata(
         &self,
         request: &Request<Body>,
-        _response: &Response<Body>,
+        response: &Response<Body>,
     ) -> ProviderMetadata {
         let mut metadata = ProviderMetadata {
             provider_id: self.id().to_string(),
@@ -119,6 +119,13 @@ impl Provider for BedrockProvider {
             if let Some(_pricing) = ModelPricing::for_model(&model_id) {
                 // Cost will be calculated when we have token counts
                 // For now, just indicate that pricing is available
+            }
+        }
+
+        // Extract AWS request ID from response headers
+        if let Some(request_id) = response.headers().get("x-amzn-requestid") {
+            if let Ok(request_id_str) = request_id.to_str() {
+                metadata.provider_request_id = Some(request_id_str.to_string());
             }
         }
 
