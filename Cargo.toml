@@ -46,6 +46,8 @@ aws-config = "1.8.3"
 aws-sdk-bedrockruntime = "1.99.0"
 regex = "1.11.1"
 base64 = "0.22.1"
+rusty-money = "0.4.1"
+rust_decimal = "1.37.2"
 
 [dev-dependencies]
 tokio-test = "0.4"

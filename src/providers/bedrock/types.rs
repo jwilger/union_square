@@ -1,6 +1,7 @@
 //! Type definitions for AWS Bedrock provider
 
 use nutype::nutype;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// AWS region for Bedrock
@@ -15,7 +16,7 @@ pub struct AwsRegion(String);
 #[nutype(
     sanitize(trim),
     validate(not_empty),
-    derive(Debug, Clone, PartialEq, Serialize, Deserialize)
+    derive(Debug, Clone, PartialEq, Serialize, Deserialize, AsRef)
 )]
 pub struct ModelId(String);
 
@@ -61,7 +62,27 @@ pub enum ModelFamily {
 
 impl ModelFamily {
     /// Determine model family from model ID
-    pub fn from_model_id(model_id: &str) -> Self {
+    pub fn from_model_id(model_id: &ModelId) -> Self {
+        let id_str = model_id.as_ref();
+        if id_str.contains("claude") {
+            Self::Claude
+        } else if id_str.contains("titan") {
+            Self::Titan
+        } else if id_str.contains("llama") {
+            Self::Llama
+        } else if id_str.contains("j2") || id_str.contains("jurassic") {
+            Self::Jurassic
+        } else if id_str.contains("command") {
+            Self::Command
+        } else if id_str.contains("stable") {
+            Self::Stable
+        } else {
+            Self::Unknown
+        }
+    }
+
+    /// Determine model family from model ID string (for backwards compatibility)
+    pub fn from_model_id_str(model_id: &str) -> Self {
         if model_id.contains("claude") {
             Self::Claude
         } else if model_id.contains("titan") {
@@ -80,11 +101,53 @@ impl ModelFamily {
     }
 }
 
-/// Model pricing information
+/// Token count for input tokens
+#[nutype(
+    validate(greater = 0),
+    derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)
+)]
+pub struct InputTokens(u32);
+
+/// Token count for output tokens
+#[nutype(
+    validate(greater = 0),
+    derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)
+)]
+pub struct OutputTokens(u32);
+
+/// Token count for total tokens
+#[nutype(
+    validate(greater = 0),
+    derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)
+)]
+pub struct TotalTokens(u32);
+
+/// Price per thousand tokens in USD using Decimal for precision
+#[nutype(
+    validate(predicate = |price| *price >= Decimal::ZERO),
+    derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, AsRef)
+)]
+pub struct PricePerThousandTokens(Decimal);
+
+impl PricePerThousandTokens {
+    /// Create a new price from USD cents per 1K tokens
+    pub fn from_usd_cents_per_1k(cents: i64) -> Self {
+        let dollars = Decimal::from(cents) / Decimal::from(100);
+        Self::try_new(dollars).unwrap()
+    }
+
+    /// Create a new price from USD dollars per 1K tokens (with precision handling)
+    pub fn from_usd_dollars_per_1k(dollars: &str) -> Result<Self, rust_decimal::Error> {
+        let decimal_value = dollars.parse::<Decimal>()?;
+        Ok(Self::try_new(decimal_value).unwrap())
+    }
+}
+
+/// Model pricing information using proper Money types
 #[derive(Debug, Clone)]
 pub struct ModelPricing {
-    pub input_price_per_1k_tokens: f64,
-    pub output_price_per_1k_tokens: f64,
+    pub input_price_per_1k_tokens: PricePerThousandTokens,
+    pub output_price_per_1k_tokens: PricePerThousandTokens,
 }
 
 impl ModelPricing {
@@ -92,55 +155,117 @@ impl ModelPricing {
     pub fn for_model(model_id: &str) -> Option<Self> {
         // Pricing as of 2025 - should be configurable in production
         match model_id {
-            // Claude models
+            // Claude models - using precise decimal strings to avoid float precision issues
             "anthropic.claude-3-opus-20240229" => Some(Self {
-                input_price_per_1k_tokens: 0.015,
-                output_price_per_1k_tokens: 0.075,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k("0.015")
+                    .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.075",
+                )
+                .unwrap(),
             }),
             "anthropic.claude-3-sonnet-20240229" => Some(Self {
-                input_price_per_1k_tokens: 0.003,
-                output_price_per_1k_tokens: 0.015,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k("0.003")
+                    .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.015",
+                )
+                .unwrap(),
             }),
             "anthropic.claude-3-haiku-20240307" => Some(Self {
-                input_price_per_1k_tokens: 0.00025,
-                output_price_per_1k_tokens: 0.00125,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.00025",
+                )
+                .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.00125",
+                )
+                .unwrap(),
             }),
             // Titan models
             "amazon.titan-text-lite-v1" => Some(Self {
-                input_price_per_1k_tokens: 0.0003,
-                output_price_per_1k_tokens: 0.0004,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0003",
+                )
+                .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0004",
+                )
+                .unwrap(),
             }),
             "amazon.titan-text-express-v1" => Some(Self {
-                input_price_per_1k_tokens: 0.0008,
-                output_price_per_1k_tokens: 0.0016,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0008",
+                )
+                .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0016",
+                )
+                .unwrap(),
             }),
             // Llama models
             "meta.llama3-8b-instruct-v1" => Some(Self {
-                input_price_per_1k_tokens: 0.0003,
-                output_price_per_1k_tokens: 0.0006,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0003",
+                )
+                .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0006",
+                )
+                .unwrap(),
             }),
             "meta.llama3-70b-instruct-v1" => Some(Self {
-                input_price_per_1k_tokens: 0.00265,
-                output_price_per_1k_tokens: 0.0035,
+                input_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.00265",
+                )
+                .unwrap(),
+                output_price_per_1k_tokens: PricePerThousandTokens::from_usd_dollars_per_1k(
+                    "0.0035",
+                )
+                .unwrap(),
             }),
             _ => None,
         }
     }
 
-    /// Calculate cost for token usage
-    pub fn calculate_cost(&self, input_tokens: u32, output_tokens: u32) -> f64 {
-        let input_cost = (input_tokens as f64 / 1000.0) * self.input_price_per_1k_tokens;
-        let output_cost = (output_tokens as f64 / 1000.0) * self.output_price_per_1k_tokens;
+    /// Calculate cost for token usage using proper Decimal arithmetic
+    pub fn calculate_cost(
+        &self,
+        input_tokens: InputTokens,
+        output_tokens: OutputTokens,
+    ) -> Decimal {
+        // Calculate input cost: (tokens / 1000) * price_per_1k
+        let input_ratio = Decimal::from(input_tokens.into_inner()) / Decimal::from(1000);
+        let input_cost = self.input_price_per_1k_tokens.as_ref() * input_ratio;
+
+        // Calculate output cost: (tokens / 1000) * price_per_1k
+        let output_ratio = Decimal::from(output_tokens.into_inner()) / Decimal::from(1000);
+        let output_cost = self.output_price_per_1k_tokens.as_ref() * output_ratio;
+
+        // Return total cost
         input_cost + output_cost
     }
 }
 
-/// Token usage information
+/// Token usage information using type-safe token counts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub total_tokens: u32,
+    pub input_tokens: InputTokens,
+    pub output_tokens: OutputTokens,
+    pub total_tokens: TotalTokens,
+}
+
+impl TokenUsage {
+    /// Create new token usage with automatic total calculation
+    pub fn new(input_tokens: InputTokens, output_tokens: OutputTokens) -> Self {
+        let total =
+            TotalTokens::try_new(input_tokens.into_inner() + output_tokens.into_inner()).unwrap();
+        Self {
+            input_tokens,
+            output_tokens,
+            total_tokens: total,
+        }
+    }
 }
 
 /// Bedrock error response

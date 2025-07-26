@@ -3,12 +3,14 @@
 //! This module handles the different request/response formats for various
 //! model families supported by Bedrock.
 
-use crate::providers::bedrock::types::{ModelFamily, TokenUsage};
+use crate::providers::bedrock::types::{
+    InputTokens, ModelFamily, ModelId, OutputTokens, TokenUsage,
+};
 use crate::providers::ProviderError;
 use serde_json::Value;
 
 /// Extract model ID from the request path
-pub fn extract_model_id(path: &str) -> Option<String> {
+pub fn extract_model_id(path: &str) -> Option<ModelId> {
     // Path format: /bedrock/model/{model-id}/invoke
     let parts: Vec<&str> = path.split('/').collect();
 
@@ -17,7 +19,7 @@ pub fn extract_model_id(path: &str) -> Option<String> {
         .iter()
         .position(|&p| p == "model")
         .and_then(|i| parts.get(i + 1))
-        .map(|&s| s.to_string())
+        .and_then(|&s| ModelId::try_new(s.to_string()).ok())
 }
 
 /// Extract token usage from response based on model family
@@ -38,44 +40,41 @@ pub fn extract_token_usage(
 /// Extract token usage from Claude response
 fn extract_claude_tokens(response: &Value) -> Option<TokenUsage> {
     let usage = response.get("usage")?;
-    let input_tokens = usage.get("input_tokens")?.as_u64()? as u32;
-    let output_tokens = usage.get("output_tokens")?.as_u64()? as u32;
+    let input_count = usage.get("input_tokens")?.as_u64()? as u32;
+    let output_count = usage.get("output_tokens")?.as_u64()? as u32;
 
-    Some(TokenUsage {
-        input_tokens,
-        output_tokens,
-        total_tokens: input_tokens + output_tokens,
-    })
+    let input_tokens = InputTokens::try_new(input_count).ok()?;
+    let output_tokens = OutputTokens::try_new(output_count).ok()?;
+
+    Some(TokenUsage::new(input_tokens, output_tokens))
 }
 
 /// Extract token usage from Titan response
 fn extract_titan_tokens(response: &Value) -> Option<TokenUsage> {
-    let input_tokens = response.get("inputTextTokenCount")?.as_u64()? as u32;
+    let input_count = response.get("inputTextTokenCount")?.as_u64()? as u32;
     let results = response.get("results")?.as_array()?;
 
-    let output_tokens = results
+    let output_count = results
         .iter()
         .filter_map(|r| r.get("tokenCount")?.as_u64())
         .sum::<u64>() as u32;
 
-    Some(TokenUsage {
-        input_tokens,
-        output_tokens,
-        total_tokens: input_tokens + output_tokens,
-    })
+    let input_tokens = InputTokens::try_new(input_count).ok()?;
+    let output_tokens = OutputTokens::try_new(output_count).ok()?;
+
+    Some(TokenUsage::new(input_tokens, output_tokens))
 }
 
 /// Extract token usage from Llama response
 fn extract_llama_tokens(response: &Value) -> Option<TokenUsage> {
     // Llama models return token counts in generation_token_count and prompt_token_count
-    let output_tokens = response.get("generation_token_count")?.as_u64()? as u32;
-    let input_tokens = response.get("prompt_token_count")?.as_u64()? as u32;
+    let output_count = response.get("generation_token_count")?.as_u64()? as u32;
+    let input_count = response.get("prompt_token_count")?.as_u64()? as u32;
 
-    Some(TokenUsage {
-        input_tokens,
-        output_tokens,
-        total_tokens: input_tokens + output_tokens,
-    })
+    let input_tokens = InputTokens::try_new(input_count).ok()?;
+    let output_tokens = OutputTokens::try_new(output_count).ok()?;
+
+    Some(TokenUsage::new(input_tokens, output_tokens))
 }
 
 /// Extract token usage from Jurassic response
@@ -83,14 +82,13 @@ fn extract_jurassic_tokens(response: &Value) -> Option<TokenUsage> {
     let completions = response.get("completions")?.as_array()?;
     if let Some(first) = completions.first() {
         let data = first.get("data")?;
-        let input_tokens = data.get("tokens")?.as_array()?.len() as u32;
-        let generated_tokens = data.get("generated_tokens")?.as_u64()? as u32;
+        let input_count = data.get("tokens")?.as_array()?.len() as u32;
+        let output_count = data.get("generated_tokens")?.as_u64()? as u32;
 
-        Some(TokenUsage {
-            input_tokens,
-            output_tokens: generated_tokens,
-            total_tokens: input_tokens + generated_tokens,
-        })
+        let input_tokens = InputTokens::try_new(input_count).ok()?;
+        let output_tokens = OutputTokens::try_new(output_count).ok()?;
+
+        Some(TokenUsage::new(input_tokens, output_tokens))
     } else {
         None
     }
@@ -99,14 +97,13 @@ fn extract_jurassic_tokens(response: &Value) -> Option<TokenUsage> {
 /// Extract token usage from Command response
 fn extract_command_tokens(response: &Value) -> Option<TokenUsage> {
     // Cohere Command models include token counts in the response
-    let input_tokens = response.get("prompt_tokens")?.as_u64()? as u32;
-    let output_tokens = response.get("completion_tokens")?.as_u64()? as u32;
+    let input_count = response.get("prompt_tokens")?.as_u64()? as u32;
+    let output_count = response.get("completion_tokens")?.as_u64()? as u32;
 
-    Some(TokenUsage {
-        input_tokens,
-        output_tokens,
-        total_tokens: input_tokens + output_tokens,
-    })
+    let input_tokens = InputTokens::try_new(input_count).ok()?;
+    let output_tokens = OutputTokens::try_new(output_count).ok()?;
+
+    Some(TokenUsage::new(input_tokens, output_tokens))
 }
 
 /// Transform request body if needed for specific model families
@@ -140,12 +137,15 @@ mod tests {
         let model_id = extract_model_id(path);
         assert_eq!(
             model_id,
-            Some("anthropic.claude-3-sonnet-20240229".to_string())
+            Some(ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap())
         );
 
         let path = "/bedrock/model/amazon.titan-text-express-v1/invoke-with-response-stream";
         let model_id = extract_model_id(path);
-        assert_eq!(model_id, Some("amazon.titan-text-express-v1".to_string()));
+        assert_eq!(
+            model_id,
+            Some(ModelId::try_new("amazon.titan-text-express-v1".to_string()).unwrap())
+        );
 
         let path = "/bedrock/invoke";
         let model_id = extract_model_id(path);
@@ -169,9 +169,9 @@ mod tests {
         assert!(tokens.is_some());
 
         let tokens = tokens.unwrap();
-        assert_eq!(tokens.input_tokens, 10);
-        assert_eq!(tokens.output_tokens, 5);
-        assert_eq!(tokens.total_tokens, 15);
+        assert_eq!(tokens.input_tokens, InputTokens::try_new(10).unwrap());
+        assert_eq!(tokens.output_tokens, OutputTokens::try_new(5).unwrap());
+        assert_eq!(tokens.total_tokens.into_inner(), 15);
     }
 
     #[test]
@@ -188,9 +188,9 @@ mod tests {
         assert!(tokens.is_some());
 
         let tokens = tokens.unwrap();
-        assert_eq!(tokens.input_tokens, 8);
-        assert_eq!(tokens.output_tokens, 12);
-        assert_eq!(tokens.total_tokens, 20);
+        assert_eq!(tokens.input_tokens, InputTokens::try_new(8).unwrap());
+        assert_eq!(tokens.output_tokens, OutputTokens::try_new(12).unwrap());
+        assert_eq!(tokens.total_tokens.into_inner(), 20);
     }
 
     #[test]
@@ -205,8 +205,8 @@ mod tests {
         assert!(tokens.is_some());
 
         let tokens = tokens.unwrap();
-        assert_eq!(tokens.input_tokens, 15);
-        assert_eq!(tokens.output_tokens, 7);
-        assert_eq!(tokens.total_tokens, 22);
+        assert_eq!(tokens.input_tokens, InputTokens::try_new(15).unwrap());
+        assert_eq!(tokens.output_tokens, OutputTokens::try_new(7).unwrap());
+        assert_eq!(tokens.total_tokens.into_inner(), 22);
     }
 }

@@ -10,7 +10,44 @@ use crate::proxy::types::ProxyError;
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Request, Response};
+use nutype::nutype;
+use rust_decimal::Decimal;
 use std::sync::Arc;
+
+/// Provider identifier newtype for type safety
+#[nutype(
+    sanitize(trim, lowercase),
+    validate(not_empty, regex = r"^[a-z][a-z0-9-]*$"),
+    derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)
+)]
+pub struct ProviderId(String);
+
+impl ProviderId {
+    pub const BEDROCK: &'static str = "bedrock";
+    pub const OPENAI: &'static str = "openai";
+    pub const ANTHROPIC: &'static str = "anthropic";
+
+    /// Create a new ProviderId for well-known providers without validation
+    pub fn bedrock() -> Self {
+        Self::try_new(Self::BEDROCK.to_string()).unwrap()
+    }
+
+    pub fn openai() -> Self {
+        Self::try_new(Self::OPENAI.to_string()).unwrap()
+    }
+
+    pub fn anthropic() -> Self {
+        Self::try_new(Self::ANTHROPIC.to_string()).unwrap()
+    }
+}
+
+/// Request ID from provider for tracking
+#[nutype(
+    sanitize(trim),
+    validate(not_empty, regex = r"^[a-zA-Z0-9-]+$"),
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display)
+)]
+pub struct RequestId(String);
 
 /// Registry of all available providers
 #[derive(Default)]
@@ -42,7 +79,7 @@ impl ProviderRegistry {
 #[async_trait]
 pub trait Provider: Send + Sync {
     /// Provider identifier (openai, anthropic, bedrock, etc.)
-    fn id(&self) -> &'static str;
+    fn id(&self) -> ProviderId;
 
     /// Check if this provider handles the given path
     fn matches_path(&self, path: &str) -> bool;
@@ -116,16 +153,30 @@ impl From<ProviderError> for ProxyError {
     }
 }
 
-/// Provider metadata for audit logging
-#[derive(Debug, Clone, Default)]
+/// Provider metadata for audit logging using type-safe domain types
+#[derive(Debug, Clone)]
 pub struct ProviderMetadata {
-    pub provider_id: String,
-    pub model_id: Option<String>,
-    pub request_tokens: Option<u32>,
-    pub response_tokens: Option<u32>,
-    pub total_tokens: Option<u32>,
-    pub cost_estimate: Option<f64>,
-    pub provider_request_id: Option<String>,
+    pub provider_id: ProviderId,
+    pub model_id: Option<crate::providers::bedrock::types::ModelId>,
+    pub request_tokens: Option<crate::providers::bedrock::types::InputTokens>,
+    pub response_tokens: Option<crate::providers::bedrock::types::OutputTokens>,
+    pub total_tokens: Option<crate::providers::bedrock::types::TotalTokens>,
+    pub cost_estimate: Option<Decimal>,
+    pub provider_request_id: Option<RequestId>,
+}
+
+impl Default for ProviderMetadata {
+    fn default() -> Self {
+        Self {
+            provider_id: ProviderId::bedrock(), // Default to bedrock for now
+            model_id: None,
+            request_tokens: None,
+            response_tokens: None,
+            total_tokens: None,
+            cost_estimate: None,
+            provider_request_id: None,
+        }
+    }
 }
 
 /// Health status for a provider

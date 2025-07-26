@@ -1,9 +1,17 @@
 //! Tests for AWS Bedrock provider
 
 #[cfg(test)]
+#[allow(unused_imports)]
 mod invoke_model_tests {
-    use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
-    use crate::providers::{Provider, ProviderError};
+    use crate::providers::bedrock::{
+        models::extract_token_usage,
+        provider::BedrockProvider,
+        types::{
+            AwsRegion, InputTokens, ModelFamily, ModelId, ModelPricing, OutputTokens, TokenUsage,
+            TotalTokens,
+        },
+    };
+    use crate::providers::{Provider, ProviderError, ProviderId, RequestId};
     use axum::body::Body;
     use http_body_util::BodyExt;
     use hyper::{Request, StatusCode};
@@ -691,8 +699,11 @@ mod error_handling_tests {
 
 #[cfg(test)]
 mod recording_transformation_tests {
-    use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
-    use crate::providers::Provider;
+    use crate::providers::bedrock::{
+        provider::BedrockProvider,
+        types::{AwsRegion, ModelId},
+    };
+    use crate::providers::{Provider, ProviderId, RequestId};
     use axum::body::Body;
     use hyper::{Request, Response, StatusCode};
     use serde_json::json;
@@ -729,14 +740,14 @@ mod recording_transformation_tests {
         // Extract metadata
         let metadata = provider.extract_metadata(&request, &response);
 
-        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(metadata.provider_id, ProviderId::bedrock());
         assert_eq!(
             metadata.model_id,
-            Some("anthropic.claude-3-sonnet-20240229".to_string())
+            Some(ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap())
         );
         assert_eq!(
             metadata.provider_request_id,
-            Some("test-request-123".to_string())
+            Some(RequestId::try_new("test-request-123".to_string()).unwrap())
         );
 
         // Note: Token extraction happens during response body processing, not in extract_metadata
@@ -761,14 +772,14 @@ mod recording_transformation_tests {
 
         let metadata = provider.extract_metadata(&request, &response);
 
-        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(metadata.provider_id, ProviderId::bedrock());
         assert_eq!(
             metadata.model_id,
-            Some("amazon.titan-text-express-v1".to_string())
+            Some(ModelId::try_new("amazon.titan-text-express-v1".to_string()).unwrap())
         );
         assert_eq!(
             metadata.provider_request_id,
-            Some("titan-req-456".to_string())
+            Some(RequestId::try_new("titan-req-456".to_string()).unwrap())
         );
     }
 
@@ -791,11 +802,14 @@ mod recording_transformation_tests {
 
         let metadata = provider.extract_metadata(&request, &response);
 
-        assert_eq!(metadata.provider_id, "bedrock");
-        assert_eq!(metadata.model_id, Some("test-model".to_string()));
+        assert_eq!(metadata.provider_id, ProviderId::bedrock());
+        assert_eq!(
+            metadata.model_id,
+            Some(ModelId::try_new("test-model".to_string()).unwrap())
+        );
         assert_eq!(
             metadata.provider_request_id,
-            Some("error-req-789".to_string())
+            Some(RequestId::try_new("error-req-789".to_string()).unwrap())
         );
         // No token data on errors
         assert_eq!(metadata.request_tokens, None);
@@ -819,24 +833,25 @@ mod recording_transformation_tests {
 
         let metadata = provider.extract_metadata(&request, &response);
 
-        assert_eq!(metadata.provider_id, "bedrock");
+        assert_eq!(metadata.provider_id, ProviderId::bedrock());
         assert_eq!(metadata.provider_request_id, None);
     }
 }
 
 #[cfg(test)]
 mod cost_calculation_tests {
-    use crate::providers::bedrock::types::{ModelPricing, TokenUsage};
-    use crate::providers::ProviderMetadata;
+    use crate::providers::bedrock::types::{
+        InputTokens, ModelId, ModelPricing, OutputTokens, TokenUsage, TotalTokens,
+    };
+    use crate::providers::{ProviderId, ProviderMetadata};
+    use rust_decimal::Decimal;
 
     #[test]
     fn test_claude_3_sonnet_cost_calculation() {
         let pricing = ModelPricing::for_model("anthropic.claude-3-sonnet-20240229").unwrap();
-        let usage = TokenUsage {
-            input_tokens: 1000,
-            output_tokens: 500,
-            total_tokens: 1500,
-        };
+        let input_tokens = InputTokens::try_new(1000).unwrap();
+        let output_tokens = OutputTokens::try_new(500).unwrap();
+        let usage = TokenUsage::new(input_tokens, output_tokens);
 
         let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
 
@@ -844,17 +859,16 @@ mod cost_calculation_tests {
         // 1000 input tokens = $0.003
         // 500 output tokens = $0.0075
         // Total = $0.0105
-        assert!((cost - 0.0105).abs() < f64::EPSILON);
+        let expected_cost = Decimal::new(105, 4); // 0.0105
+        assert!((cost - expected_cost).abs() < Decimal::new(1, 7)); // Small epsilon for decimal comparison
     }
 
     #[test]
     fn test_claude_3_haiku_cost_calculation() {
         let pricing = ModelPricing::for_model("anthropic.claude-3-haiku-20240307").unwrap();
-        let usage = TokenUsage {
-            input_tokens: 1000,
-            output_tokens: 500,
-            total_tokens: 1500,
-        };
+        let input_tokens = InputTokens::try_new(1000).unwrap();
+        let output_tokens = OutputTokens::try_new(500).unwrap();
+        let usage = TokenUsage::new(input_tokens, output_tokens);
 
         let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
 
@@ -862,17 +876,15 @@ mod cost_calculation_tests {
         // 1000 input tokens = $0.00025
         // 500 output tokens = $0.000625
         // Total = $0.000875
-        assert_eq!(cost, 0.000875);
+        assert_eq!(cost, Decimal::new(875, 6)); // 0.000875
     }
 
     #[test]
     fn test_claude_3_opus_cost_calculation() {
         let pricing = ModelPricing::for_model("anthropic.claude-3-opus-20240229").unwrap();
-        let usage = TokenUsage {
-            input_tokens: 1000,
-            output_tokens: 500,
-            total_tokens: 1500,
-        };
+        let input_tokens = InputTokens::try_new(1000).unwrap();
+        let output_tokens = OutputTokens::try_new(500).unwrap();
+        let usage = TokenUsage::new(input_tokens, output_tokens);
 
         let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
 
@@ -880,17 +892,15 @@ mod cost_calculation_tests {
         // 1000 input tokens = $0.015
         // 500 output tokens = $0.0375
         // Total = $0.0525
-        assert_eq!(cost, 0.0525);
+        assert_eq!(cost, Decimal::new(525, 4)); // 0.0525
     }
 
     #[test]
     fn test_titan_express_cost_calculation() {
         let pricing = ModelPricing::for_model("amazon.titan-text-express-v1").unwrap();
-        let usage = TokenUsage {
-            input_tokens: 1000,
-            output_tokens: 500,
-            total_tokens: 1500,
-        };
+        let input_tokens = InputTokens::try_new(1000).unwrap();
+        let output_tokens = OutputTokens::try_new(500).unwrap();
+        let usage = TokenUsage::new(input_tokens, output_tokens);
 
         let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
 
@@ -898,17 +908,15 @@ mod cost_calculation_tests {
         // 1000 input tokens = $0.0008
         // 500 output tokens = $0.0008
         // Total = $0.0016
-        assert_eq!(cost, 0.0016);
+        assert_eq!(cost, Decimal::new(16, 4)); // 0.0016
     }
 
     #[test]
     fn test_llama_3_cost_calculation() {
         let pricing = ModelPricing::for_model("meta.llama3-8b-instruct-v1").unwrap();
-        let usage = TokenUsage {
-            input_tokens: 1000,
-            output_tokens: 500,
-            total_tokens: 1500,
-        };
+        let input_tokens = InputTokens::try_new(1000).unwrap();
+        let output_tokens = OutputTokens::try_new(500).unwrap();
+        let usage = TokenUsage::new(input_tokens, output_tokens);
 
         let cost = pricing.calculate_cost(usage.input_tokens, usage.output_tokens);
 
@@ -916,7 +924,7 @@ mod cost_calculation_tests {
         // 1000 input tokens = $0.0003
         // 500 output tokens = $0.0003
         // Total = $0.0006
-        assert_eq!(cost, 0.0006);
+        assert_eq!(cost, Decimal::new(6, 4)); // 0.0006
     }
 
     #[test]
@@ -928,11 +936,13 @@ mod cost_calculation_tests {
     #[test]
     fn test_metadata_with_cost_calculation() {
         let mut metadata = ProviderMetadata {
-            provider_id: "bedrock".to_string(),
-            model_id: Some("anthropic.claude-3-sonnet-20240229".to_string()),
-            request_tokens: Some(1000),
-            response_tokens: Some(500),
-            total_tokens: Some(1500),
+            provider_id: ProviderId::bedrock(),
+            model_id: Some(
+                ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap(),
+            ),
+            request_tokens: Some(InputTokens::try_new(1000).unwrap()),
+            response_tokens: Some(OutputTokens::try_new(500).unwrap()),
+            total_tokens: Some(TotalTokens::try_new(1500).unwrap()),
             cost_estimate: None,
             provider_request_id: None,
         };
@@ -943,26 +953,22 @@ mod cost_calculation_tests {
             metadata.request_tokens,
             metadata.response_tokens,
         ) {
-            if let Some(pricing) = ModelPricing::for_model(model_id) {
-                let usage = TokenUsage {
-                    input_tokens: input,
-                    output_tokens: output,
-                    total_tokens: input + output,
-                };
-                metadata.cost_estimate =
-                    Some(pricing.calculate_cost(usage.input_tokens, usage.output_tokens));
+            if let Some(pricing) = ModelPricing::for_model(model_id.as_ref()) {
+                metadata.cost_estimate = Some(pricing.calculate_cost(input, output));
             }
         }
 
         assert!(metadata.cost_estimate.is_some());
-        assert!((metadata.cost_estimate.unwrap() - 0.0105).abs() < f64::EPSILON);
+        let expected_cost = Decimal::new(105, 4); // 0.0105
+        let actual_cost = metadata.cost_estimate.unwrap();
+        assert!((actual_cost - expected_cost).abs() < Decimal::new(1, 7)); // Small epsilon for decimal comparison
     }
 }
 
 #[cfg(test)]
 mod model_specific_tests {
     use crate::providers::bedrock::models::*;
-    use crate::providers::bedrock::types::ModelFamily;
+    use crate::providers::bedrock::types::{InputTokens, ModelFamily, OutputTokens, TotalTokens};
     use serde_json::json;
 
     #[test]
@@ -988,9 +994,9 @@ mod model_specific_tests {
         assert!(tokens.is_some());
 
         let usage = tokens.unwrap();
-        assert_eq!(usage.input_tokens, 15);
-        assert_eq!(usage.output_tokens, 10);
-        assert_eq!(usage.total_tokens, 25);
+        assert_eq!(usage.input_tokens, InputTokens::try_new(15).unwrap());
+        assert_eq!(usage.output_tokens, OutputTokens::try_new(10).unwrap());
+        assert_eq!(usage.total_tokens, TotalTokens::try_new(25).unwrap());
     }
 
     #[test]
@@ -1008,9 +1014,9 @@ mod model_specific_tests {
         assert!(tokens.is_some());
 
         let usage = tokens.unwrap();
-        assert_eq!(usage.input_tokens, 12);
-        assert_eq!(usage.output_tokens, 20);
-        assert_eq!(usage.total_tokens, 32);
+        assert_eq!(usage.input_tokens, InputTokens::try_new(12).unwrap());
+        assert_eq!(usage.output_tokens, OutputTokens::try_new(20).unwrap());
+        assert_eq!(usage.total_tokens, TotalTokens::try_new(32).unwrap());
     }
 
     #[test]
@@ -1026,8 +1032,8 @@ mod model_specific_tests {
         assert!(tokens.is_some());
 
         let usage = tokens.unwrap();
-        assert_eq!(usage.input_tokens, 8);
-        assert_eq!(usage.output_tokens, 15);
-        assert_eq!(usage.total_tokens, 23);
+        assert_eq!(usage.input_tokens, InputTokens::try_new(8).unwrap());
+        assert_eq!(usage.output_tokens, OutputTokens::try_new(15).unwrap());
+        assert_eq!(usage.total_tokens, TotalTokens::try_new(23).unwrap());
     }
 }

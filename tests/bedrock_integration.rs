@@ -7,13 +7,19 @@
 //! - Metadata extraction
 //! - Response processing
 
+#[allow(unused_imports)]
 use axum::body::Body;
 use hyper::{Request, Response, StatusCode};
+use rust_decimal::Decimal;
 use std::sync::Arc;
+#[allow(unused_imports)]
 use union_square::providers::{
-    bedrock::{types::AwsRegion, BedrockProvider},
+    bedrock::{
+        types::{AwsRegion, InputTokens, ModelFamily, ModelId, OutputTokens, TotalTokens},
+        BedrockProvider,
+    },
     response_processor::ProviderResponseProcessor,
-    Provider, ProviderRegistry,
+    Provider, ProviderId, ProviderMetadata, ProviderRegistry, RequestId,
 };
 
 /// Create a test request with required SigV4 headers
@@ -93,22 +99,22 @@ fn test_provider_metadata_extraction() {
 
     let metadata = provider.extract_metadata(&request, &response);
 
-    assert_eq!(metadata.provider_id, "bedrock");
+    assert_eq!(metadata.provider_id, ProviderId::bedrock());
     assert_eq!(
         metadata.model_id,
-        Some("anthropic.claude-3-sonnet-20240229".to_string())
+        Some(ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap())
     );
     assert_eq!(
         metadata.provider_request_id,
-        Some("test-request-123".to_string())
+        Some(RequestId::try_new("test-request-123".to_string()).unwrap())
     );
 }
 
 #[test]
 fn test_response_processor_claude() {
     let base_metadata = union_square::providers::ProviderMetadata {
-        provider_id: "bedrock".to_string(),
-        model_id: Some("anthropic.claude-3-sonnet-20240229".to_string()),
+        provider_id: ProviderId::bedrock(),
+        model_id: Some(ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap()),
         ..Default::default()
     };
 
@@ -131,21 +137,31 @@ fn test_response_processor_claude() {
     let body_bytes = response_body.to_string().into_bytes();
     let metadata = processor.process_complete_body(&body_bytes);
 
-    assert_eq!(metadata.request_tokens, Some(25));
-    assert_eq!(metadata.response_tokens, Some(15));
-    assert_eq!(metadata.total_tokens, Some(40));
+    assert_eq!(
+        metadata.request_tokens,
+        Some(InputTokens::try_new(25).unwrap())
+    );
+    assert_eq!(
+        metadata.response_tokens,
+        Some(OutputTokens::try_new(15).unwrap())
+    );
+    assert_eq!(
+        metadata.total_tokens,
+        Some(TotalTokens::try_new(40).unwrap())
+    );
     assert!(metadata.cost_estimate.is_some());
 
     // Verify cost calculation (Claude 3 Sonnet: $0.003/1K input, $0.015/1K output)
-    let expected_cost = (25.0 / 1000.0) * 0.003 + (15.0 / 1000.0) * 0.015;
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < f64::EPSILON);
+    let expected_cost =
+        Decimal::new(3, 3) * Decimal::new(25, 3) + Decimal::new(15, 3) * Decimal::new(15, 3); // 0.003*0.025 + 0.015*0.015
+    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
 }
 
 #[test]
 fn test_response_processor_titan() {
     let base_metadata = union_square::providers::ProviderMetadata {
-        provider_id: "bedrock".to_string(),
-        model_id: Some("amazon.titan-text-express-v1".to_string()),
+        provider_id: ProviderId::bedrock(),
+        model_id: Some(ModelId::try_new("amazon.titan-text-express-v1".to_string()).unwrap()),
         ..Default::default()
     };
 
@@ -163,20 +179,30 @@ fn test_response_processor_titan() {
     let body_bytes = response_body.to_string().into_bytes();
     let metadata = processor.process_complete_body(&body_bytes);
 
-    assert_eq!(metadata.request_tokens, Some(20));
-    assert_eq!(metadata.response_tokens, Some(30));
-    assert_eq!(metadata.total_tokens, Some(50));
+    assert_eq!(
+        metadata.request_tokens,
+        Some(InputTokens::try_new(20).unwrap())
+    );
+    assert_eq!(
+        metadata.response_tokens,
+        Some(OutputTokens::try_new(30).unwrap())
+    );
+    assert_eq!(
+        metadata.total_tokens,
+        Some(TotalTokens::try_new(50).unwrap())
+    );
 
     // Verify Titan Express cost ($0.0008/1K input, $0.0016/1K output)
-    let expected_cost = (20.0 / 1000.0) * 0.0008 + (30.0 / 1000.0) * 0.0016;
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < f64::EPSILON);
+    let expected_cost =
+        Decimal::new(8, 4) * Decimal::new(2, 2) + Decimal::new(16, 4) * Decimal::new(3, 2); // 0.0008*0.02 + 0.0016*0.03
+    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
 }
 
 #[test]
 fn test_response_processor_llama() {
     let base_metadata = union_square::providers::ProviderMetadata {
-        provider_id: "bedrock".to_string(),
-        model_id: Some("meta.llama3-70b-instruct-v1".to_string()),
+        provider_id: ProviderId::bedrock(),
+        model_id: Some(ModelId::try_new("meta.llama3-70b-instruct-v1".to_string()).unwrap()),
         ..Default::default()
     };
 
@@ -192,13 +218,23 @@ fn test_response_processor_llama() {
     let body_bytes = response_body.to_string().into_bytes();
     let metadata = processor.process_complete_body(&body_bytes);
 
-    assert_eq!(metadata.request_tokens, Some(15));
-    assert_eq!(metadata.response_tokens, Some(10));
-    assert_eq!(metadata.total_tokens, Some(25));
+    assert_eq!(
+        metadata.request_tokens,
+        Some(InputTokens::try_new(15).unwrap())
+    );
+    assert_eq!(
+        metadata.response_tokens,
+        Some(OutputTokens::try_new(10).unwrap())
+    );
+    assert_eq!(
+        metadata.total_tokens,
+        Some(TotalTokens::try_new(25).unwrap())
+    );
 
     // Verify Llama 70B cost ($0.00265/1K input, $0.0035/1K output)
-    let expected_cost = (15.0 / 1000.0) * 0.00265 + (10.0 / 1000.0) * 0.0035;
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < f64::EPSILON);
+    let expected_cost =
+        Decimal::new(265, 5) * Decimal::new(15, 3) + Decimal::new(35, 4) * Decimal::new(1, 2); // 0.00265*0.015 + 0.0035*0.01
+    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
 }
 
 #[test]
@@ -206,7 +242,7 @@ fn test_authentication_validation() {
     // Test that provider checks for required auth headers
     let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
 
-    assert_eq!(provider.id(), "bedrock");
+    assert_eq!(provider.id(), ProviderId::bedrock());
     assert!(provider.matches_path("/bedrock/test"));
 
     // Note: Actual authentication validation happens in forward_request
@@ -232,19 +268,23 @@ fn test_model_family_detection() {
     use union_square::providers::bedrock::types::ModelFamily;
 
     assert_eq!(
-        ModelFamily::from_model_id("anthropic.claude-3-opus"),
+        ModelFamily::from_model_id(
+            &ModelId::try_new("anthropic.claude-3-opus".to_string()).unwrap()
+        ),
         ModelFamily::Claude
     );
     assert_eq!(
-        ModelFamily::from_model_id("amazon.titan-text-lite"),
+        ModelFamily::from_model_id(
+            &ModelId::try_new("amazon.titan-text-lite".to_string()).unwrap()
+        ),
         ModelFamily::Titan
     );
     assert_eq!(
-        ModelFamily::from_model_id("meta.llama3-8b"),
+        ModelFamily::from_model_id(&ModelId::try_new("meta.llama3-8b".to_string()).unwrap()),
         ModelFamily::Llama
     );
     assert_eq!(
-        ModelFamily::from_model_id("unknown-model"),
+        ModelFamily::from_model_id(&ModelId::try_new("unknown-model".to_string()).unwrap()),
         ModelFamily::Unknown
     );
 }

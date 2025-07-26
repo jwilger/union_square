@@ -5,36 +5,74 @@ use crate::providers::bedrock::{
     models::extract_model_id,
     types::{AwsRegion, ModelFamily, ModelPricing},
 };
-use crate::providers::{HealthStatus, Provider, ProviderError, ProviderMetadata};
+use crate::providers::{
+    HealthStatus, Provider, ProviderError, ProviderId, ProviderMetadata, RequestId,
+};
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Request, Response, Uri};
+use nutype::nutype;
+
+/// Base URL for provider endpoints
+#[nutype(
+    validate(predicate = |url| url.parse::<hyper::Uri>().is_ok()),
+    derive(Debug, Clone, PartialEq, AsRef)
+)]
+pub struct BaseUrl(String);
+
+impl BaseUrl {
+    /// Convert to hyper::Uri for use in HTTP clients
+    pub fn to_uri(&self) -> hyper::Uri {
+        self.as_ref().parse().unwrap() // Safe because validated
+    }
+}
+
+/// API path prefix for routing
+#[nutype(
+    sanitize(trim),
+    validate(not_empty, predicate = |s| s.starts_with('/')),
+    derive(Debug, Clone, PartialEq)
+)]
+pub struct PathPrefix(String);
+
+impl PathPrefix {
+    pub const BEDROCK: &'static str = "/bedrock/";
+    pub const OPENAI: &'static str = "/openai/";
+    pub const ANTHROPIC: &'static str = "/anthropic/";
+
+    pub fn bedrock() -> Self {
+        Self::try_new(Self::BEDROCK.to_string()).unwrap()
+    }
+}
 
 /// AWS Bedrock provider
 pub struct BedrockProvider {
-    base_url: String,
+    base_url: BaseUrl,
 }
 
 impl BedrockProvider {
     /// Create a new Bedrock provider
     pub fn new(region: AwsRegion) -> Self {
-        let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", region.as_ref());
+        let url_string = format!("https://bedrock-runtime.{}.amazonaws.com", region.as_ref());
+        let base_url = BaseUrl::try_new(url_string).unwrap();
         Self { base_url }
     }
 
     /// Create a new Bedrock provider with a custom base URL (for testing)
     pub fn with_base_url(base_url: String) -> Self {
+        let base_url = BaseUrl::try_new(base_url).unwrap();
         Self { base_url }
     }
 
     /// Build the target URL for Bedrock API
     fn build_target_url(&self, path: &str) -> Result<Uri, ProviderError> {
         // Remove /bedrock prefix from path
+        let bedrock_prefix = PathPrefix::BEDROCK.trim_end_matches('/'); // Remove trailing slash for strip_prefix
         let bedrock_path = path
-            .strip_prefix("/bedrock")
+            .strip_prefix(bedrock_prefix)
             .ok_or_else(|| ProviderError::InvalidPath("Missing /bedrock prefix".to_string()))?;
 
-        let target_url = format!("{}{}", self.base_url, bedrock_path);
+        let target_url = format!("{}{}", self.base_url.as_ref(), bedrock_path);
 
         target_url
             .parse()
@@ -44,12 +82,12 @@ impl BedrockProvider {
 
 #[async_trait]
 impl Provider for BedrockProvider {
-    fn id(&self) -> &'static str {
-        "bedrock"
+    fn id(&self) -> ProviderId {
+        ProviderId::bedrock()
     }
 
     fn matches_path(&self, path: &str) -> bool {
-        path.starts_with("/bedrock/")
+        path.starts_with(PathPrefix::BEDROCK)
     }
 
     fn transform_url(&self, url: &Uri) -> Result<Uri, ProviderError> {
@@ -101,7 +139,7 @@ impl Provider for BedrockProvider {
         response: &Response<Body>,
     ) -> ProviderMetadata {
         let mut metadata = ProviderMetadata {
-            provider_id: self.id().to_string(),
+            provider_id: self.id(),
             ..Default::default()
         };
 
@@ -116,7 +154,7 @@ impl Provider for BedrockProvider {
             // This method just provides basic metadata
 
             // Calculate cost estimate if we have pricing info
-            if let Some(_pricing) = ModelPricing::for_model(&model_id) {
+            if let Some(_pricing) = ModelPricing::for_model(model_id.as_ref()) {
                 // Cost will be calculated when we have token counts
                 // For now, just indicate that pricing is available
             }
@@ -125,7 +163,9 @@ impl Provider for BedrockProvider {
         // Extract AWS request ID from response headers
         if let Some(request_id) = response.headers().get("x-amzn-requestid") {
             if let Ok(request_id_str) = request_id.to_str() {
-                metadata.provider_request_id = Some(request_id_str.to_string());
+                if let Ok(req_id) = RequestId::try_new(request_id_str.to_string()) {
+                    metadata.provider_request_id = Some(req_id);
+                }
             }
         }
 
@@ -152,7 +192,7 @@ mod tests {
     #[test]
     fn test_provider_id() {
         let provider = BedrockProvider::new(AwsRegion::try_new("us-east-1").unwrap());
-        assert_eq!(provider.id(), "bedrock");
+        assert_eq!(provider.id(), ProviderId::bedrock());
     }
 
     #[test]

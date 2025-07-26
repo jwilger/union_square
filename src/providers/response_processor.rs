@@ -2,16 +2,16 @@
 
 use crate::providers::bedrock::{
     models::extract_token_usage,
-    types::{ModelFamily, ModelPricing},
+    types::{ModelFamily, ModelId, ModelPricing},
 };
-use crate::providers::ProviderMetadata;
+use crate::providers::{ProviderId, ProviderMetadata};
 use bytes::Bytes;
 use serde_json::Value;
 
 /// Process response body and extract provider metadata
 pub struct ProviderResponseProcessor {
-    provider_id: String,
-    model_id: Option<String>,
+    provider_id: ProviderId,
+    model_id: Option<ModelId>,
     base_metadata: ProviderMetadata,
 }
 
@@ -34,9 +34,10 @@ impl ProviderResponseProcessor {
         let json_value: Value = serde_json::from_slice(chunk).ok()?;
 
         // Extract metadata based on provider
-        match self.provider_id.as_str() {
-            "bedrock" => self.process_bedrock_response(model_id, &json_value),
-            _ => None,
+        if self.provider_id == ProviderId::bedrock() {
+            self.process_bedrock_response(model_id, &json_value)
+        } else {
+            None
         }
     }
 
@@ -49,9 +50,10 @@ impl ProviderResponseProcessor {
             // Try to parse JSON from the body
             if let Ok(json_value) = serde_json::from_slice::<Value>(body) {
                 // Extract metadata based on provider
-                if let Some(extracted) = match self.provider_id.as_str() {
-                    "bedrock" => self.process_bedrock_response(model_id, &json_value),
-                    _ => None,
+                if let Some(extracted) = if self.provider_id == ProviderId::bedrock() {
+                    self.process_bedrock_response(model_id, &json_value)
+                } else {
+                    None
                 } {
                     // Merge extracted metadata
                     metadata.request_tokens = extracted.request_tokens.or(metadata.request_tokens);
@@ -69,7 +71,7 @@ impl ProviderResponseProcessor {
     /// Process Bedrock response and extract metadata
     fn process_bedrock_response(
         &self,
-        model_id: &str,
+        model_id: &ModelId,
         json_value: &Value,
     ) -> Option<ProviderMetadata> {
         let mut metadata = self.base_metadata.clone();
@@ -84,7 +86,7 @@ impl ProviderResponseProcessor {
             metadata.total_tokens = Some(token_usage.total_tokens);
 
             // Calculate cost if pricing is available
-            if let Some(pricing) = ModelPricing::for_model(model_id) {
+            if let Some(pricing) = ModelPricing::for_model(model_id.as_ref()) {
                 metadata.cost_estimate = Some(
                     pricing.calculate_cost(token_usage.input_tokens, token_usage.output_tokens),
                 );
@@ -98,13 +100,16 @@ impl ProviderResponseProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::bedrock::types::{InputTokens, OutputTokens};
     use serde_json::json;
 
     #[test]
     fn test_process_claude_response() {
         let base_metadata = ProviderMetadata {
-            provider_id: "bedrock".to_string(),
-            model_id: Some("anthropic.claude-3-sonnet-20240229".to_string()),
+            provider_id: ProviderId::bedrock(),
+            model_id: Some(
+                ModelId::try_new("anthropic.claude-3-sonnet-20240229".to_string()).unwrap(),
+            ),
             ..Default::default()
         };
 
@@ -124,17 +129,23 @@ mod tests {
         let body_bytes = response_body.to_string().into_bytes();
         let metadata = processor.process_complete_body(&body_bytes);
 
-        assert_eq!(metadata.request_tokens, Some(10));
-        assert_eq!(metadata.response_tokens, Some(5));
-        assert_eq!(metadata.total_tokens, Some(15));
+        assert_eq!(
+            metadata.request_tokens,
+            Some(InputTokens::try_new(10).unwrap())
+        );
+        assert_eq!(
+            metadata.response_tokens,
+            Some(OutputTokens::try_new(5).unwrap())
+        );
+        assert_eq!(metadata.total_tokens.unwrap().into_inner(), 15);
         assert!(metadata.cost_estimate.is_some());
     }
 
     #[test]
     fn test_process_titan_response() {
         let base_metadata = ProviderMetadata {
-            provider_id: "bedrock".to_string(),
-            model_id: Some("amazon.titan-text-express-v1".to_string()),
+            provider_id: ProviderId::bedrock(),
+            model_id: Some(ModelId::try_new("amazon.titan-text-express-v1".to_string()).unwrap()),
             ..Default::default()
         };
 
@@ -152,17 +163,23 @@ mod tests {
         let body_bytes = response_body.to_string().into_bytes();
         let metadata = processor.process_complete_body(&body_bytes);
 
-        assert_eq!(metadata.request_tokens, Some(12));
-        assert_eq!(metadata.response_tokens, Some(20));
-        assert_eq!(metadata.total_tokens, Some(32));
+        assert_eq!(
+            metadata.request_tokens,
+            Some(InputTokens::try_new(12).unwrap())
+        );
+        assert_eq!(
+            metadata.response_tokens,
+            Some(OutputTokens::try_new(20).unwrap())
+        );
+        assert_eq!(metadata.total_tokens.unwrap().into_inner(), 32);
         assert!(metadata.cost_estimate.is_some());
     }
 
     #[test]
     fn test_process_invalid_json() {
         let base_metadata = ProviderMetadata {
-            provider_id: "bedrock".to_string(),
-            model_id: Some("test-model".to_string()),
+            provider_id: ProviderId::bedrock(),
+            model_id: Some(ModelId::try_new("test-model".to_string()).unwrap()),
             ..Default::default()
         };
 
