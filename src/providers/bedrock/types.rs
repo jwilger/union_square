@@ -1,5 +1,6 @@
 //! Type definitions for AWS Bedrock provider
 
+use currencies::{currency::USD, Amount};
 use nutype::nutype;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -228,22 +229,32 @@ impl ModelPricing {
         }
     }
 
-    /// Calculate cost for token usage using proper Decimal arithmetic
+    /// Calculate cost for token usage returning proper Money type
     pub fn calculate_cost(
         &self,
         input_tokens: InputTokens,
         output_tokens: OutputTokens,
-    ) -> Decimal {
+    ) -> Amount<USD> {
         // Calculate input cost: (tokens / 1000) * price_per_1k
         let input_ratio = Decimal::from(input_tokens.into_inner()) / Decimal::from(1000);
-        let input_cost = self.input_price_per_1k_tokens.as_ref() * input_ratio;
+        let input_cost_decimal = self.input_price_per_1k_tokens.as_ref() * input_ratio;
 
         // Calculate output cost: (tokens / 1000) * price_per_1k
         let output_ratio = Decimal::from(output_tokens.into_inner()) / Decimal::from(1000);
-        let output_cost = self.output_price_per_1k_tokens.as_ref() * output_ratio;
+        let output_cost_decimal = self.output_price_per_1k_tokens.as_ref() * output_ratio;
 
-        // Return total cost
-        input_cost + output_cost
+        // Total cost in dollars
+        let total_cost_decimal = input_cost_decimal + output_cost_decimal;
+
+        // Convert to cents (multiply by 100) and round UP to next cent (ceiling)
+        let total_cents = (total_cost_decimal * Decimal::from(100)).ceil();
+
+        // Convert to u64 for Amount (safe because we're dealing with reasonable cost values)
+        // Use try_into() to convert Decimal to u64
+        let cents_u64 = total_cents.try_into().unwrap_or(0);
+
+        // Return as Money
+        Amount::<USD>::from_raw(cents_u64)
     }
 }
 

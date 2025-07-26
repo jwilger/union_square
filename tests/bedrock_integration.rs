@@ -9,8 +9,8 @@
 
 #[allow(unused_imports)]
 use axum::body::Body;
+use currencies::{currency::USD, Amount};
 use hyper::{Request, Response, StatusCode};
-use rust_decimal::Decimal;
 use std::sync::Arc;
 #[allow(unused_imports)]
 use union_square::providers::{
@@ -152,9 +152,11 @@ fn test_response_processor_claude() {
     assert!(metadata.cost_estimate.is_some());
 
     // Verify cost calculation (Claude 3 Sonnet: $0.003/1K input, $0.015/1K output)
-    let expected_cost =
-        Decimal::new(3, 3) * Decimal::new(25, 3) + Decimal::new(15, 3) * Decimal::new(15, 3); // 0.003*0.025 + 0.015*0.015
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
+    // 25 input tokens: 0.003 * 25/1000 = $0.000075
+    // 15 output tokens: 0.015 * 15/1000 = $0.000225
+    // Total: $0.0003 = 0.03 cents, rounds UP to 1 cent
+    let expected_cost = Amount::<USD>::from_raw(1);
+    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]
@@ -193,9 +195,11 @@ fn test_response_processor_titan() {
     );
 
     // Verify Titan Express cost ($0.0008/1K input, $0.0016/1K output)
-    let expected_cost =
-        Decimal::new(8, 4) * Decimal::new(2, 2) + Decimal::new(16, 4) * Decimal::new(3, 2); // 0.0008*0.02 + 0.0016*0.03
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
+    // 20 input tokens: 0.0008 * 20/1000 = $0.000016
+    // 30 output tokens: 0.0016 * 30/1000 = $0.000048
+    // Total: $0.000064 = 0.0064 cents, rounds UP to 1 cent
+    let expected_cost = Amount::<USD>::from_raw(1);
+    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]
@@ -232,9 +236,11 @@ fn test_response_processor_llama() {
     );
 
     // Verify Llama 70B cost ($0.00265/1K input, $0.0035/1K output)
-    let expected_cost =
-        Decimal::new(265, 5) * Decimal::new(15, 3) + Decimal::new(35, 4) * Decimal::new(1, 2); // 0.00265*0.015 + 0.0035*0.01
-    assert!((metadata.cost_estimate.unwrap() - expected_cost).abs() < Decimal::new(1, 6));
+    // 15 input tokens: 0.00265 * 15/1000 = $0.00003975
+    // 10 output tokens: 0.0035 * 10/1000 = $0.000035
+    // Total: $0.00007475 = 0.007475 cents, rounds UP to 1 cent
+    let expected_cost = Amount::<USD>::from_raw(1);
+    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]

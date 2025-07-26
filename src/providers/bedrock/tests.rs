@@ -844,7 +844,7 @@ mod cost_calculation_tests {
         InputTokens, ModelId, ModelPricing, OutputTokens, TokenUsage, TotalTokens,
     };
     use crate::providers::{ProviderId, ProviderMetadata};
-    use rust_decimal::Decimal;
+    use currencies::{currency::USD, Amount};
 
     #[test]
     fn test_claude_3_sonnet_cost_calculation() {
@@ -858,9 +858,9 @@ mod cost_calculation_tests {
         // Claude 3 Sonnet: $3/1M input, $15/1M output
         // 1000 input tokens = $0.003
         // 500 output tokens = $0.0075
-        // Total = $0.0105
-        let expected_cost = Decimal::new(105, 4); // 0.0105
-        assert!((cost - expected_cost).abs() < Decimal::new(1, 7)); // Small epsilon for decimal comparison
+        // Total = $0.0105 = 1.05 cents, rounds UP to 2 cents
+        let expected_cost = Amount::<USD>::from_raw(2);
+        assert_eq!(cost, expected_cost);
     }
 
     #[test]
@@ -875,8 +875,8 @@ mod cost_calculation_tests {
         // Claude 3 Haiku: $0.25/1M input, $1.25/1M output
         // 1000 input tokens = $0.00025
         // 500 output tokens = $0.000625
-        // Total = $0.000875
-        assert_eq!(cost, Decimal::new(875, 6)); // 0.000875
+        // Total = $0.000875 = 0.0875 cents, rounds UP to 1 cent
+        assert_eq!(cost, Amount::<USD>::from_raw(1));
     }
 
     #[test]
@@ -891,8 +891,8 @@ mod cost_calculation_tests {
         // Claude 3 Opus: $15/1M input, $75/1M output
         // 1000 input tokens = $0.015
         // 500 output tokens = $0.0375
-        // Total = $0.0525
-        assert_eq!(cost, Decimal::new(525, 4)); // 0.0525
+        // Total = $0.0525 = 5.25 cents, rounds UP to 6 cents
+        assert_eq!(cost, Amount::<USD>::from_raw(6));
     }
 
     #[test]
@@ -907,8 +907,8 @@ mod cost_calculation_tests {
         // Titan Express: $0.8/1M input, $1.6/1M output
         // 1000 input tokens = $0.0008
         // 500 output tokens = $0.0008
-        // Total = $0.0016
-        assert_eq!(cost, Decimal::new(16, 4)); // 0.0016
+        // Total = $0.0016 = 0.16 cents, rounds UP to 1 cent
+        assert_eq!(cost, Amount::<USD>::from_raw(1));
     }
 
     #[test]
@@ -923,8 +923,8 @@ mod cost_calculation_tests {
         // Llama 3 8B: $0.3/1M input, $0.6/1M output
         // 1000 input tokens = $0.0003
         // 500 output tokens = $0.0003
-        // Total = $0.0006
-        assert_eq!(cost, Decimal::new(6, 4)); // 0.0006
+        // Total = $0.0006 = 0.06 cents, rounds UP to 1 cent
+        assert_eq!(cost, Amount::<USD>::from_raw(1));
     }
 
     #[test]
@@ -959,9 +959,10 @@ mod cost_calculation_tests {
         }
 
         assert!(metadata.cost_estimate.is_some());
-        let expected_cost = Decimal::new(105, 4); // 0.0105
+        // 1000 input tokens @ $0.003/1K + 500 output tokens @ $0.015/1K = $0.0105 = 1.05 cents, rounds UP to 2 cents
+        let expected_cost = Amount::<USD>::from_raw(2);
         let actual_cost = metadata.cost_estimate.unwrap();
-        assert!((actual_cost - expected_cost).abs() < Decimal::new(1, 7)); // Small epsilon for decimal comparison
+        assert_eq!(actual_cost, expected_cost);
     }
 }
 

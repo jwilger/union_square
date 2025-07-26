@@ -9,9 +9,9 @@ pub mod response_processor;
 use crate::proxy::types::ProxyError;
 use async_trait::async_trait;
 use axum::body::Body;
+use currencies::{currency::USD, Amount};
 use hyper::{Request, Response};
 use nutype::nutype;
-use rust_decimal::Decimal;
 use std::sync::Arc;
 
 /// Provider identifier newtype for type safety
@@ -161,7 +161,7 @@ pub struct ProviderMetadata {
     pub request_tokens: Option<crate::providers::bedrock::types::InputTokens>,
     pub response_tokens: Option<crate::providers::bedrock::types::OutputTokens>,
     pub total_tokens: Option<crate::providers::bedrock::types::TotalTokens>,
-    pub cost_estimate: Option<Decimal>,
+    pub cost_estimate: Option<Amount<USD>>,
     pub provider_request_id: Option<RequestId>,
 }
 
