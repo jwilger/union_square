@@ -423,6 +423,273 @@ mod streaming_tests {
 }
 
 #[cfg(test)]
+mod error_handling_tests {
+    use crate::providers::bedrock::provider::BedrockProvider;
+    use crate::providers::Provider;
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+    use hyper::{Request, StatusCode};
+    use mockito::{Matcher, Server};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_validation_exception_passthrough() {
+        let mut server = Server::new_async().await;
+        let provider = BedrockProvider::with_base_url(server.url());
+
+        let mock = server
+            .mock("POST", "/model/test/invoke")
+            .match_header("authorization", Matcher::Any)
+            .match_header("x-amz-date", Matcher::Any)
+            .with_status(400)
+            .with_header("content-type", "application/x-amz-json-1.1")
+            .with_header("x-amzn-requestid", "test-request-id")
+            .with_header("x-amzn-errortype", "ValidationException")
+            .with_body(
+                json!({
+                    "__type": "ValidationException",
+                    "message": "1 validation error detected: Value 'invalid-model' at 'modelId' failed to satisfy constraint: Model ID must be valid"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test/invoke")
+            .header("authorization", "AWS4-HMAC-SHA256 Credential=test")
+            .header("x-amz-date", "20250126T120000Z")
+            .body(Body::empty())
+            .unwrap();
+
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
+        let response = provider.forward_request(request, &client).await.unwrap();
+
+        // Verify status and headers are preserved
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers().get("x-amzn-errortype").unwrap(),
+            "ValidationException"
+        );
+
+        // Verify body is preserved exactly
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(error_response["__type"], "ValidationException");
+        assert!(error_response["message"]
+            .as_str()
+            .unwrap()
+            .contains("validation error"));
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_throttling_exception_passthrough() {
+        let mut server = Server::new_async().await;
+        let provider = BedrockProvider::with_base_url(server.url());
+
+        let mock = server
+            .mock("POST", "/model/test/invoke")
+            .match_header("authorization", Matcher::Any)
+            .match_header("x-amz-date", Matcher::Any)
+            .with_status(429)
+            .with_header("content-type", "application/x-amz-json-1.1")
+            .with_header("x-amzn-errortype", "ThrottlingException")
+            .with_header("retry-after", "5")
+            .with_body(
+                json!({
+                    "__type": "ThrottlingException",
+                    "message": "Rate exceeded. Please retry your request after 5 seconds."
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test/invoke")
+            .header("authorization", "AWS4-HMAC-SHA256 Credential=test")
+            .header("x-amz-date", "20250126T120000Z")
+            .body(Body::empty())
+            .unwrap();
+
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
+        let response = provider.forward_request(request, &client).await.unwrap();
+
+        // Verify status and headers
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "5");
+
+        // Verify body
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(error_response["__type"], "ThrottlingException");
+        assert!(error_response["message"]
+            .as_str()
+            .unwrap()
+            .contains("Rate exceeded"));
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_model_not_ready_exception_passthrough() {
+        let mut server = Server::new_async().await;
+        let provider = BedrockProvider::with_base_url(server.url());
+
+        let mock = server
+            .mock("POST", "/model/test/invoke")
+            .match_header("authorization", Matcher::Any)
+            .match_header("x-amz-date", Matcher::Any)
+            .with_status(503)
+            .with_header("content-type", "application/x-amz-json-1.1")
+            .with_header("x-amzn-errortype", "ModelNotReadyException")
+            .with_body(
+                json!({
+                    "__type": "ModelNotReadyException",
+                    "message": "Model is still loading. Please try again in a few moments."
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test/invoke")
+            .header("authorization", "AWS4-HMAC-SHA256 Credential=test")
+            .header("x-amz-date", "20250126T120000Z")
+            .body(Body::empty())
+            .unwrap();
+
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
+        let response = provider.forward_request(request, &client).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(error_response["__type"], "ModelNotReadyException");
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_access_denied_exception_passthrough() {
+        let mut server = Server::new_async().await;
+        let provider = BedrockProvider::with_base_url(server.url());
+
+        let mock = server
+            .mock(
+                "POST",
+                "/model/anthropic.claude-3-5-sonnet-20241022-v2:0/invoke",
+            )
+            .match_header("authorization", Matcher::Any)
+            .match_header("x-amz-date", Matcher::Any)
+            .with_status(403)
+            .with_header("content-type", "application/x-amz-json-1.1")
+            .with_header("x-amzn-errortype", "AccessDeniedException")
+            .with_body(
+                json!({
+                    "__type": "AccessDeniedException",
+                    "message": "You don't have access to the model with the specified model ID."
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/anthropic.claude-3-5-sonnet-20241022-v2:0/invoke")
+            .header("authorization", "AWS4-HMAC-SHA256 Credential=test")
+            .header("x-amz-date", "20250126T120000Z")
+            .body(Body::empty())
+            .unwrap();
+
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
+        let response = provider.forward_request(request, &client).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(error_response["__type"], "AccessDeniedException");
+        assert!(error_response["message"]
+            .as_str()
+            .unwrap()
+            .contains("don't have access"));
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_internal_server_error_passthrough() {
+        let mut server = Server::new_async().await;
+        let provider = BedrockProvider::with_base_url(server.url());
+
+        let mock = server
+            .mock("POST", "/model/test/invoke")
+            .match_header("authorization", Matcher::Any)
+            .match_header("x-amz-date", Matcher::Any)
+            .with_status(500)
+            .with_header("content-type", "application/x-amz-json-1.1")
+            .with_header("x-amzn-errortype", "InternalServerException")
+            .with_body(
+                json!({
+                    "__type": "InternalServerException",
+                    "message": "An internal server error occurred. Please try again."
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/bedrock/model/test/invoke")
+            .header("authorization", "AWS4-HMAC-SHA256 Credential=test")
+            .header("x-amz-date", "20250126T120000Z")
+            .body(Body::empty())
+            .unwrap();
+
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
+        let response = provider.forward_request(request, &client).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(error_response["__type"], "InternalServerException");
+
+        mock.assert_async().await;
+    }
+}
+
+#[cfg(test)]
 mod model_specific_tests {
     use crate::providers::bedrock::models::*;
     use crate::providers::bedrock::types::ModelFamily;
