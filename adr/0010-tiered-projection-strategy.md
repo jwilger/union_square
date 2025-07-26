@@ -1,4 +1,4 @@
-# ADR-0010: Tiered Projection Strategy
+# 0010. Tiered Projection Strategy
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

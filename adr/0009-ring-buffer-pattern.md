@@ -1,4 +1,4 @@
-# ADR-0009: Ring Buffer Pattern for Event Recording
+# 0009. Ring Buffer Pattern for Event Recording
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

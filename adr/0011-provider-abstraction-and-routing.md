@@ -1,4 +1,4 @@
-# ADR-0011: Provider Abstraction and Routing
+# 0011. Provider Abstraction and Routing
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

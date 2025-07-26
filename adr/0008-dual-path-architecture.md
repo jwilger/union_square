@@ -1,4 +1,4 @@
-# ADR-0008: Dual-path Architecture (Hot Path vs Audit Path)
+# 0008. Dual-path Architecture (Hot Path vs Audit Path)
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

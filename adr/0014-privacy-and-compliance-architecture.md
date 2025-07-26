@@ -1,4 +1,4 @@
-# ADR-0014: Privacy and Compliance Architecture
+# 0014. Privacy and Compliance Architecture
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

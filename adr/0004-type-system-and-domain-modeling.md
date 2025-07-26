@@ -1,4 +1,4 @@
-# Type System and Domain Modeling
+# 0004. Type System and Domain Modeling
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

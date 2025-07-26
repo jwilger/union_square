@@ -1,4 +1,4 @@
-# ADR-0015: Caching Strategy
+# 0015. Caching Strategy
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team
