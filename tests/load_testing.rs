@@ -9,9 +9,15 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use union_square::proxy::storage::RingBuffer;
 use union_square::proxy::types::*;
+
+// Constants for load testing configuration
+const TASK_BATCH_THRESHOLD: usize = 1000; // Maximum concurrent tasks before draining
+const MAX_CONCURRENT_TASKS: usize = 1000; // Semaphore limit for burst tests
+const DB_ERROR_THRESHOLD_PERCENT: u64 = 1; // 1% error tolerance for database operations
 
 /// MVP Target: 500 RPS sustained load test
 #[tokio::test]
@@ -109,6 +115,7 @@ async fn test_2000_rps_burst_load() {
 
     let start = Instant::now();
     let mut tasks = JoinSet::new();
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
     // Burst pattern: generate all operations quickly
     let total_operations = target_rps * duration.as_secs();
@@ -117,9 +124,11 @@ async fn test_2000_rps_burst_load() {
         let rb = ring_buffer.clone();
         let ops = operations.clone();
         let errs = errors.clone();
+        let sem = semaphore.clone();
 
         let op_start = Instant::now();
         tasks.spawn(async move {
+            let _permit = sem.acquire().await.expect("semaphore closed");
             let request_id = RequestId::new();
             let data = vec![b'x'; 1024]; // 1KB payload
 
@@ -135,8 +144,8 @@ async fn test_2000_rps_burst_load() {
             op_start.elapsed()
         });
 
-        // Small delay to prevent overwhelming the system
-        if tasks.len() >= 1000 {
+        // Periodically drain completed tasks to avoid unbounded growth
+        if tasks.len() >= TASK_BATCH_THRESHOLD {
             while let Some(result) = tasks.join_next().await {
                 if let Ok(latency) = result {
                     latencies.push(latency);
@@ -355,7 +364,7 @@ async fn test_database_pool_under_load() {
         target_rps as f64 * 0.9
     );
     assert!(
-        total_errors < total_ops / 100,
+        total_errors < total_ops * DB_ERROR_THRESHOLD_PERCENT / 100,
         "Too many database errors: {total_errors} errors out of {total_ops} operations"
     );
 }
