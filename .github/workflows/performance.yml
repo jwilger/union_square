@@ -3,6 +3,10 @@ name: Performance Tests
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    # Only run on release-plz PRs to document performance
+    types: [ opened, synchronize ]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +25,12 @@ jobs:
   performance:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
+    # Run on pushes to main or on release-plz PRs only
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       (startsWith(github.head_ref, 'release-plz-') ||
+        github.event.pull_request.user.login == 'github-actions[bot]'))
 
     steps:
     - name: Checkout code
