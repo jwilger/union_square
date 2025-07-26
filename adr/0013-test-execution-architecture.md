@@ -1,4 +1,4 @@
-# ADR-0013: Test Execution Architecture
+# 0013. Test Execution Architecture
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

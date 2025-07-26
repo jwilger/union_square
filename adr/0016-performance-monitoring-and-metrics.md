@@ -1,4 +1,4 @@
-# ADR-0016: Performance Monitoring and Metrics Collection
+# 0016. Performance Monitoring and Metrics Collection
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team

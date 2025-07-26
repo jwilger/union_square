@@ -487,6 +487,14 @@ ADRs follow the template in `docs/adr/template.md` which includes:
 - Decision outcome
 - Consequences (positive and negative)
 
+### ADR Naming Convention
+
+**IMPORTANT**: All ADRs must follow this naming convention:
+- **Filename**: `NNNN-descriptive-name.md` where NNNN is the zero-padded ADR number (e.g., `0001-overall-architecture-pattern.md`)
+- **Document Title**: The first line (H1) must include the ADR number prefix: `# NNNN. Title` (e.g., `# 0001. Overall Architecture Pattern`)
+- Keep ADR numbers sequential and never reuse numbers
+- The ADR number appears in both the filename AND the document title for consistency
+
 ### Publishing ADRs
 
 ADRs are automatically published to GitHub Pages when merged to main:

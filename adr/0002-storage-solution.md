@@ -1,4 +1,4 @@
-# Storage Solution for Session Data
+# 0002. Storage Solution for Session Data
 
 - Status: accepted
 - Deciders: John Wilger, Technical Architecture Team
