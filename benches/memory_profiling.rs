@@ -1,10 +1,15 @@
 //! Memory profiling benchmark using dhat
 //!
 //! Run with: cargo bench --bench memory_profiling
+//!
+//! Note: This benchmark uses a global allocator which is required for dhat
+//! memory profiling. This benchmark should be run in isolation to avoid
+//! interference with other benchmarks.
 
 use union_square::proxy::storage::RingBuffer;
 use union_square::proxy::types::*;
 
+// Global allocator is required for dhat heap profiling to track all allocations
 #[global_allocator]
 static ALLOCATOR: dhat::Alloc = dhat::Alloc;
 
