@@ -53,6 +53,7 @@ criterion = { version = "0.6", features = ["async_tokio"] }
 mockito = "1.6"
 dhat = "0.3.3"
 
+
 [[bin]]
 name = "union_square"
 path = "src/main.rs"

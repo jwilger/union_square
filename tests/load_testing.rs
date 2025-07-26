@@ -11,13 +11,22 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use union_square::benchmark_types::*;
 use union_square::proxy::storage::RingBuffer;
 use union_square::proxy::types::*;
 
-// Constants for load testing configuration
-const TASK_BATCH_THRESHOLD: usize = 1000; // Maximum concurrent tasks before draining
-const MAX_CONCURRENT_TASKS: usize = 1000; // Semaphore limit for burst tests
-const DB_ERROR_THRESHOLD_PERCENT: u64 = 1; // 1% error tolerance for database operations
+// Helper functions for load testing configuration
+fn task_batch_threshold() -> TaskBatchThreshold {
+    TaskBatchThreshold::try_new(1000).expect("1000 is valid threshold")
+}
+
+fn max_concurrent_tasks() -> MaxConcurrentTasks {
+    MaxConcurrentTasks::try_new(1000).expect("1000 is valid task count")
+}
+
+fn db_error_threshold_percent() -> ErrorThresholdPercent {
+    ErrorThresholdPercent::try_new(1).expect("1% is valid threshold")
+}
 
 /// MVP Target: 500 RPS sustained load test
 #[tokio::test]
@@ -31,8 +40,8 @@ async fn test_500_rps_sustained_load() {
     };
     let ring_buffer = Arc::new(RingBuffer::new(&config));
 
-    let target_rps = 500;
-    let duration = Duration::from_secs(30);
+    let target_rps = TargetRps::try_new(500).expect("500 is valid RPS");
+    let duration = TestDuration::thirty_seconds().expect("30s is valid duration");
     let operations = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicU64::new(0));
 
@@ -40,10 +49,10 @@ async fn test_500_rps_sustained_load() {
     let mut tasks = JoinSet::new();
 
     // Calculate operations per millisecond to maintain steady rate
-    let ops_per_ms = target_rps as f64 / 1000.0;
+    let ops_per_ms = OpsPerMillisecond::from(target_rps);
     let mut next_op_time = start;
 
-    while start.elapsed() < duration {
+    while start.elapsed() < duration.into_inner() {
         let rb = ring_buffer.clone();
         let ops = operations.clone();
         let errs = errors.clone();
@@ -63,7 +72,7 @@ async fn test_500_rps_sustained_load() {
         });
 
         // Maintain steady rate
-        next_op_time += Duration::from_micros((1000.0 / ops_per_ms) as u64);
+        next_op_time += Duration::from_micros((1000.0 / ops_per_ms.into_inner()) as u64);
         if let Some(sleep_duration) = next_op_time.checked_duration_since(Instant::now()) {
             tokio::time::sleep(sleep_duration).await;
         }
@@ -84,10 +93,10 @@ async fn test_500_rps_sustained_load() {
 
     // Verify we achieved target RPS (within 5% tolerance)
     assert!(
-        actual_rps >= target_rps as f64 * 0.95,
+        actual_rps >= target_rps.into_inner() as f64 * RpsTolerance::five_percent().into_inner(),
         "Failed to achieve target RPS: {:.2} < {}",
         actual_rps,
-        target_rps as f64 * 0.95
+        target_rps.into_inner() as f64 * RpsTolerance::five_percent().into_inner()
     );
     assert_eq!(
         total_errors, 0,
@@ -107,18 +116,18 @@ async fn test_2000_rps_burst_load() {
     };
     let ring_buffer = Arc::new(RingBuffer::new(&config));
 
-    let target_rps = 2000;
-    let duration = Duration::from_secs(10);
+    let target_rps = TargetRps::try_new(2000).expect("2000 is valid RPS");
+    let duration = TestDuration::ten_seconds().expect("10s is valid duration");
     let operations = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicU64::new(0));
     let mut latencies = Vec::new();
 
     let start = Instant::now();
     let mut tasks = JoinSet::new();
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+    let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks().into_inner()));
 
     // Burst pattern: generate all operations quickly
-    let total_operations = target_rps * duration.as_secs();
+    let total_operations = target_rps.into_inner() * duration.into_inner().as_secs() as u32;
 
     for _ in 0..total_operations {
         let rb = ring_buffer.clone();
@@ -145,7 +154,7 @@ async fn test_2000_rps_burst_load() {
         });
 
         // Periodically drain completed tasks to avoid unbounded growth
-        if tasks.len() >= TASK_BATCH_THRESHOLD {
+        if tasks.len() >= task_batch_threshold().into_inner() {
             while let Some(result) = tasks.join_next().await {
                 if let Ok(latency) = result {
                     latencies.push(latency);
@@ -182,13 +191,15 @@ async fn test_2000_rps_burst_load() {
 
     // Verify performance
     assert!(
-        actual_rps >= target_rps as f64 * 0.9,
+        actual_rps >= target_rps.into_inner() as f64 * RpsTolerance::ten_percent().into_inner(),
         "Failed to achieve burst RPS: {:.2} < {}",
         actual_rps,
-        target_rps as f64 * 0.9
+        target_rps.into_inner() as f64 * RpsTolerance::ten_percent().into_inner()
     );
     assert!(
-        p99 < Duration::from_millis(5),
+        p99 < LatencyThreshold::five_ms()
+            .expect("5ms is valid threshold")
+            .into_inner(),
         "P99 latency {p99:?} exceeds 5ms requirement"
     );
     assert_eq!(total_errors, 0, "Errors occurred during burst load test");
@@ -206,8 +217,8 @@ async fn test_1000_concurrent_users() {
     };
     let ring_buffer = Arc::new(RingBuffer::new(&config));
 
-    let num_users = 1000;
-    let duration = Duration::from_secs(20);
+    let num_users = ConcurrentUsers::try_new(1000).expect("1000 is valid user count");
+    let duration = TestDuration::twenty_seconds().expect("20s is valid duration");
     let operations = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicU64::new(0));
 
@@ -215,7 +226,7 @@ async fn test_1000_concurrent_users() {
     let mut tasks = JoinSet::new();
 
     // Spawn concurrent users
-    for user_id in 0..num_users {
+    for user_id in 0..num_users.into_inner() {
         let rb = ring_buffer.clone();
         let ops = operations.clone();
         let errs = errors.clone();
@@ -226,7 +237,7 @@ async fn test_1000_concurrent_users() {
             let mut user_ops = 0u64;
 
             // Each user performs operations for the duration
-            while user_start.elapsed() < user_duration {
+            while user_start.elapsed() < user_duration.into_inner() {
                 let request_id = RequestId::new();
                 let _session_id = SessionId::new(); // Each user has own session
                 let data = format!("User {user_id} request {user_ops}").into_bytes();
@@ -242,7 +253,9 @@ async fn test_1000_concurrent_users() {
                 }
 
                 // Simulate realistic user behavior with small delays
-                tokio::time::sleep(Duration::from_millis(10 + (user_id % 10) as u64)).await;
+                let base_delay_ms = 10u64;
+                let user_variation = (user_id % 10) as u64;
+                tokio::time::sleep(Duration::from_millis(base_delay_ms + user_variation)).await;
             }
 
             user_ops
@@ -263,7 +276,7 @@ async fn test_1000_concurrent_users() {
     let actual_rps = total_ops as f64 / total_duration.as_secs_f64();
 
     // Calculate statistics
-    let avg_ops_per_user = total_ops as f64 / num_users as f64;
+    let avg_ops_per_user = total_ops as f64 / num_users.into_inner() as f64;
     let min_ops = user_operations.iter().min().unwrap_or(&0);
     let max_ops = user_operations.iter().max().unwrap_or(&0);
 
@@ -278,10 +291,10 @@ async fn test_1000_concurrent_users() {
     // Verify concurrent user handling
     assert_eq!(
         user_operations.len(),
-        num_users,
+        num_users.into_inner(),
         "Not all users completed: {} < {}",
         user_operations.len(),
-        num_users
+        num_users.into_inner()
     );
     assert!(*min_ops > 0, "Some users made no operations");
     assert_eq!(
@@ -298,29 +311,34 @@ async fn test_database_pool_under_load() {
 
     println!("\n=== Testing Database Connection Pool Under Load ===");
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/union_square".to_string());
+    let database_url = DatabaseUrl::try_new(std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://postgres:postgres@localhost:5432/union_square".to_string()
+    }))
+    .expect("Valid database URL");
+
+    let max_conns = MaxConnections::try_new(100).expect("100 is valid max connections");
+    let min_conns = MinConnections::try_new(10).expect("10 is valid min connections");
 
     let pool = PgPoolOptions::new()
-        .max_connections(100)
-        .min_connections(10)
-        .connect(&database_url)
+        .max_connections(max_conns.into_inner())
+        .min_connections(min_conns.into_inner())
+        .connect(&database_url.into_inner())
         .await
         .expect("Failed to create pool");
 
     let operations = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicU64::new(0));
-    let duration = Duration::from_secs(10);
+    let duration = TestDuration::ten_seconds().expect("10s is valid duration");
 
     let start = Instant::now();
     let mut tasks = JoinSet::new();
 
     // Simulate 500 RPS database operations
-    let target_rps = 500;
-    let ops_per_ms = target_rps as f64 / 1000.0;
+    let target_rps = TargetRps::try_new(500).expect("500 is valid RPS");
+    let ops_per_ms = OpsPerMillisecond::from(target_rps);
     let mut next_op_time = start;
 
-    while start.elapsed() < duration {
+    while start.elapsed() < duration.into_inner() {
         let pool = pool.clone();
         let ops = operations.clone();
         let errs = errors.clone();
@@ -337,7 +355,7 @@ async fn test_database_pool_under_load() {
             }
         });
 
-        next_op_time += Duration::from_micros((1000.0 / ops_per_ms) as u64);
+        next_op_time += Duration::from_micros((1000.0 / ops_per_ms.into_inner()) as u64);
         if let Some(sleep_duration) = next_op_time.checked_duration_since(Instant::now()) {
             tokio::time::sleep(sleep_duration).await;
         }
@@ -358,13 +376,13 @@ async fn test_database_pool_under_load() {
 
     // Verify database can handle load
     assert!(
-        actual_rps >= target_rps as f64 * 0.9,
+        actual_rps >= target_rps.into_inner() as f64 * RpsTolerance::ten_percent().into_inner(),
         "Database couldn't handle target RPS: {:.2} < {}",
         actual_rps,
-        target_rps as f64 * 0.9
+        target_rps.into_inner() as f64 * RpsTolerance::ten_percent().into_inner()
     );
     assert!(
-        total_errors < total_ops * DB_ERROR_THRESHOLD_PERCENT / 100,
+        total_errors < total_ops * db_error_threshold_percent().into_inner() as u64 / 100,
         "Too many database errors: {total_errors} errors out of {total_ops} operations"
     );
 }

@@ -2,6 +2,7 @@
 //! and that performance requirements are being met.
 
 use std::time::{Duration, Instant};
+use union_square::benchmark_types::*;
 use union_square::proxy::types::*;
 
 /// Test that we can measure sub-millisecond operations accurately
@@ -31,13 +32,14 @@ fn test_critical_path_performance() {
     let ring_buffer = RingBuffer::new(&config);
 
     // Run multiple iterations to get stable measurements
+    let iterations = BenchmarkIterations::try_new(100).expect("100 is valid iterations");
     let mut durations = Vec::new();
-    for _ in 0..100 {
+    for _ in 0..iterations.into_inner() {
         let start = Instant::now();
 
         // Critical path operations
         let request_id = RequestId::new();
-        let data = vec![b'x'; 1024]; // 1KB payload
+        let data = vec![b'x'; PayloadSize::one_kb().into_inner()]; // 1KB payload
         let _ = ring_buffer.write(request_id, &data);
 
         durations.push(start.elapsed());
@@ -50,12 +52,14 @@ fn test_critical_path_performance() {
 
     // Verify performance requirements
     // The whole critical path should be well under 5ms
+    let avg_threshold = LatencyThreshold::one_ms().expect("1ms is valid threshold");
     assert!(
-        avg < Duration::from_millis(1),
+        avg < avg_threshold.into_inner(),
         "Average duration {avg:?} exceeds 1ms"
     );
+    let max_threshold = LatencyThreshold::five_ms().expect("5ms is valid threshold");
     assert!(
-        *max < Duration::from_millis(5),
+        *max < max_threshold.into_inner(),
         "Max duration {max:?} exceeds 5ms budget"
     );
 }
@@ -76,13 +80,15 @@ fn test_concurrent_performance() {
     let start = Instant::now();
 
     // Spawn 10 threads each doing 100 operations
-    let handles: Vec<_> = (0..10)
+    let thread_count = ThreadCount::try_new(10).expect("10 is valid thread count");
+    let ops_per_thread = OperationsPerThread::try_new(100).expect("100 is valid ops count");
+    let handles: Vec<_> = (0..thread_count.into_inner())
         .map(|_| {
             let rb = ring_buffer.clone();
             thread::spawn(move || {
-                for _ in 0..100 {
+                for _ in 0..ops_per_thread.into_inner() {
                     let request_id = RequestId::new();
-                    let data = vec![b'x'; 1024];
+                    let data = vec![b'x'; PayloadSize::one_kb().into_inner()];
                     let _ = rb.write(request_id, &data);
                 }
             })
@@ -96,8 +102,10 @@ fn test_concurrent_performance() {
     let total_elapsed = start.elapsed();
 
     // 1000 total operations should complete quickly even with contention
+    let timeout =
+        ConcurrencyTestTimeout::try_new(Duration::from_secs(1)).expect("1s is valid timeout");
     assert!(
-        total_elapsed < Duration::from_secs(1),
+        total_elapsed < timeout.into_inner(),
         "Concurrent operations took {total_elapsed:?}, exceeding 1 second"
     );
 }
@@ -107,10 +115,10 @@ fn test_concurrent_performance() {
 fn test_allocation_performance() {
     use union_square::proxy::types::{AuditEvent, AuditEventType};
 
-    let iterations = 1000;
+    let iterations = BenchmarkIterations::try_new(1000).expect("1000 is valid iterations");
     let start = Instant::now();
 
-    for _ in 0..iterations {
+    for _ in 0..iterations.into_inner() {
         // Create events that would be serialized
         let event = AuditEvent {
             request_id: RequestId::new(),
@@ -124,7 +132,7 @@ fn test_allocation_performance() {
                     ("authorization".to_string(), "Bearer test-key".to_string()),
                 ])
                 .unwrap(),
-                body_size: BodySize::from(1024),
+                body_size: BodySize::from(PayloadSize::one_kb().into_inner()),
             },
         };
 
@@ -133,11 +141,12 @@ fn test_allocation_performance() {
     }
 
     let elapsed = start.elapsed();
-    let per_iteration = elapsed / iterations;
+    let per_iteration = elapsed / iterations.into_inner();
 
     // Each event creation and serialization should be sub-millisecond
+    let per_iter_threshold = LatencyThreshold::one_ms().expect("1ms is valid threshold");
     assert!(
-        per_iteration < Duration::from_millis(1),
+        per_iteration < per_iter_threshold.into_inner(),
         "Per-iteration time {per_iteration:?} exceeds 1ms"
     );
 }

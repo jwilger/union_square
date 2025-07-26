@@ -6,6 +6,7 @@
 //! memory profiling. This benchmark should be run in isolation to avoid
 //! interference with other benchmarks.
 
+use union_square::benchmark_types::*;
 use union_square::proxy::storage::RingBuffer;
 use union_square::proxy::types::*;
 
@@ -41,15 +42,25 @@ fn profile_ring_buffer() {
     let ring_buffer = RingBuffer::new(&config);
 
     // Write various sized payloads
-    for size in &[1024, 10 * 1024, 64 * 1024] {
-        let data = vec![b'x'; *size];
+    let payload_sizes = [
+        PayloadSize::one_kb(),
+        PayloadSize::ten_kb(),
+        PayloadSize::sixty_four_kb(),
+    ];
+    for size in &payload_sizes {
+        let data = vec![b'x'; size.into_inner()];
         let request_id = RequestId::new();
 
-        for _ in 0..100 {
+        let write_iterations = BenchmarkIterations::try_new(100).expect("100 is valid iterations");
+        for _ in 0..write_iterations.into_inner() {
             let _ = ring_buffer.write(request_id, &data);
         }
 
-        println!("Completed 100 writes of {}KB", size / 1024);
+        println!(
+            "Completed {} writes of {}KB",
+            write_iterations.into_inner(),
+            size.into_inner() / 1024
+        );
     }
 }
 
@@ -59,7 +70,8 @@ fn profile_audit_events() {
     let mut events = Vec::new();
 
     // Create and serialize various audit events
-    for i in 0..1000 {
+    let event_iterations = BenchmarkIterations::try_new(1000).expect("1000 is valid iterations");
+    for i in 0..event_iterations.into_inner() {
         let event = AuditEvent {
             request_id: RequestId::new(),
             session_id: SessionId::new(),
@@ -74,7 +86,9 @@ fn profile_audit_events() {
                         ("user-agent".to_string(), "union-square/1.0".to_string()),
                     ])
                     .unwrap(),
-                    body_size: BodySize::from(1024 * (i % 10 + 1) as usize),
+                    body_size: BodySize::from(
+                        PayloadSize::one_kb().into_inner() * (i % 10 + 1) as usize,
+                    ),
                 }
             } else {
                 AuditEventType::ResponseReceived {
@@ -83,11 +97,16 @@ fn profile_audit_events() {
                         ("content-type".to_string(), "application/json".to_string()),
                         (
                             "content-length".to_string(),
-                            format!("{}", 2048 * (i % 5 + 1)),
+                            format!(
+                                "{}",
+                                PayloadSize::one_kb().into_inner() * 2 * (i % 5 + 1) as usize
+                            ),
                         ),
                     ])
                     .unwrap(),
-                    body_size: BodySize::from(2048 * (i % 5 + 1) as usize),
+                    body_size: BodySize::from(
+                        PayloadSize::one_kb().into_inner() * 2 * (i % 5 + 1) as usize,
+                    ),
                     duration_ms: DurationMillis::from(15 + (i % 100) as u64),
                 }
             },
@@ -97,7 +116,10 @@ fn profile_audit_events() {
         events.push(serialized);
     }
 
-    println!("Created and serialized 1000 audit events");
+    println!(
+        "Created and serialized {} audit events",
+        event_iterations.into_inner()
+    );
     println!(
         "Total serialized size: {} bytes",
         events.iter().map(|e| e.len()).sum::<usize>()
@@ -116,16 +138,22 @@ fn profile_concurrent_allocations() {
     };
     let ring_buffer = Arc::new(RingBuffer::new(&config));
 
-    let handles: Vec<_> = (0..10)
+    let thread_count = ThreadCount::try_new(10).expect("10 is valid thread count");
+    let handles: Vec<_> = (0..thread_count.into_inner())
         .map(|thread_id| {
             let rb = ring_buffer.clone();
             thread::spawn(move || {
-                for i in 0..1000 {
+                let ops_per_thread = OperationsPerThread::try_new(1000).expect("1000 is valid ops");
+                for i in 0..ops_per_thread.into_inner() {
                     let request_id = RequestId::new();
-                    let data = vec![b'x'; 1024 + (i % 10) * 1024]; // Variable sizes
+                    let base_size = PayloadSize::one_kb().into_inner();
+                    let data = vec![b'x'; base_size + (i % 10) as usize * base_size]; // Variable sizes
                     let _ = rb.write(request_id, &data);
                 }
-                println!("Thread {thread_id} completed 1000 writes");
+                println!(
+                    "Thread {thread_id} completed {} writes",
+                    ops_per_thread.into_inner()
+                );
             })
         })
         .collect();
