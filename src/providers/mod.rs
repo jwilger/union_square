@@ -9,7 +9,6 @@ pub mod response_processor;
 use crate::proxy::types::ProxyError;
 use async_trait::async_trait;
 use axum::body::Body;
-use currencies::{currency::USD, Amount};
 use hyper::{Request, Response};
 use nutype::nutype;
 use std::sync::Arc;
@@ -161,7 +160,6 @@ pub struct ProviderMetadata {
     pub request_tokens: Option<crate::providers::bedrock::types::InputTokens>,
     pub response_tokens: Option<crate::providers::bedrock::types::OutputTokens>,
     pub total_tokens: Option<crate::providers::bedrock::types::TotalTokens>,
-    pub cost_estimate: Option<Amount<USD>>,
     pub provider_request_id: Option<RequestId>,
 }
 
@@ -173,7 +171,6 @@ impl Default for ProviderMetadata {
             request_tokens: None,
             response_tokens: None,
             total_tokens: None,
-            cost_estimate: None,
             provider_request_id: None,
         }
     }

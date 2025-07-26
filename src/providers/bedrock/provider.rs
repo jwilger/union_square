@@ -3,7 +3,7 @@
 use crate::providers::bedrock::{
     auth::{extract_sigv4_headers, validate_sigv4_auth},
     models::extract_model_id,
-    types::{AwsRegion, ModelFamily, ModelPricing},
+    types::{AwsRegion, ModelFamily},
 };
 use crate::providers::{
     HealthStatus, Provider, ProviderError, ProviderId, ProviderMetadata, RequestId,
@@ -152,12 +152,6 @@ impl Provider for BedrockProvider {
 
             // Note: Actual token extraction happens in process_response_body
             // This method just provides basic metadata
-
-            // Calculate cost estimate if we have pricing info
-            if let Some(_pricing) = ModelPricing::for_model(model_id.as_ref()) {
-                // Cost will be calculated when we have token counts
-                // For now, just indicate that pricing is available
-            }
         }
 
         // Extract AWS request ID from response headers

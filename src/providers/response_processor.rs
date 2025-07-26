@@ -2,7 +2,7 @@
 
 use crate::providers::bedrock::{
     models::extract_token_usage,
-    types::{ModelFamily, ModelId, ModelPricing},
+    types::{ModelFamily, ModelId},
 };
 use crate::providers::{ProviderId, ProviderMetadata};
 use bytes::Bytes;
@@ -60,7 +60,6 @@ impl ProviderResponseProcessor {
                     metadata.response_tokens =
                         extracted.response_tokens.or(metadata.response_tokens);
                     metadata.total_tokens = extracted.total_tokens.or(metadata.total_tokens);
-                    metadata.cost_estimate = extracted.cost_estimate.or(metadata.cost_estimate);
                 }
             }
         }
@@ -84,13 +83,6 @@ impl ProviderResponseProcessor {
             metadata.request_tokens = Some(token_usage.input_tokens);
             metadata.response_tokens = Some(token_usage.output_tokens);
             metadata.total_tokens = Some(token_usage.total_tokens);
-
-            // Calculate cost if pricing is available
-            if let Some(pricing) = ModelPricing::for_model(model_id.as_ref()) {
-                metadata.cost_estimate = Some(
-                    pricing.calculate_cost(token_usage.input_tokens, token_usage.output_tokens),
-                );
-            }
         }
 
         Some(metadata)
@@ -138,7 +130,6 @@ mod tests {
             Some(OutputTokens::try_new(5).unwrap())
         );
         assert_eq!(metadata.total_tokens.unwrap().into_inner(), 15);
-        assert!(metadata.cost_estimate.is_some());
     }
 
     #[test]
@@ -172,7 +163,6 @@ mod tests {
             Some(OutputTokens::try_new(20).unwrap())
         );
         assert_eq!(metadata.total_tokens.unwrap().into_inner(), 32);
-        assert!(metadata.cost_estimate.is_some());
     }
 
     #[test]

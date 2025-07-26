@@ -8,7 +8,6 @@
 //! - Response processing
 
 use axum::body::Body;
-use currencies::{currency::USD, Amount};
 use hyper::{Request, Response, StatusCode};
 use std::sync::Arc;
 use union_square::providers::{
@@ -147,14 +146,6 @@ fn test_response_processor_claude() {
         metadata.total_tokens,
         Some(TotalTokens::try_new(40).unwrap())
     );
-    assert!(metadata.cost_estimate.is_some());
-
-    // Verify cost calculation (Claude 3 Sonnet: $0.003/1K input, $0.015/1K output)
-    // 25 input tokens: 0.003 * 25/1000 = $0.000075
-    // 15 output tokens: 0.015 * 15/1000 = $0.000225
-    // Total: $0.0003 = 0.03 cents, rounds UP to 1 cent
-    let expected_cost = Amount::<USD>::from_raw(1);
-    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]
@@ -191,13 +182,6 @@ fn test_response_processor_titan() {
         metadata.total_tokens,
         Some(TotalTokens::try_new(50).unwrap())
     );
-
-    // Verify Titan Express cost ($0.0008/1K input, $0.0016/1K output)
-    // 20 input tokens: 0.0008 * 20/1000 = $0.000016
-    // 30 output tokens: 0.0016 * 30/1000 = $0.000048
-    // Total: $0.000064 = 0.0064 cents, rounds UP to 1 cent
-    let expected_cost = Amount::<USD>::from_raw(1);
-    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]
@@ -232,13 +216,6 @@ fn test_response_processor_llama() {
         metadata.total_tokens,
         Some(TotalTokens::try_new(25).unwrap())
     );
-
-    // Verify Llama 70B cost ($0.00265/1K input, $0.0035/1K output)
-    // 15 input tokens: 0.00265 * 15/1000 = $0.00003975
-    // 10 output tokens: 0.0035 * 10/1000 = $0.000035
-    // Total: $0.00007475 = 0.007475 cents, rounds UP to 1 cent
-    let expected_cost = Amount::<USD>::from_raw(1);
-    assert_eq!(metadata.cost_estimate.unwrap(), expected_cost);
 }
 
 #[test]
@@ -291,19 +268,6 @@ fn test_model_family_detection() {
         ModelFamily::from_model_id(&ModelId::try_new("unknown-model".to_string()).unwrap()),
         ModelFamily::Unknown
     );
-}
-
-#[test]
-fn test_model_pricing_lookup() {
-    use union_square::providers::bedrock::types::ModelPricing;
-
-    // Test known models have pricing
-    assert!(ModelPricing::for_model("anthropic.claude-3-opus-20240229").is_some());
-    assert!(ModelPricing::for_model("amazon.titan-text-express-v1").is_some());
-    assert!(ModelPricing::for_model("meta.llama3-70b-instruct-v1").is_some());
-
-    // Test unknown model has no pricing
-    assert!(ModelPricing::for_model("unknown-model-v1").is_none());
 }
 
 // Integration test scenarios that would require async context and mocked HTTP:
