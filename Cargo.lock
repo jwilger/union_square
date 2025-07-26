@@ -4082,6 +4082,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-bedrockruntime",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "config",
