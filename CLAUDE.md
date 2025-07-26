@@ -845,20 +845,6 @@ When addressing PR review feedback:
 - **Keep PRs small and focused** for easier review
 - **All automated comments must be signed with `-- @claude`**
 
-## Known Limitations
-
-### Release-plz PRs and GitHub Actions
-
-**IMPORTANT**: Pull requests created by release-plz using `GITHUB_TOKEN` do NOT automatically trigger other workflows (CI, performance tests, etc.). This is a GitHub security feature to prevent infinite loops.
-
-**Workaround**: All workflows have `workflow_dispatch` triggers to allow manual runs:
-1. Go to the Actions tab in GitHub
-2. Select the workflow you want to run (CI or Performance Tests)
-3. Click "Run workflow" and select the release PR branch
-4. Optionally provide a reason like "Release PR testing"
-
-This ensures release PRs get proper validation before merging.
-
 ## Memories
 
 ### Repository Management Reminders
