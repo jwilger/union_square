@@ -7,11 +7,13 @@ pub mod commands;
 pub mod events;
 pub mod llm;
 pub mod session;
+pub mod test_case;
 pub mod user;
 pub mod version;
 
 pub use events::*;
 pub use llm::*;
 pub use session::*;
+pub use test_case::*;
 pub use user::*;
 pub use version::*;

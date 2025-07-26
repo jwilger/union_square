@@ -140,6 +140,7 @@ impl LlmResponse {
 mod tests {
     use super::*;
     use crate::domain::SessionId;
+    use proptest::prelude::*;
 
     #[test]
     fn test_request_id_generation() {
@@ -207,5 +208,96 @@ mod tests {
         assert_eq!(response.response_text, "Test response");
         assert_eq!(response.metadata.tokens_used, Some(150));
         assert_eq!(response.metadata.cost_cents, Some(5));
+    }
+
+    // Property-based tests
+    proptest! {
+        #[test]
+        fn prop_request_id_uniqueness(n in 1..100usize) {
+            let mut ids = std::collections::HashSet::new();
+            for _ in 0..n {
+                let id = RequestId::generate();
+                assert!(ids.insert(id));
+            }
+        }
+
+        #[test]
+        fn prop_model_version_serialization(
+            provider_choice in 0..5u8,
+            model_id in "[a-zA-Z0-9-]+",
+            custom_name in "[a-zA-Z0-9-]+"
+        ) {
+            let provider = match provider_choice {
+                0 => LlmProvider::OpenAI,
+                1 => LlmProvider::Anthropic,
+                2 => LlmProvider::Google,
+                3 => LlmProvider::Azure,
+                _ => LlmProvider::Other(custom_name),
+            };
+
+            let model_version = ModelVersion {
+                provider: provider.clone(),
+                model_id: model_id.clone(),
+            };
+
+            let json = serde_json::to_string(&model_version).unwrap();
+            let deserialized: ModelVersion = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(model_version, deserialized);
+        }
+
+        #[test]
+        fn prop_llm_request_serialization(
+            prompt in any::<String>(),
+            model_id in "[a-zA-Z0-9-]+",
+            temp in 0.0..2.0f64,
+            max_tokens in 1..4000u32
+        ) {
+            let session_id = SessionId::generate();
+            let model_version = ModelVersion {
+                provider: LlmProvider::OpenAI,
+                model_id,
+            };
+            // Round temperature to avoid floating point precision issues
+            let rounded_temp = (temp * 1000.0).round() / 1000.0;
+            let parameters = serde_json::json!({
+                "temperature": rounded_temp,
+                "max_tokens": max_tokens
+            });
+
+            let request = LlmRequest::new(
+                session_id,
+                model_version,
+                prompt,
+                parameters
+            );
+
+            let json = serde_json::to_string(&request).unwrap();
+            let deserialized: LlmRequest = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(request, deserialized);
+        }
+
+        #[test]
+        fn prop_response_metadata_defaults(
+            tokens in prop::option::of(0..10000u32),
+            cost in prop::option::of(0..100000u32),
+            latency in prop::option::of(0..60000u64),
+            finish_reason in prop::option::of("[a-zA-Z_]+"),
+            model_used in prop::option::of("[a-zA-Z0-9-]+")
+        ) {
+            let metadata = ResponseMetadata {
+                tokens_used: tokens,
+                cost_cents: cost,
+                latency_ms: latency,
+                finish_reason,
+                model_used,
+            };
+
+            let json = serde_json::to_string(&metadata).unwrap();
+            let deserialized: ResponseMetadata = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(metadata, deserialized);
+        }
     }
 }
