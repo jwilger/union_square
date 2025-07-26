@@ -98,6 +98,17 @@ This benchmark uses `dhat` to profile:
 - Audit event serialization overhead
 - Concurrent allocation behavior
 
+### 📈 Performance Benchmarks on GitHub Actions
+
+The CPU-bound performance benchmarks (Criterion benchmarks) **ARE suitable for GitHub Actions** because:
+
+1. **Relative measurements**: We're tracking regressions, not absolute performance
+2. **Consistent environment**: GitHub Actions provides consistent (if limited) hardware
+3. **Statistical validity**: Multiple samples over 10-15 seconds provide reliable comparisons
+4. **No I/O dependency**: These benchmarks test algorithmic performance, not system capacity
+
+**Note**: Absolute timings may be slower on GitHub Actions than production hardware, but relative changes between commits remain meaningful for regression detection.
+
 ## Benchmark Categories
 
 ### `ring_buffer_performance`
