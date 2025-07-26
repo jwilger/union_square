@@ -39,6 +39,7 @@ mod proxy_service_tests {
                 buffer_size: BufferSize::try_new(512 * 1024 * 1024).expect("valid size"), // 512MB
                 slot_size: SlotSize::try_new(32 * 1024).expect("valid size"),             // 32KB
             },
+            bedrock_region: None,
         };
 
         let _service = ProxyService::new(config.clone());

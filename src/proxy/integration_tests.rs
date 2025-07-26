@@ -79,6 +79,7 @@ mod tests {
             max_response_size: ResponseSizeLimit::try_new(BYTES_10MB).unwrap(),
             request_timeout: Duration::from_secs(5),
             ring_buffer: RingBufferConfig::default(),
+            bedrock_region: None,
         };
 
         // Create auth configuration
@@ -235,6 +236,7 @@ mod tests {
             max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).unwrap(),
             request_timeout: Duration::from_secs(5),
             ring_buffer: RingBufferConfig::default(),
+            bedrock_region: None,
         };
 
         let mut auth_config = AuthConfig::default();
@@ -275,6 +277,7 @@ mod tests {
             max_response_size: ResponseSizeLimit::try_new(1024).unwrap(), // 1KB limit
             request_timeout: Duration::from_secs(5),
             ring_buffer: RingBufferConfig::default(),
+            bedrock_region: None,
         };
 
         let mut auth_config = AuthConfig::default();
@@ -315,6 +318,7 @@ mod tests {
             max_response_size: ResponseSizeLimit::try_new(10 * 1024 * 1024).unwrap(),
             request_timeout: Duration::from_millis(50), // Very short timeout
             ring_buffer: RingBufferConfig::default(),
+            bedrock_region: None,
         };
 
         let mut auth_config = AuthConfig::default();
