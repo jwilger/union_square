@@ -154,7 +154,10 @@ pub struct ModelPricing {
 impl ModelPricing {
     /// Get pricing for a specific model
     pub fn for_model(model_id: &str) -> Option<Self> {
-        // Pricing as of 2025 - should be configurable in production
+        // TODO: Make pricing configurable in production via configuration file or database
+        // This would allow updating prices without code changes and support different
+        // pricing tiers for different customers
+        // Pricing as of 2025 - hardcoded for MVP
         match model_id {
             // Claude models - using precise decimal strings to avoid float precision issues
             "anthropic.claude-3-opus-20240229" => Some(Self {
@@ -249,9 +252,21 @@ impl ModelPricing {
         // Convert to cents (multiply by 100) and round UP to next cent (ceiling)
         let total_cents = (total_cost_decimal * Decimal::from(100)).ceil();
 
-        // Convert to u64 for Amount (safe because we're dealing with reasonable cost values)
-        // Use try_into() to convert Decimal to u64
-        let cents_u64 = total_cents.try_into().unwrap_or(0);
+        // Convert to u64 for Amount
+        // Since we control the inputs (validated token counts and prices), and we're dealing
+        // with reasonable cost values, we can safely handle the conversion edge cases:
+        // - Negative values: Not possible since all inputs are validated as non-negative
+        // - Very large values: Would represent costs > $184 quadrillion, which is unrealistic
+        let cents_u64 = if total_cents < Decimal::ZERO {
+            // This should never happen with validated inputs, but handle gracefully
+            0
+        } else if let Ok(cents) = total_cents.try_into() {
+            cents
+        } else {
+            // Overflow case: cap at maximum representable value
+            // This would be ~$184 quadrillion, which is unrealistic for LLM costs
+            u64::MAX
+        };
 
         // Return as Money
         Amount::<USD>::from_raw(cents_u64)

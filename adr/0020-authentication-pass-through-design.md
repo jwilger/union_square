@@ -143,6 +143,23 @@ If we need request attribution, we could:
 
 But these would be IN ADDITION to, not INSTEAD OF, the pass-through authentication.
 
+### Proxy Authentication
+
+Union Square's authentication model (as per ADR-0006) uses API keys for client authentication. This is separate from provider authentication:
+
+1. **Proxy Authentication** (Union Square API key) - Identifies the client application to the proxy
+2. **Provider Authentication** (pass-through) - Authenticates the request to the LLM provider
+
+HTTP proxy standards (RFC 7235) define Proxy-Authorization headers for proxy authentication, but:
+- Traditional HTTP proxies are typically transparent to the application
+- Union Square is an application-level proxy with value-added features
+- We need to track usage per client for audit purposes
+
+Our approach:
+- Use `X-API-Key` header for Union Square authentication (already implemented)
+- Keep provider authentication separate and pass it through unchanged
+- This allows clients to use different provider credentials while sharing a proxy
+
 ## Links
 
 - ADR-0006 - Authentication and Authorization (establishes API key pattern)

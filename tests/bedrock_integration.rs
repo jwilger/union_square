@@ -7,19 +7,17 @@
 //! - Metadata extraction
 //! - Response processing
 
-#[allow(unused_imports)]
 use axum::body::Body;
 use currencies::{currency::USD, Amount};
 use hyper::{Request, Response, StatusCode};
 use std::sync::Arc;
-#[allow(unused_imports)]
 use union_square::providers::{
     bedrock::{
-        types::{AwsRegion, InputTokens, ModelFamily, ModelId, OutputTokens, TotalTokens},
+        types::{AwsRegion, InputTokens, ModelId, OutputTokens, TotalTokens},
         BedrockProvider,
     },
     response_processor::ProviderResponseProcessor,
-    Provider, ProviderId, ProviderMetadata, ProviderRegistry, RequestId,
+    Provider, ProviderId, ProviderRegistry, RequestId,
 };
 
 /// Create a test request with required SigV4 headers

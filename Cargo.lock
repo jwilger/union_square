@@ -3300,16 +3300,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_decimal_macros"
-version = "1.37.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6268b74858287e1a062271b988a0c534bf85bbeb567fe09331bf40ed78113d5"
-dependencies = [
- "quote",
- "syn 2.0.104",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3469,16 +3459,6 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
-]
-
-[[package]]
-name = "rusty-money"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b28f881005eac7ad8d46b6f075da5f322bd7f4f83a38720fc069694ddadd683"
-dependencies = [
- "rust_decimal",
- "rust_decimal_macros",
 ]
 
 [[package]]
@@ -4553,7 +4533,6 @@ dependencies = [
  "regex",
  "rstest",
  "rust_decimal",
- "rusty-money",
  "serde",
  "serde_json",
  "sqlx",

@@ -44,6 +44,9 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+/// Environment variable name for Bedrock endpoint override (primarily for testing)
+const BEDROCK_ENDPOINT_OVERRIDE_ENV: &str = "BEDROCK_ENDPOINT_OVERRIDE";
+
 /// Main proxy service combining hot and audit paths
 pub struct ProxyService {
     hot_path: StreamingHotPathService,
@@ -65,7 +68,7 @@ impl ProxyService {
         use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
 
         // Check for endpoint override (for testing)
-        if let Ok(endpoint_override) = std::env::var("BEDROCK_ENDPOINT_OVERRIDE") {
+        if let Ok(endpoint_override) = std::env::var(BEDROCK_ENDPOINT_OVERRIDE_ENV) {
             let bedrock_provider = Arc::new(BedrockProvider::with_base_url(endpoint_override));
             registry.register(bedrock_provider);
         } else {

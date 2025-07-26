@@ -1,17 +1,9 @@
 //! Tests for AWS Bedrock provider
 
 #[cfg(test)]
-#[allow(unused_imports)]
 mod invoke_model_tests {
-    use crate::providers::bedrock::{
-        models::extract_token_usage,
-        provider::BedrockProvider,
-        types::{
-            AwsRegion, InputTokens, ModelFamily, ModelId, ModelPricing, OutputTokens, TokenUsage,
-            TotalTokens,
-        },
-    };
-    use crate::providers::{Provider, ProviderError, ProviderId, RequestId};
+    use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
+    use crate::providers::{Provider, ProviderError};
     use axum::body::Body;
     use http_body_util::BodyExt;
     use hyper::{Request, StatusCode};
