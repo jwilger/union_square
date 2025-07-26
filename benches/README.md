@@ -68,7 +68,20 @@ Per architect guidance, Union Square must handle:
 2. **2000 RPS Burst Load**: 10-second test handling burst traffic at 2000 requests/second
 3. **1000 Concurrent Users**: 20-second test with 1000 simultaneous connections
 
-Run load tests with:
+#### ⚠️ Important: Load Testing Infrastructure
+
+**Load tests should NOT be run on GitHub Actions** due to resource constraints:
+- GitHub Actions runners have only 2 CPU cores and 7GB RAM
+- This is insufficient for realistic load testing scenarios
+- Results from resource-constrained environments can be misleading
+
+**Recommended approach for load testing:**
+1. Run load tests locally on dedicated hardware or cloud instances
+2. Use production-like infrastructure with adequate resources
+3. Consider using dedicated load testing services (e.g., k6 Cloud, BlazeMeter)
+4. Document baseline performance metrics from representative hardware
+
+Run load tests locally with:
 ```bash
 cargo test --test load_testing --release -- --nocapture --test-threads=1
 ```
