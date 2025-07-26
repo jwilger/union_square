@@ -16,4 +16,7 @@ pub mod models;
 pub mod provider;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use provider::BedrockProvider;

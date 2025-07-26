@@ -15,6 +15,9 @@ pub const X_REQUEST_ID: &str = "x-request-id";
 /// Header name for session ID used for grouping related requests
 pub const X_SESSION_ID: &str = "x-session-id";
 
+/// Header name for API key authentication
+pub const X_API_KEY: &str = "x-api-key";
+
 /// Authorization header prefix for bearer tokens
 pub const BEARER_PREFIX: &str = "Bearer ";
 

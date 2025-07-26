@@ -281,6 +281,8 @@ pub struct ProxyConfig {
     pub request_timeout: Duration,
     /// Ring buffer configuration
     pub ring_buffer: RingBufferConfig,
+    /// AWS region for Bedrock provider (optional, defaults to us-east-1)
+    pub bedrock_region: Option<String>,
 }
 
 impl Default for ProxyConfig {
@@ -290,6 +292,7 @@ impl Default for ProxyConfig {
             max_response_size: ResponseSizeLimit::try_new(BYTES_10MB).expect("10MB is valid"),
             request_timeout: Duration::from_secs(TIMEOUT_DEFAULT_SECS),
             ring_buffer: RingBufferConfig::default(),
+            bedrock_region: None,
         }
     }
 }

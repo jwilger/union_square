@@ -22,6 +22,11 @@ impl BedrockProvider {
         Self { base_url }
     }
 
+    /// Create a new Bedrock provider with a custom base URL (for testing)
+    pub fn with_base_url(base_url: String) -> Self {
+        Self { base_url }
+    }
+
     /// Build the target URL for Bedrock API
     fn build_target_url(&self, path: &str) -> Result<Uri, ProviderError> {
         // Remove /bedrock prefix from path
