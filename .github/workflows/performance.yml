@@ -1,0 +1,236 @@
+name: Performance Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Performance thresholds
+  MAX_LATENCY_MS: 5
+  MAX_REGRESSION_PERCENT: 10
+
+jobs:
+  performance:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need history for baseline comparison
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-criterion
+      run: |
+        cargo install cargo-criterion --locked || true
+        cargo install critcmp --locked || true
+
+    - name: Run benchmark validation tests
+      run: cargo test --test benchmark_validation
+
+    - name: Get baseline benchmark results
+      if: github.event_name == 'pull_request'
+      run: |
+        # Checkout base branch for comparison
+        git fetch origin ${{ github.base_ref }}
+        git checkout origin/${{ github.base_ref }}
+
+        # Run benchmarks on base branch
+        cargo bench --bench proxy_performance -- --save-baseline base --sample-size 50
+
+        # Return to PR branch
+        git checkout -
+
+    - name: Run performance benchmarks
+      run: |
+        cargo bench --bench proxy_performance -- --save-baseline current --sample-size 50
+
+    - name: Compare benchmark results
+      if: github.event_name == 'pull_request'
+      id: benchmark_comparison
+      run: |
+        # Compare results
+        critcmp base current > comparison.txt || true
+
+        # Check for regressions
+        if grep -E "\\+[0-9]{2,}\\.[0-9]+%" comparison.txt; then
+          echo "Performance regression detected!"
+          echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+        else
+          echo "No significant regression detected"
+          echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+        fi
+
+        # Save comparison for PR comment
+        echo '```' > benchmark_report.md
+        cat comparison.txt >> benchmark_report.md
+        echo '```' >> benchmark_report.md
+
+    - name: Run memory profiling
+      run: |
+        cargo bench --bench memory_profiling > memory_profile.txt 2>&1 || true
+
+    - name: Post benchmark results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+
+          let comment = '## 📊 Performance Benchmark Results\n\n';
+
+          // Add comparison results if available
+          try {
+            const comparison = fs.readFileSync('benchmark_report.md', 'utf8');
+            comment += '### Benchmark Comparison (base vs current)\n';
+            comment += comparison + '\n\n';
+          } catch (e) {
+            comment += '### Benchmark Results\n';
+            comment += 'No baseline comparison available.\n\n';
+          }
+
+          // Add memory profile summary
+          try {
+            const memProfile = fs.readFileSync('memory_profile.txt', 'utf8');
+            const lines = memProfile.split('\n').slice(-20).join('\n');
+            comment += '### Memory Profile Summary\n';
+            comment += '```\n' + lines + '\n```\n\n';
+          } catch (e) {
+            console.log('No memory profile available');
+          }
+
+          // Check for regression
+          const regressionDetected = '${{ steps.benchmark_comparison.outputs.REGRESSION_DETECTED }}' === 'true';
+          if (regressionDetected) {
+            comment += '⚠️ **Performance regression detected!** Please review the benchmark comparison above.\n';
+            comment += 'Regressions exceeding ' + process.env.MAX_REGRESSION_PERCENT + '% require justification.\n';
+          } else {
+            comment += '✅ **No significant performance regressions detected.**\n';
+          }
+
+          comment += '\n<sub>All latency requirements (<' + process.env.MAX_LATENCY_MS + 'ms) are enforced by the test suite.</sub>';
+
+          // Find existing comment or create new one
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Performance Benchmark Results')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment,
+            });
+          }
+
+    - name: Fail if regression detected
+      if: steps.benchmark_comparison.outputs.REGRESSION_DETECTED == 'true'
+      run: |
+        echo "Performance regression detected! See PR comment for details."
+        exit 1
+
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: union_square
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build release binary
+      run: cargo build --release
+
+    - name: Install vegeta for load testing
+      run: |
+        wget https://github.com/tsenart/vegeta/releases/download/v12.11.1/vegeta_12.11.1_linux_amd64.tar.gz
+        tar -xzf vegeta_12.11.1_linux_amd64.tar.gz
+        chmod +x vegeta
+        sudo mv vegeta /usr/local/bin/
+
+    - name: Start Union Square server
+      run: |
+        DATABASE_URL=postgres://postgres:postgres@localhost:5432/union_square \
+        ./target/release/union_square &
+        sleep 5  # Wait for server to start
+
+    - name: Run load tests
+      run: |
+        # Test 1: 500 RPS sustained load (MVP target)
+        echo "GET http://localhost:8080/health" | vegeta attack -rate=500 -duration=30s | vegeta report > load_test_500rps.txt
+
+        # Test 2: 2000 RPS burst load (MVP target)
+        echo "GET http://localhost:8080/health" | vegeta attack -rate=2000 -duration=10s | vegeta report > load_test_2000rps.txt
+
+        # Test 3: 1000 concurrent connections (MVP target)
+        echo "GET http://localhost:8080/health" | vegeta attack -rate=1000 -duration=20s -workers=100 | vegeta report > load_test_concurrent.txt
+
+        # Display results
+        echo "=== 500 RPS Sustained Load Test ==="
+        cat load_test_500rps.txt
+        echo -e "\n=== 2000 RPS Burst Load Test ==="
+        cat load_test_2000rps.txt
+        echo -e "\n=== 1000 Concurrent Connections Test ==="
+        cat load_test_concurrent.txt
+
+        # Check if latency requirements are met
+        for file in load_test_*.txt; do
+          if grep -E "99th percentile:.*[0-9]{2,}ms" "$file"; then
+            echo "WARNING: High latency detected in $file"
+            exit 1
+          fi
+        done
