@@ -1,8 +1,8 @@
 # 0007. EventCore as Central Audit Mechanism
 
-- Status: proposed
+- Status: accepted
 - Deciders: John Wilger, Claude
-- Date: 2025-01-15
+- Date: 2025-07-15
 
 ## Context and Problem Statement
 
@@ -97,12 +97,14 @@ Use PostgreSQL triggers to maintain audit tables for all changes.
 ## Implementation Approach
 
 1. **Event Categories**:
+
    - **Operational Events**: SessionStarted, RequestRecorded, ResponseRecorded
    - **Configuration Events**: ApiKeyAdded, ApiKeyRevoked, RateLimitChanged
    - **Access Control Events**: ModelAccessGranted, UserPermissionChanged
    - **System Events**: ServiceStarted, ServiceShutdown, HealthCheckFailed
 
 2. **Architecture Boundaries**:
+
    - EventCore never touches the proxy request path
    - Events emitted to async channels for processing
    - Cached projections for frequently accessed configuration
