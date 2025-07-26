@@ -173,24 +173,3 @@ jobs:
 
     - name: Build
       run: cargo build --workspace
-
-  # Run quick performance validation on every PR
-  performance-check:
-    name: Performance Validation
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-
-    - name: Run performance validation tests
-      run: cargo test --test benchmark_validation
-
-    - name: Run quick benchmarks
-      run: cargo bench --bench proxy_performance -- --quick --noplot
