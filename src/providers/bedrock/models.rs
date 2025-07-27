@@ -6,6 +6,7 @@
 use crate::providers::bedrock::types::{
     InputTokens, ModelFamily, ModelId, OutputTokens, TokenUsage,
 };
+use crate::providers::constants::{json_fields, paths};
 use crate::providers::ProviderError;
 use serde_json::Value;
 
@@ -17,7 +18,7 @@ pub fn extract_model_id(path: &str) -> Option<ModelId> {
     // Find "model" in path and get the next element
     parts
         .iter()
-        .position(|&p| p == "model")
+        .position(|&p| p == paths::bedrock::MODEL_SEGMENT)
         .and_then(|i| parts.get(i + 1))
         .and_then(|&s| ModelId::try_new(s.to_string()).ok())
 }
@@ -39,9 +40,9 @@ pub fn extract_token_usage(
 
 /// Extract token usage from Claude response
 fn extract_claude_tokens(response: &Value) -> Option<TokenUsage> {
-    let usage = response.get("usage")?;
-    let input_count = usage.get("input_tokens")?.as_u64()? as u32;
-    let output_count = usage.get("output_tokens")?.as_u64()? as u32;
+    let usage = response.get(json_fields::claude::USAGE)?;
+    let input_count = usage.get(json_fields::claude::INPUT_TOKENS)?.as_u64()? as u32;
+    let output_count = usage.get(json_fields::claude::OUTPUT_TOKENS)?.as_u64()? as u32;
 
     let input_tokens = InputTokens::try_new(input_count).ok()?;
     let output_tokens = OutputTokens::try_new(output_count).ok()?;
@@ -51,12 +52,14 @@ fn extract_claude_tokens(response: &Value) -> Option<TokenUsage> {
 
 /// Extract token usage from Titan response
 fn extract_titan_tokens(response: &Value) -> Option<TokenUsage> {
-    let input_count = response.get("inputTextTokenCount")?.as_u64()? as u32;
-    let results = response.get("results")?.as_array()?;
+    let input_count = response
+        .get(json_fields::titan::INPUT_TEXT_TOKEN_COUNT)?
+        .as_u64()? as u32;
+    let results = response.get(json_fields::titan::RESULTS)?.as_array()?;
 
     let output_count = results
         .iter()
-        .filter_map(|r| r.get("tokenCount")?.as_u64())
+        .filter_map(|r| r.get(json_fields::titan::TOKEN_COUNT)?.as_u64())
         .sum::<u64>() as u32;
 
     let input_tokens = InputTokens::try_new(input_count).ok()?;
@@ -68,8 +71,12 @@ fn extract_titan_tokens(response: &Value) -> Option<TokenUsage> {
 /// Extract token usage from Llama response
 fn extract_llama_tokens(response: &Value) -> Option<TokenUsage> {
     // Llama models return token counts in generation_token_count and prompt_token_count
-    let output_count = response.get("generation_token_count")?.as_u64()? as u32;
-    let input_count = response.get("prompt_token_count")?.as_u64()? as u32;
+    let output_count = response
+        .get(json_fields::llama::GENERATION_TOKEN_COUNT)?
+        .as_u64()? as u32;
+    let input_count = response
+        .get(json_fields::llama::PROMPT_TOKEN_COUNT)?
+        .as_u64()? as u32;
 
     let input_tokens = InputTokens::try_new(input_count).ok()?;
     let output_tokens = OutputTokens::try_new(output_count).ok()?;
@@ -79,11 +86,15 @@ fn extract_llama_tokens(response: &Value) -> Option<TokenUsage> {
 
 /// Extract token usage from Jurassic response
 fn extract_jurassic_tokens(response: &Value) -> Option<TokenUsage> {
-    let completions = response.get("completions")?.as_array()?;
+    let completions = response
+        .get(json_fields::jurassic::COMPLETIONS)?
+        .as_array()?;
     if let Some(first) = completions.first() {
-        let data = first.get("data")?;
-        let input_count = data.get("tokens")?.as_array()?.len() as u32;
-        let output_count = data.get("generated_tokens")?.as_u64()? as u32;
+        let data = first.get(json_fields::jurassic::DATA)?;
+        let input_count = data.get(json_fields::jurassic::TOKENS)?.as_array()?.len() as u32;
+        let output_count = data
+            .get(json_fields::jurassic::GENERATED_TOKENS)?
+            .as_u64()? as u32;
 
         let input_tokens = InputTokens::try_new(input_count).ok()?;
         let output_tokens = OutputTokens::try_new(output_count).ok()?;
@@ -97,8 +108,12 @@ fn extract_jurassic_tokens(response: &Value) -> Option<TokenUsage> {
 /// Extract token usage from Command response
 fn extract_command_tokens(response: &Value) -> Option<TokenUsage> {
     // Cohere Command models include token counts in the response
-    let input_count = response.get("prompt_tokens")?.as_u64()? as u32;
-    let output_count = response.get("completion_tokens")?.as_u64()? as u32;
+    let input_count = response
+        .get(json_fields::command::PROMPT_TOKENS)?
+        .as_u64()? as u32;
+    let output_count = response
+        .get(json_fields::command::COMPLETION_TOKENS)?
+        .as_u64()? as u32;
 
     let input_tokens = InputTokens::try_new(input_count).ok()?;
     let output_tokens = OutputTokens::try_new(output_count).ok()?;
