@@ -1,5 +1,5 @@
 use crate::domain::types::{
-    Cost, FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
+    FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
 };
 use chrono::{DateTime, Utc};
 use nutype::nutype;
@@ -87,7 +87,6 @@ pub enum RequestStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
     pub tokens_used: Option<TokenCount>,
-    pub cost_cents: Option<Cost>,
     pub latency_ms: Option<Latency>,
     pub finish_reason: Option<FinishReason>,
     pub model_used: Option<ModelId>,
@@ -204,7 +203,6 @@ mod tests {
         let request_id = RequestId::generate();
         let metadata = ResponseMetadata {
             tokens_used: Some(TokenCount::try_new(150).unwrap()),
-            cost_cents: Some(Cost::try_new(5).unwrap()),
             latency_ms: Some(Latency::try_new(1200).unwrap()),
             finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
             model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
@@ -220,10 +218,6 @@ mod tests {
         assert_eq!(
             response.metadata.tokens_used,
             Some(TokenCount::try_new(150).unwrap())
-        );
-        assert_eq!(
-            response.metadata.cost_cents,
-            Some(Cost::try_new(5).unwrap())
         );
     }
 
@@ -302,14 +296,12 @@ mod tests {
         #[test]
         fn prop_response_metadata_defaults(
             tokens in prop::option::of(0..10000u32),
-            cost in prop::option::of(0..100000u32),
             latency in prop::option::of(0..60000u64),
             finish_reason in prop::option::of("[a-zA-Z_]+"),
             model_used in prop::option::of("[a-zA-Z0-9-]+")
         ) {
             let metadata = ResponseMetadata {
                 tokens_used: tokens.and_then(|t| TokenCount::try_new(t).ok()),
-                cost_cents: cost.and_then(|c| Cost::try_new(c).ok()),
                 latency_ms: latency.and_then(|l| Latency::try_new(l).ok()),
                 finish_reason: finish_reason.and_then(|s| FinishReason::try_new(s).ok()),
                 model_used: model_used.and_then(|s| ModelId::try_new(s).ok()),

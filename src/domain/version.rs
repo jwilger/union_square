@@ -44,8 +44,7 @@ impl TrackedVersion {
 
     pub fn record_usage(&mut self) {
         self.last_seen = Utc::now();
-        // Saturating add to prevent overflow
-        self.request_count = RequestCount::new(self.request_count.as_ref().saturating_add(1));
+        self.request_count = self.request_count.increment();
     }
 
     pub fn deactivate(&mut self) {

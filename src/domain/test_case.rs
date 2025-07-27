@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use uuid::Uuid;
 
+/// Placeholder prompt template used in draft state before actual prompt is set
+const PLACEHOLDER_PROMPT_TEMPLATE: &str = "PLACEHOLDER";
+
 /// Unique identifier for a test case
 #[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef))]
 pub struct TestCaseId(Uuid);
@@ -115,7 +118,8 @@ impl TestCase<Draft> {
             description,
             expected_behavior: ExpectedBehavior {
                 // Use a placeholder prompt template - will be replaced before finalize
-                prompt_template: PromptTemplate::try_new("PLACEHOLDER".to_string()).unwrap(),
+                prompt_template: PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string())
+                    .unwrap(),
                 expected_patterns: Vec::new(),
                 forbidden_patterns: Vec::new(),
                 metadata_assertions: MetadataAssertions::new(serde_json::Value::Object(
@@ -138,7 +142,7 @@ impl TestCase<Draft> {
     /// Finalize the test case, moving it to Ready state
     pub fn finalize(self) -> Result<TestCase<Ready>, ValidationError> {
         // Validate the test case - check if still placeholder
-        if self.expected_behavior.prompt_template.as_ref() == "PLACEHOLDER" {
+        if self.expected_behavior.prompt_template.as_ref() == PLACEHOLDER_PROMPT_TEMPLATE {
             return Err(ValidationError::EmptyPromptTemplate);
         }
         if self.expected_behavior.expected_patterns.is_empty() {
@@ -447,7 +451,7 @@ mod tests {
 
             let prompt_template = if prompt.is_empty() {
                 // Keep placeholder for empty prompts
-                PromptTemplate::try_new("PLACEHOLDER".to_string()).unwrap()
+                PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string()).unwrap()
             } else {
                 PromptTemplate::try_new(prompt.clone()).unwrap()
             };
@@ -462,7 +466,7 @@ mod tests {
             let draft = draft.with_expected_behavior(behavior);
             let result = draft.finalize();
 
-            if prompt.is_empty() || prompt == "PLACEHOLDER" {
+            if prompt.is_empty() || prompt == PLACEHOLDER_PROMPT_TEMPLATE {
                 assert!(matches!(result, Err(ValidationError::EmptyPromptTemplate)));
             } else if expected_count == 0 {
                 assert!(matches!(result, Err(ValidationError::NoExpectedPatterns)));
