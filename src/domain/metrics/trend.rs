@@ -20,18 +20,6 @@ pub enum TrendDirection {
 }
 
 impl TrendDirection {
-    /// Determine trend direction from change value and threshold
-    #[deprecated(note = "Use from_values with MetricValue types instead")]
-    pub fn from_change(change: f64, stability_threshold: StabilityThreshold) -> Self {
-        if change.abs() <= stability_threshold.into_inner() {
-            Self::Stable
-        } else if change > 0.0 {
-            Self::Improving
-        } else {
-            Self::Declining
-        }
-    }
-
     /// Determine trend direction from two metric values
     pub fn from_values(
         current: MetricValue,
@@ -110,16 +98,6 @@ impl TrendMagnitude {
         Self::try_new(magnitude).map_err(|_| TrendError::InvalidMagnitude(magnitude))
     }
 
-    /// Calculate magnitude from raw values (for backward compatibility)
-    #[deprecated(note = "Use from_values with MetricValue types instead")]
-    pub fn from_raw_values(current: f64, previous: f64) -> Result<Self, TrendError> {
-        if previous == 0.0 {
-            return Err(TrendError::ZeroDivision);
-        }
-        let magnitude = ((current - previous) / previous).abs();
-        Self::try_new(magnitude).map_err(|_| TrendError::InvalidMagnitude(magnitude))
-    }
-
     /// Categorize the magnitude of change
     pub fn category(&self) -> TrendCategory {
         match self.into_inner() {
@@ -168,23 +146,6 @@ impl TrendAnalysis {
         })
     }
 
-    /// Create trend analysis from raw f64 values (for backward compatibility)
-    #[deprecated(note = "Use from_values with MetricValue types instead")]
-    pub fn from_raw_values(
-        current: f64,
-        previous: f64,
-        stability_threshold: f64,
-    ) -> Result<Self, TrendError> {
-        let current_metric =
-            MetricValue::try_new(current).map_err(|_| TrendError::InvalidMagnitude(current))?;
-        let previous_metric =
-            MetricValue::try_new(previous).map_err(|_| TrendError::InvalidMagnitude(previous))?;
-        let threshold = StabilityThreshold::try_new(stability_threshold)
-            .map_err(|_| TrendError::InvalidThreshold(stability_threshold))?;
-
-        Self::from_values(current_metric, previous_metric, threshold)
-    }
-
     /// Create a new trend analysis from direction and magnitude
     pub fn new(direction: TrendDirection, magnitude: TrendMagnitude) -> Self {
         let category = magnitude.category();
@@ -208,8 +169,6 @@ pub enum TrendError {
     ZeroDivision,
     /// Invalid magnitude value
     InvalidMagnitude(f64),
-    /// Invalid stability threshold value
-    InvalidThreshold(f64),
 }
 
 impl fmt::Display for TrendError {
@@ -217,7 +176,6 @@ impl fmt::Display for TrendError {
         match self {
             Self::ZeroDivision => write!(f, "Cannot calculate trend: previous value is zero"),
             Self::InvalidMagnitude(value) => write!(f, "Invalid trend magnitude: {value}"),
-            Self::InvalidThreshold(value) => write!(f, "Invalid stability threshold: {value}"),
         }
     }
 }
