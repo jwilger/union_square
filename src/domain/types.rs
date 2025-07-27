@@ -7,6 +7,7 @@ use nutype::nutype;
 #[allow(unused_imports)] // These are used by nutype derive macros
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use tracing::warn;
 
 /// User agent string from HTTP headers
 ///
@@ -81,10 +82,10 @@ pub struct TestCaseDescription(String);
 
 /// Prompt template for test cases
 ///
-/// Limited to 10,000 characters to support complex prompts with multiple examples
-/// while preventing excessive memory usage. This aligns with typical LLM context limits.
+/// Hard limit of 10MB (10,485,760 chars) for DoS protection.
+/// This is approximately 2.6M tokens, well beyond current LLM context windows.
 #[nutype(
-    validate(not_empty, len_char_max = 10000),
+    validate(not_empty, len_char_max = 10485760),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct PromptTemplate(String);
@@ -111,10 +112,10 @@ pub struct Pattern(String);
 
 /// LLM response text
 ///
-/// Limited to 100,000 characters (~25k tokens) to accommodate extensive LLM responses
-/// while maintaining reasonable memory bounds. Most LLM APIs have lower limits than this.
+/// Hard limit of 10MB (10,485,760 chars) for DoS protection.
+/// This is approximately 2.6M tokens, well beyond current LLM context windows.
 #[nutype(
-    validate(len_char_max = 100000),
+    validate(len_char_max = 10485760),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct ResponseText(String);
@@ -161,10 +162,10 @@ pub struct ModelId(String);
 
 /// LLM prompt text
 ///
-/// Limited to 100,000 characters to support extensive prompts with context
-/// while staying within typical LLM context window limits.
+/// Hard limit of 10MB (10,485,760 chars) for DoS protection.
+/// This is approximately 2.6M tokens, well beyond current LLM context windows.
 #[nutype(
-    validate(not_empty, len_char_max = 100000),
+    validate(not_empty, len_char_max = 10485760),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct Prompt(String);
@@ -271,6 +272,51 @@ pub struct LlmParameters(serde_json::Value);
 #[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize))]
 pub struct MetadataAssertions(serde_json::Value);
 
+/// Soft limit validation for logging warnings when limits are exceeded
+pub mod soft_limits {
+    use super::*;
+
+    /// Soft limit for prompt/response text (100k chars, ~25k tokens)
+    const SOFT_LIMIT_LLM_TEXT: usize = 100_000;
+
+    /// Check if a prompt exceeds soft limits and log warning
+    pub fn check_prompt(prompt: &Prompt) {
+        let len = prompt.as_ref().len();
+        if len > SOFT_LIMIT_LLM_TEXT {
+            warn!(
+                "Prompt exceeds soft limit of {} chars (actual: {} chars, ~{} tokens)",
+                SOFT_LIMIT_LLM_TEXT,
+                len,
+                len / 4
+            );
+        }
+    }
+
+    /// Check if a response exceeds soft limits and log warning
+    pub fn check_response(response: &ResponseText) {
+        let len = response.as_ref().len();
+        if len > SOFT_LIMIT_LLM_TEXT {
+            warn!(
+                "Response exceeds soft limit of {} chars (actual: {} chars, ~{} tokens)",
+                SOFT_LIMIT_LLM_TEXT,
+                len,
+                len / 4
+            );
+        }
+    }
+
+    /// Check if a prompt template exceeds soft limits and log warning
+    pub fn check_prompt_template(template: &PromptTemplate) {
+        let len = template.as_ref().len();
+        if len > SOFT_LIMIT_LLM_TEXT {
+            warn!(
+                "Prompt template exceeds soft limit of {} chars (actual: {} chars)",
+                SOFT_LIMIT_LLM_TEXT, len
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,7 +364,10 @@ mod tests {
     fn test_prompt_template_validation() {
         assert!(PromptTemplate::try_new("Hello {name}!".to_string()).is_ok());
         assert!(PromptTemplate::try_new("".to_string()).is_err());
-        assert!(PromptTemplate::try_new("a".repeat(10001)).is_err());
+        // Test that we can create large prompts up to 10MB
+        assert!(PromptTemplate::try_new("a".repeat(1_000_000)).is_ok());
+        // But not beyond 10MB
+        assert!(PromptTemplate::try_new("a".repeat(10_485_761)).is_err());
     }
 
     #[test]
@@ -326,5 +375,22 @@ mod tests {
         assert!(Pattern::try_new("expected output".to_string()).is_ok());
         assert!(Pattern::try_new("".to_string()).is_err());
         assert!(Pattern::try_new("a".repeat(1001)).is_err());
+    }
+
+    #[test]
+    fn test_soft_limits() {
+        // Test that soft limit functions don't panic on valid inputs
+        let small_prompt = Prompt::try_new("Hello".to_string()).unwrap();
+        soft_limits::check_prompt(&small_prompt);
+
+        let small_response = ResponseText::try_new("Response".to_string()).unwrap();
+        soft_limits::check_response(&small_response);
+
+        let small_template = PromptTemplate::try_new("Template".to_string()).unwrap();
+        soft_limits::check_prompt_template(&small_template);
+
+        // Large inputs (would trigger warning logs in real usage)
+        let large_prompt = Prompt::try_new("a".repeat(200_000)).unwrap();
+        soft_limits::check_prompt(&large_prompt);
     }
 }
