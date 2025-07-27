@@ -13,17 +13,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FScoreDataPoint {
     /// Timestamp for this measurement
-    pub timestamp: Timestamp,
+    timestamp: Timestamp,
     /// F-score value at this time
-    pub f_score: FScore,
+    f_score: FScore,
     /// Optional precision value
-    pub precision: Option<Precision>,
+    precision: Option<Precision>,
     /// Optional recall value
-    pub recall: Option<Recall>,
+    recall: Option<Recall>,
     /// Number of samples this measurement is based on
-    pub sample_count: SampleCount,
+    sample_count: SampleCount,
     /// Optional confidence level for statistical analysis
-    pub confidence_level: Option<ConfidenceLevel>,
+    confidence_level: Option<ConfidenceLevel>,
 }
 
 impl FScoreDataPoint {
@@ -77,6 +77,36 @@ impl FScoreDataPoint {
     pub fn age_category(&self) -> TimestampAge {
         self.timestamp.age_category()
     }
+
+    /// Get the timestamp
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
+    }
+
+    /// Get the F-score value
+    pub fn f_score(&self) -> FScore {
+        self.f_score
+    }
+
+    /// Get the precision value if present
+    pub fn precision(&self) -> Option<Precision> {
+        self.precision
+    }
+
+    /// Get the recall value if present
+    pub fn recall(&self) -> Option<Recall> {
+        self.recall
+    }
+
+    /// Get the sample count
+    pub fn sample_count(&self) -> SampleCount {
+        self.sample_count
+    }
+
+    /// Get the confidence level if present
+    pub fn confidence_level(&self) -> Option<ConfidenceLevel> {
+        self.confidence_level
+    }
 }
 
 #[cfg(test)]
@@ -95,19 +125,19 @@ mod tests {
             FScoreDataPoint::with_precision_recall(timestamp, precision, recall, sample_count)
                 .unwrap();
 
-        assert_eq!(data_point.timestamp, timestamp);
-        assert_eq!(data_point.precision, Some(precision));
-        assert_eq!(data_point.recall, Some(recall));
-        assert_eq!(data_point.sample_count, sample_count);
+        assert_eq!(data_point.timestamp(), timestamp);
+        assert_eq!(data_point.precision(), Some(precision));
+        assert_eq!(data_point.recall(), Some(recall));
+        assert_eq!(data_point.sample_count(), sample_count);
 
         // Verify F-score calculation
         let expected_f_score = constants::calculation::F1_MULTIPLIER * (0.8 * 0.7) / (0.8 + 0.7);
-        assert!((data_point.f_score.into_inner() - expected_f_score).abs() < 1e-10);
+        assert!((data_point.f_score().into_inner() - expected_f_score).abs() < 1e-10);
 
         // Test new methods
         assert!(data_point.is_recent());
         let assessment = data_point.performance_assessment();
-        assert_eq!(assessment.f_score_level, PerformanceLevel::Good);
+        assert_eq!(assessment.f_score_level(), PerformanceLevel::Good);
     }
 
     #[test]
@@ -120,6 +150,6 @@ mod tests {
         let data_point =
             FScoreDataPoint::new(timestamp, f_score, sample_count).with_confidence(confidence);
 
-        assert_eq!(data_point.confidence_level, Some(confidence));
+        assert_eq!(data_point.confidence_level(), Some(confidence));
     }
 }

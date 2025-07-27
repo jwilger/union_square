@@ -30,8 +30,8 @@ impl FScoreDemoDataGenerator {
     ) -> Vec<FScoreDataPoint> {
         let mut data_points = Vec::new();
         let now = Utc::now();
-        let days_back = time_period.days_back.into_inner();
-        let points_per_day = time_period.points_per_day.into_inner();
+        let days_back = time_period.days_back().into_inner();
+        let points_per_day = time_period.points_per_day().into_inner();
 
         for day in 0..days_back {
             let day_start = now - Duration::days(day);
@@ -91,7 +91,7 @@ impl FScoreDemoDataGenerator {
         }
 
         // Sort by timestamp
-        data_points.sort_by_key(|dp| dp.timestamp);
+        data_points.sort_by_key(|dp| dp.timestamp());
         data_points
     }
 
@@ -148,8 +148,8 @@ impl FScoreDemoDataGenerator {
     ) -> Vec<FScoreDataPoint> {
         let mut data_points = Vec::new();
         let now = Utc::now();
-        let days_back = time_period.days_back.into_inner();
-        let points_per_day = time_period.points_per_day.into_inner();
+        let days_back = time_period.days_back().into_inner();
+        let points_per_day = time_period.points_per_day().into_inner();
 
         // Each application has different baseline performance
         // For demo purposes, we map specific test applications to performance levels
@@ -221,7 +221,7 @@ impl FScoreDemoDataGenerator {
             }
         }
 
-        data_points.sort_by_key(|dp| dp.timestamp);
+        data_points.sort_by_key(|dp| dp.timestamp());
         data_points
     }
 
@@ -297,11 +297,11 @@ impl FScoreDemoDataGenerator {
 
         let current_f_score = overall_data
             .last()
-            .map(|dp| dp.f_score)
+            .map(|dp| dp.f_score())
             .unwrap_or(FScore::zero());
         let previous_f_score = overall_data
             .get(overall_data.len().saturating_sub(24))
-            .map(|dp| dp.f_score)
+            .map(|dp| dp.f_score())
             .unwrap_or(FScore::zero());
 
         let _trend_value = current_f_score.into_inner() - previous_f_score.into_inner();
@@ -364,14 +364,14 @@ mod tests {
 
         // Check that data is sorted by timestamp
         for i in 1..data.len() {
-            assert!(data[i].timestamp >= data[i - 1].timestamp);
+            assert!(data[i].timestamp() >= data[i - 1].timestamp());
         }
 
         // Check that all F-scores are valid
         for point in &data {
-            assert!(point.f_score.into_inner() >= 0.0);
-            assert!(point.f_score.into_inner() <= 1.0);
-            assert!(point.sample_count.into_inner() > 0);
+            assert!(point.f_score().into_inner() >= 0.0);
+            assert!(point.f_score().into_inner() <= 1.0);
+            assert!(point.sample_count().into_inner() > 0);
         }
     }
 

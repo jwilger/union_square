@@ -101,8 +101,8 @@ impl PointsPerDay {
 /// Time period configuration for data generation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimePeriod {
-    pub days_back: DaysBack,
-    pub points_per_day: PointsPerDay,
+    days_back: DaysBack,
+    points_per_day: PointsPerDay,
 }
 
 impl TimePeriod {
@@ -127,6 +127,16 @@ impl TimePeriod {
     /// Data density (points per hour)
     pub fn data_density(&self) -> f64 {
         self.points_per_day.into_inner() as f64 / 24.0
+    }
+
+    /// Get the days back value
+    pub fn days_back(&self) -> DaysBack {
+        self.days_back
+    }
+
+    /// Get the points per day value
+    pub fn points_per_day(&self) -> PointsPerDay {
+        self.points_per_day
     }
 }
 
@@ -185,11 +195,11 @@ mod tests {
     #[test]
     fn test_preset_periods() {
         let recent = TimePeriod::recent_detailed();
-        assert_eq!(recent.days_back, DaysBack::week());
-        assert_eq!(recent.points_per_day, PointsPerDay::hourly());
+        assert_eq!(recent.days_back(), DaysBack::week());
+        assert_eq!(recent.points_per_day(), PointsPerDay::hourly());
 
         let monthly = TimePeriod::monthly_overview();
-        assert_eq!(monthly.days_back, DaysBack::month());
-        assert_eq!(monthly.points_per_day, PointsPerDay::six_hourly());
+        assert_eq!(monthly.days_back(), DaysBack::month());
+        assert_eq!(monthly.points_per_day(), PointsPerDay::six_hourly());
     }
 }

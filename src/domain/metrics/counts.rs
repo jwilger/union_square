@@ -3,6 +3,8 @@
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 
+use crate::domain::metrics::constants;
+
 /// Number of models being tracked
 #[nutype(
     validate(greater_or_equal = 0, less_or_equal = 1000),
@@ -129,17 +131,21 @@ impl DataPointCount {
 
     /// Check if we have sufficient data for analysis
     pub fn is_sufficient_for_analysis(&self) -> bool {
-        self.into_inner() >= 30 // Statistical significance threshold
+        self.into_inner() >= constants::statistical::MIN_SIGNIFICANT_SAMPLE_SIZE as usize
     }
 
     /// Get data quality level based on count
     pub fn quality_level(&self) -> DataQuality {
+        let min_significant = constants::statistical::MIN_SIGNIFICANT_SAMPLE_SIZE as usize;
+        let recommended_min = constants::statistical::RECOMMENDED_MIN_SAMPLE_SIZE as usize;
+        let large_threshold = constants::statistical::LARGE_SAMPLE_THRESHOLD as usize;
+
         match self.into_inner() {
             0 => DataQuality::NoData,
-            1..=29 => DataQuality::Insufficient,
-            30..=99 => DataQuality::Limited,
-            100..=999 => DataQuality::Good,
-            1000..=9999 => DataQuality::Excellent,
+            n if n < min_significant => DataQuality::Insufficient,
+            n if n < recommended_min => DataQuality::Limited,
+            n if n < large_threshold => DataQuality::Good,
+            n if n < large_threshold * 10 => DataQuality::Excellent,
             _ => DataQuality::Exceptional,
         }
     }

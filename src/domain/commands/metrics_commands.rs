@@ -41,13 +41,18 @@ impl MetricsState {
                 calculated_at,
                 ..
             } => {
-                let data_point = FScoreDataPoint {
-                    timestamp: *calculated_at,
-                    f_score: *f_score,
-                    precision: *precision,
-                    recall: *recall,
-                    sample_count: *sample_count,
-                    confidence_level: None,
+                let data_point = if let (Some(precision), Some(recall)) = (precision, recall) {
+                    FScoreDataPoint::with_precision_recall(
+                        *calculated_at,
+                        *precision,
+                        *recall,
+                        *sample_count,
+                    )
+                    .unwrap_or_else(|_| {
+                        FScoreDataPoint::new(*calculated_at, *f_score, *sample_count)
+                    })
+                } else {
+                    FScoreDataPoint::new(*calculated_at, *f_score, *sample_count)
                 };
 
                 self.f_score_data
@@ -64,13 +69,18 @@ impl MetricsState {
                 calculated_at,
                 ..
             } => {
-                let data_point = FScoreDataPoint {
-                    timestamp: *calculated_at,
-                    f_score: *f_score,
-                    precision: *precision,
-                    recall: *recall,
-                    sample_count: *sample_count,
-                    confidence_level: None,
+                let data_point = if let (Some(precision), Some(recall)) = (precision, recall) {
+                    FScoreDataPoint::with_precision_recall(
+                        *calculated_at,
+                        *precision,
+                        *recall,
+                        *sample_count,
+                    )
+                    .unwrap_or_else(|_| {
+                        FScoreDataPoint::new(*calculated_at, *f_score, *sample_count)
+                    })
+                } else {
+                    FScoreDataPoint::new(*calculated_at, *f_score, *sample_count)
                 };
 
                 self.application_f_scores
@@ -516,9 +526,10 @@ mod tests {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
         };
-        let f_score = FScore::try_new(f_scores::GOOD_F_SCORE).unwrap();
         let precision = Precision::try_new(f_scores::HIGH_PRECISION).unwrap();
         let recall = Recall::try_new(f_scores::MEDIUM_PRECISION).unwrap();
+        // Calculate F-score from precision and recall
+        let f_score = FScore::from_precision_recall(precision, recall).unwrap();
 
         let event = DomainEvent::FScoreCalculated {
             session_id: SessionId::generate(),
@@ -536,11 +547,12 @@ mod tests {
         let latest = state.latest_f_score(&model_version);
         assert!(latest.is_some());
         let latest = latest.unwrap();
-        assert_eq!(latest.f_score, f_score);
-        assert_eq!(latest.precision, Some(precision));
-        assert_eq!(latest.recall, Some(recall));
+        // The F-score should match what was calculated from precision/recall
+        assert_eq!(latest.f_score(), f_score);
+        assert_eq!(latest.precision(), Some(precision));
+        assert_eq!(latest.recall(), Some(recall));
         assert_eq!(
-            latest.sample_count,
+            latest.sample_count(),
             SampleCount::try_new(numeric::TOKENS_150 as u64).unwrap()
         );
 

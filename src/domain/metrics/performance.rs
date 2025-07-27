@@ -225,9 +225,9 @@ impl fmt::Display for QualityRating {
 /// Combined performance assessment
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PerformanceAssessment {
-    pub f_score_level: PerformanceLevel,
-    pub quality_rating: QualityRating,
-    pub recommendation: Recommendation,
+    f_score_level: PerformanceLevel,
+    quality_rating: QualityRating,
+    recommendation: Recommendation,
 }
 
 impl PerformanceAssessment {
@@ -288,6 +288,21 @@ impl PerformanceAssessment {
             (level, _) if level.requires_attention() => ConfidenceInPerformance::Low,
             _ => ConfidenceInPerformance::VeryLow,
         }
+    }
+
+    /// Get the F-score performance level
+    pub fn f_score_level(&self) -> PerformanceLevel {
+        self.f_score_level
+    }
+
+    /// Get the quality rating
+    pub fn quality_rating(&self) -> QualityRating {
+        self.quality_rating
+    }
+
+    /// Get the recommendation
+    pub fn recommendation(&self) -> &Recommendation {
+        &self.recommendation
     }
 }
 
@@ -359,8 +374,8 @@ mod tests {
 
         let assessment = PerformanceAssessment::from_components(f_score, precision, recall);
 
-        assert_eq!(assessment.f_score_level, PerformanceLevel::Excellent);
-        assert_eq!(assessment.quality_rating, QualityRating::Balanced);
+        assert_eq!(assessment.f_score_level(), PerformanceLevel::Excellent);
+        assert_eq!(assessment.quality_rating(), QualityRating::Balanced);
         assert!(!assessment.needs_urgent_action());
     }
 
