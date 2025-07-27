@@ -8,6 +8,8 @@ pub mod core_metrics;
 pub mod counts;
 pub mod data_point;
 pub mod demo_data;
+pub mod demo_types;
+pub mod durations;
 pub mod errors;
 pub mod performance;
 pub mod sample_count;

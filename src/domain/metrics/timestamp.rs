@@ -3,9 +3,11 @@
 //! Provides a validated timestamp type for metric data points with
 //! reasonable bounds for system operation.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
+
+use crate::domain::metrics::durations::{Days, EpochSeconds, Hours, Minutes};
 
 /// A validated timestamp for metric measurements
 ///
@@ -37,14 +39,14 @@ impl Timestamp {
     pub fn is_recent(&self) -> bool {
         let now = Utc::now();
         let age = now.signed_duration_since(self.into_inner());
-        age <= Duration::hours(24)
+        age <= Hours::one_day().to_duration()
     }
 
     /// Check if this timestamp is very old (older than 1 year)
     pub fn is_very_old(&self) -> bool {
         let now = Utc::now();
         let age = now.signed_duration_since(self.into_inner());
-        age >= Duration::days(365)
+        age >= Days::one_year().to_duration()
     }
 
     /// Get age category for this timestamp
@@ -53,12 +55,12 @@ impl Timestamp {
         let age = now.signed_duration_since(self.into_inner());
 
         match age {
-            d if d <= Duration::hours(1) => TimestampAge::VeryRecent,
-            d if d <= Duration::hours(24) => TimestampAge::Recent,
-            d if d <= Duration::days(7) => TimestampAge::ThisWeek,
-            d if d <= Duration::days(30) => TimestampAge::ThisMonth,
-            d if d <= Duration::days(90) => TimestampAge::ThisQuarter,
-            d if d <= Duration::days(365) => TimestampAge::ThisYear,
+            d if d <= Hours::one().to_duration() => TimestampAge::VeryRecent,
+            d if d <= Hours::one_day().to_duration() => TimestampAge::Recent,
+            d if d <= Days::one_week().to_duration() => TimestampAge::ThisWeek,
+            d if d <= Days::one_month().to_duration() => TimestampAge::ThisMonth,
+            d if d <= Days::one_quarter().to_duration() => TimestampAge::ThisQuarter,
+            d if d <= Days::one_year().to_duration() => TimestampAge::ThisYear,
             _ => TimestampAge::Historical,
         }
     }
@@ -88,13 +90,14 @@ fn is_valid_metric_timestamp(dt: &DateTime<Utc>) -> bool {
     let now = Utc::now();
 
     // Not in the future (with small tolerance for clock skew)
-    let future_tolerance = Duration::minutes(5);
+    let future_tolerance = Minutes::five().to_duration();
     if *dt > now + future_tolerance {
         return false;
     }
 
     // Not too old (system started around 2024, so anything before 2020 is suspicious)
-    let min_valid_date = DateTime::from_timestamp(1577836800, 0).unwrap(); // 2020-01-01
+    let min_valid_date =
+        DateTime::from_timestamp(EpochSeconds::year_2020().into_inner(), 0).unwrap(); // 2020-01-01
     if *dt < min_valid_date {
         return false;
     }
@@ -112,15 +115,15 @@ mod tests {
         let _timestamp = Timestamp::now(); // This should always succeed
 
         // Valid: recent past
-        let recent = Utc::now() - Duration::hours(1);
+        let recent = Utc::now() - Hours::one().to_duration();
         assert!(Timestamp::try_new(recent).is_ok());
 
         // Invalid: future
-        let future = Utc::now() + Duration::hours(1);
+        let future = Utc::now() + Hours::one().to_duration();
         assert!(Timestamp::try_new(future).is_err());
 
         // Invalid: too old
-        let too_old = DateTime::from_timestamp(946684800, 0).unwrap(); // 2000-01-01
+        let too_old = DateTime::from_timestamp(EpochSeconds::year_2000().into_inner(), 0).unwrap(); // 2000-01-01
         assert!(Timestamp::try_new(too_old).is_err());
     }
 
@@ -128,24 +131,25 @@ mod tests {
     fn test_age_categories() {
         let now = Utc::now();
 
-        let very_recent = Timestamp::try_new(now - Duration::minutes(30)).unwrap();
+        let very_recent =
+            Timestamp::try_new(now - Minutes::try_new(30).unwrap().to_duration()).unwrap();
         assert_eq!(very_recent.age_category(), TimestampAge::VeryRecent);
 
-        let recent = Timestamp::try_new(now - Duration::hours(12)).unwrap();
+        let recent = Timestamp::try_new(now - Hours::try_new(12).unwrap().to_duration()).unwrap();
         assert_eq!(recent.age_category(), TimestampAge::Recent);
 
-        let this_week = Timestamp::try_new(now - Duration::days(3)).unwrap();
+        let this_week = Timestamp::try_new(now - Days::try_new(3).unwrap().to_duration()).unwrap();
         assert_eq!(this_week.age_category(), TimestampAge::ThisWeek);
     }
 
     #[test]
     fn test_from_timestamp_secs() {
         // Valid timestamp
-        let valid_ts = 1704067200; // 2024-01-01
+        let valid_ts = EpochSeconds::year_2024().into_inner(); // 2024-01-01
         assert!(Timestamp::from_timestamp_secs(valid_ts).is_some());
 
         // Invalid timestamp (too old)
-        let invalid_ts = 946684800; // 2000-01-01
+        let invalid_ts = EpochSeconds::year_2000().into_inner(); // 2000-01-01
         assert!(Timestamp::from_timestamp_secs(invalid_ts).is_none());
     }
 }

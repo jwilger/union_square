@@ -8,16 +8,22 @@ use crate::domain::{
     config_types::ProviderName,
     llm::{LlmProvider, ModelVersion},
     metrics::{
-        constants, ui_types::PerformanceCategory, ApplicationCount, ConfidenceLevel,
-        DataPointCount, DaysBack, FScore, FScoreDataPoint, MetricValue, ModelCount, PointsPerDay,
-        Precision, Recall, SampleCount, StabilityThreshold, TimePeriod, Timestamp, TrendAnalysis,
-        TrendDirection, TrendMagnitude,
+        constants,
+        demo_types::{
+            CycleLength, DailyTrendRate, SampleIncrement, TrendFactor, VarianceAmplitude,
+            WaveFrequency,
+        },
+        durations::{Days, Hours},
+        ui_types::PerformanceCategory,
+        ApplicationCount, ConfidenceLevel, DataPointCount, DaysBack, FScore, FScoreDataPoint,
+        MetricValue, ModelCount, PointsPerDay, Precision, Recall, SampleCount, StabilityThreshold,
+        TimePeriod, Timestamp, TrendAnalysis, TrendDirection, TrendMagnitude,
     },
     session::ApplicationId,
     test_data::{self, f_scores},
     types::ModelId,
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 
 /// Demo F-score data generator for MVP visualization
 pub struct FScoreDemoDataGenerator;
@@ -34,28 +40,39 @@ impl FScoreDemoDataGenerator {
         let points_per_day = time_period.points_per_day().into_inner();
 
         for day in 0..days_back {
-            let day_start = now - Duration::days(day);
+            let day_start = if day == 0 {
+                now
+            } else {
+                now - Days::try_new(day).unwrap().to_duration()
+            };
 
             for point in 0..points_per_day {
-                let datetime =
-                    day_start + Duration::hours(point as i64 * 24 / points_per_day as i64);
+                let hours_offset = point as i64 * 24 / points_per_day as i64;
+                let datetime = if hours_offset == 0 {
+                    day_start
+                } else {
+                    day_start + Hours::try_new(hours_offset).unwrap().to_duration()
+                };
                 let timestamp = Timestamp::try_new(datetime).unwrap_or_else(|_| Timestamp::now());
 
                 // Generate realistic F-score trends (slightly declining over time for demo)
-                let base_precision = f_scores::HIGH_PRECISION
-                    - (day as f64 * constants::demo_generation::trends::PRECISION_DECLINE_RATE);
-                let base_recall = f_scores::HIGH_RECALL
-                    - (day as f64 * constants::demo_generation::trends::RECALL_DECLINE_RATE);
+                let precision_decline_rate = DailyTrendRate::try_new(0.001).unwrap();
+                let recall_decline_rate = DailyTrendRate::try_new(0.0015).unwrap();
+                let base_precision =
+                    f_scores::HIGH_PRECISION - (day as f64 * precision_decline_rate.into_inner());
+                let base_recall =
+                    f_scores::HIGH_RECALL - (day as f64 * recall_decline_rate.into_inner());
 
                 // Add some randomness to make it realistic
-                let precision_variance =
-                    constants::demo_generation::trends::PRECISION_VARIANCE_AMPLITUDE
-                        * ((point as f64
-                            * constants::demo_generation::trends::PRECISION_WAVE_FREQUENCY)
-                            .sin());
-                let recall_variance = constants::demo_generation::trends::RECALL_VARIANCE_AMPLITUDE
-                    * ((point as f64 * constants::demo_generation::trends::RECALL_WAVE_FREQUENCY)
-                        .cos());
+                let precision_variance_amplitude = VarianceAmplitude::precision_standard();
+                let precision_wave_frequency = WaveFrequency::precision_standard();
+                let recall_variance_amplitude = VarianceAmplitude::recall_standard();
+                let recall_wave_frequency = WaveFrequency::recall_standard();
+
+                let precision_variance = precision_variance_amplitude.into_inner()
+                    * ((point as f64 * precision_wave_frequency.into_inner()).sin());
+                let recall_variance = recall_variance_amplitude.into_inner()
+                    * ((point as f64 * recall_wave_frequency.into_inner()).cos());
 
                 let precision = Precision::try_new((base_precision + precision_variance).clamp(
                     constants::demo_generation::bounds::MIN_DEMO_VALUE,
@@ -69,9 +86,8 @@ impl FScoreDemoDataGenerator {
                 ))
                 .unwrap();
 
-                let sample_count = match day
-                    % constants::demo_generation::sample_increments::SAMPLE_CYCLE_MODULO
-                {
+                let cycle_length = CycleLength::standard();
+                let sample_count = match day % cycle_length.into_inner() {
                     0 => SampleCount::try_new(f_scores::LARGE_SAMPLE).unwrap(),
                     1 => SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
                     _ => SampleCount::try_new(f_scores::SMALL_SAMPLE).unwrap(),
@@ -163,50 +179,56 @@ impl FScoreDemoDataGenerator {
             };
 
         for day in 0..days_back {
-            let day_start = now - Duration::days(day);
+            let day_start = if day == 0 {
+                now
+            } else {
+                now - Days::try_new(day).unwrap().to_duration()
+            };
 
             for point in 0..points_per_day {
-                let datetime =
-                    day_start + Duration::hours(point as i64 * 24 / points_per_day as i64);
+                let hours_offset = point as i64 * 24 / points_per_day as i64;
+                let datetime = if hours_offset == 0 {
+                    day_start
+                } else {
+                    day_start + Hours::try_new(hours_offset).unwrap().to_duration()
+                };
                 let timestamp = Timestamp::try_new(datetime).unwrap_or_else(|_| Timestamp::now());
 
                 // Application-specific trends
                 let precision_trend = if application_id.as_ref()
                     == test_data::application_ids::MY_APP
                 {
-                    constants::demo_generation::application_trends::IMPROVING_TREND_RATE
-                // Improving
+                    DailyTrendRate::improving() // Improving
                 } else if application_id.as_ref() == test_data::application_ids::MY_APPLICATION {
-                    constants::demo_generation::application_trends::SLIGHT_DECLINE_RATE
-                // Slightly declining
+                    DailyTrendRate::slight_decline() // Slightly declining
                 } else {
-                    constants::demo_generation::application_trends::RAPID_DECLINE_RATE
-                    // Declining more rapidly
+                    DailyTrendRate::rapid_decline() // Declining more rapidly
                 };
 
-                let precision =
-                    Precision::try_new((base_precision + day as f64 * precision_trend).clamp(
+                let precision = Precision::try_new(
+                    (base_precision + day as f64 * precision_trend.into_inner()).clamp(
                         constants::demo_generation::bounds::APPLICATION_MIN_VALUE,
                         constants::demo_generation::bounds::MAX_VALUE,
-                    ))
-                    .unwrap();
-
-                let recall = Recall::try_new(
-                    (base_recall
-                        + day as f64
-                            * precision_trend
-                            * constants::demo_generation::application_trends::RECALL_TREND_FACTOR)
-                        .clamp(
-                            constants::demo_generation::bounds::APPLICATION_MIN_VALUE,
-                            constants::demo_generation::bounds::MAX_VALUE,
-                        ),
+                    ),
                 )
                 .unwrap();
 
+                let recall_trend_factor = TrendFactor::recall_to_precision();
+                let recall = Recall::try_new(
+                    (base_recall
+                        + day as f64
+                            * precision_trend.into_inner()
+                            * recall_trend_factor.into_inner())
+                    .clamp(
+                        constants::demo_generation::bounds::APPLICATION_MIN_VALUE,
+                        constants::demo_generation::bounds::MAX_VALUE,
+                    ),
+                )
+                .unwrap();
+
+                let sample_increment = SampleIncrement::base();
                 let sample_count = SampleCount::try_new(
-                    f_scores::MEDIUM_SAMPLE
-                        + ((point as u64)
-                            * constants::demo_generation::sample_increments::BASE_SAMPLE_INCREMENT),
+                    f_scores::MEDIUM_SAMPLE + ((point as u64) * sample_increment.into_inner()),
                 )
                 .unwrap();
 
@@ -243,7 +265,8 @@ impl FScoreDemoDataGenerator {
                 PerformanceCategory::Good,
                 Self::create_demo_point(
                     // Use slightly older timestamp that's still valid
-                    Timestamp::try_new(now.into_datetime() - Duration::hours(1)).unwrap_or(now),
+                    Timestamp::try_new(now.into_datetime() - Hours::one().to_duration())
+                        .unwrap_or(now),
                     f_scores::MEDIUM_PRECISION,
                     f_scores::MEDIUM_RECALL,
                     SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
@@ -252,7 +275,10 @@ impl FScoreDemoDataGenerator {
             (
                 PerformanceCategory::NeedsImprovement,
                 Self::create_demo_point(
-                    Timestamp::try_new(now.into_datetime() - Duration::hours(2)).unwrap_or(now),
+                    Timestamp::try_new(
+                        now.into_datetime() - Hours::try_new(2).unwrap().to_duration(),
+                    )
+                    .unwrap_or(now),
                     f_scores::LOW_PRECISION,
                     f_scores::LOW_RECALL,
                     SampleCount::try_new(f_scores::SMALL_SAMPLE).unwrap(),
@@ -261,7 +287,10 @@ impl FScoreDemoDataGenerator {
             (
                 PerformanceCategory::Critical,
                 Self::create_demo_point(
-                    Timestamp::try_new(now.into_datetime() - Duration::hours(3)).unwrap_or(now),
+                    Timestamp::try_new(
+                        now.into_datetime() - Hours::try_new(3).unwrap().to_duration(),
+                    )
+                    .unwrap_or(now),
                     constants::demo_generation::bounds::CRITICAL_PRECISION_THRESHOLD,
                     constants::demo_generation::bounds::CRITICAL_RECALL_THRESHOLD,
                     SampleCount::try_new(f_scores::TINY_SAMPLE).unwrap(),
