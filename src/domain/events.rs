@@ -91,6 +91,27 @@ pub enum DomainEvent {
         deactivated_at: DateTime<Utc>,
     },
 
+    // F-score and Metrics Events
+    FScoreCalculated {
+        session_id: SessionId,
+        model_version: ModelVersion,
+        f_score: crate::domain::metrics::FScore,
+        precision: Option<crate::domain::metrics::Precision>,
+        recall: Option<crate::domain::metrics::Recall>,
+        sample_count: u64,
+        calculated_at: DateTime<Utc>,
+    },
+    ApplicationFScoreCalculated {
+        session_id: SessionId,
+        application_id: ApplicationId,
+        model_version: ModelVersion,
+        f_score: crate::domain::metrics::FScore,
+        precision: Option<crate::domain::metrics::Precision>,
+        recall: Option<crate::domain::metrics::Recall>,
+        sample_count: u64,
+        calculated_at: DateTime<Utc>,
+    },
+
     // User Events
     UserCreated {
         user_id: UserId,
@@ -125,6 +146,8 @@ impl DomainEvent {
             DomainEvent::VersionChanged { changed_at, .. } => *changed_at,
             DomainEvent::VersionUsageRecorded { recorded_at, .. } => *recorded_at,
             DomainEvent::VersionDeactivated { deactivated_at, .. } => *deactivated_at,
+            DomainEvent::FScoreCalculated { calculated_at, .. } => *calculated_at,
+            DomainEvent::ApplicationFScoreCalculated { calculated_at, .. } => *calculated_at,
             DomainEvent::UserCreated { created_at, .. } => *created_at,
             DomainEvent::UserActivated { activated_at, .. } => *activated_at,
             DomainEvent::UserDeactivated { deactivated_at, .. } => *deactivated_at,
