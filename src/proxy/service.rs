@@ -65,7 +65,8 @@ impl ProxyService {
         let mut registry = ProviderRegistry::new();
 
         // Register Bedrock provider (MVP provider)
-        use crate::providers::bedrock::{provider::BedrockProvider, types::AwsRegion};
+        use crate::providers::bedrock::provider::BedrockProvider;
+        use crate::providers::bedrock::types::AwsRegion;
 
         // Check for endpoint override (for testing)
         if let Ok(endpoint_override) = std::env::var(BEDROCK_ENDPOINT_OVERRIDE_ENV) {
@@ -75,11 +76,9 @@ impl ProxyService {
             let bedrock_region = config
                 .bedrock_region
                 .clone()
-                .unwrap_or_else(|| "us-east-1".to_string());
-            if let Ok(region) = AwsRegion::try_new(bedrock_region) {
-                let bedrock_provider = Arc::new(BedrockProvider::new(region));
-                registry.register(bedrock_provider);
-            }
+                .unwrap_or_else(|| AwsRegion::try_new("us-east-1".to_string()).unwrap());
+            let bedrock_provider = Arc::new(BedrockProvider::new(bedrock_region));
+            registry.register(bedrock_provider);
         }
 
         // Create provider router

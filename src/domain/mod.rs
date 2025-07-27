@@ -4,6 +4,7 @@
 //! concepts of Union Square, following type-driven development principles.
 
 pub mod commands;
+pub mod config_types;
 pub mod events;
 pub mod llm;
 pub mod session;

@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::providers::bedrock::types::AwsRegion;
     use crate::proxy::types::ApiKey;
     use crate::proxy::{AuthConfig, ProxyConfig, ProxyService};
     use axum::body::Body;
@@ -51,7 +52,7 @@ mod tests {
 
         // Create proxy with Bedrock provider enabled
         let config = ProxyConfig {
-            bedrock_region: Some("us-east-1".to_string()),
+            bedrock_region: Some(AwsRegion::try_new("us-east-1".to_string()).unwrap()),
             request_timeout: Duration::from_secs(5),
             ..Default::default()
         };

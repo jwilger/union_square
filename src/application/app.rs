@@ -58,6 +58,6 @@ mod tests {
         let app = Application::new()
             .await
             .expect("Failed to create application");
-        assert!(app.settings().application.port > 0);
+        assert!(*app.settings().application.port.as_ref() > 0);
     }
 }

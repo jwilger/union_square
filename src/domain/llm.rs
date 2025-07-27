@@ -1,3 +1,4 @@
+use crate::domain::config_types::ProviderName;
 use crate::domain::types::{
     FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
 };
@@ -29,7 +30,7 @@ pub enum LlmProvider {
     Anthropic,
     Google,
     Azure,
-    Other(String),
+    Other(ProviderName),
 }
 
 impl LlmProvider {
@@ -40,7 +41,7 @@ impl LlmProvider {
             LlmProvider::Anthropic => "anthropic",
             LlmProvider::Google => "google",
             LlmProvider::Azure => "azure",
-            LlmProvider::Other(name) => name,
+            LlmProvider::Other(name) => name.as_ref(),
         }
     }
 }
@@ -236,14 +237,21 @@ mod tests {
         fn prop_model_version_serialization(
             provider_choice in 0..5u8,
             model_id in "[a-zA-Z0-9-]+",
-            custom_name in "[a-zA-Z0-9-]+"
+            custom_name in "[a-zA-Z][a-zA-Z0-9_-]*"
         ) {
             let provider = match provider_choice {
                 0 => LlmProvider::OpenAI,
                 1 => LlmProvider::Anthropic,
                 2 => LlmProvider::Google,
                 3 => LlmProvider::Azure,
-                _ => LlmProvider::Other(custom_name),
+                _ => {
+                    // ProviderName validation requires starting with a letter
+                    if let Ok(name) = ProviderName::try_new(custom_name.clone()) {
+                        LlmProvider::Other(name)
+                    } else {
+                        LlmProvider::Other(ProviderName::try_new("custom_provider".to_string()).unwrap())
+                    }
+                },
             };
 
             let model_version = ModelVersion {
