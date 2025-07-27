@@ -85,8 +85,6 @@ impl fmt::Display for DatabasePassword {
     }
 }
 
-// AsRef is already derived by nutype, no manual impl needed
-
 /// Database name
 #[nutype(
     validate(not_empty, len_char_max = 128, regex = r"^[a-zA-Z][a-zA-Z0-9_]*$"),
@@ -159,8 +157,6 @@ impl fmt::Display for LogLevel {
     }
 }
 
-// Default is now derived
-
 impl std::str::FromStr for LogLevel {
     type Err = String;
 
@@ -200,8 +196,6 @@ impl fmt::Display for LogFormat {
         write!(f, "{}", self.as_str())
     }
 }
-
-// Default is now derived
 
 impl std::str::FromStr for LogFormat {
     type Err = String;

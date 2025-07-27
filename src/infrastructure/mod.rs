@@ -5,5 +5,6 @@
 //! - Database access via SQLx
 
 pub mod database;
+pub mod log_messages;
 
 pub use database::*;

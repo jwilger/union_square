@@ -1,4 +1,5 @@
 use crate::domain::types::{ErrorMessage, FieldName, ResourceId};
+use crate::providers::constants::error_messages;
 use thiserror::Error;
 
 /// Union Square application error types
@@ -39,22 +40,24 @@ impl Error {
     pub fn application(message: impl Into<String>) -> Self {
         Self::Application {
             message: ErrorMessage::try_new(message.into()).unwrap_or_else(|_| {
-                ErrorMessage::try_new("Invalid error message".to_string()).unwrap()
+                ErrorMessage::try_new(error_messages::INVALID_ERROR_MESSAGE.to_string()).unwrap()
             }),
         }
     }
 
     pub fn invalid_input(field: impl Into<String>) -> Self {
         Self::InvalidInput {
-            field: FieldName::try_new(field.into())
-                .unwrap_or_else(|_| FieldName::try_new("unknown_field".to_string()).unwrap()),
+            field: FieldName::try_new(field.into()).unwrap_or_else(|_| {
+                FieldName::try_new(error_messages::UNKNOWN_FIELD.to_string()).unwrap()
+            }),
         }
     }
 
     pub fn not_found(resource: impl Into<String>) -> Self {
         Self::NotFound {
-            resource: ResourceId::try_new(resource.into())
-                .unwrap_or_else(|_| ResourceId::try_new("unknown_resource".to_string()).unwrap()),
+            resource: ResourceId::try_new(resource.into()).unwrap_or_else(|_| {
+                ResourceId::try_new(error_messages::UNKNOWN_RESOURCE.to_string()).unwrap()
+            }),
         }
     }
 }

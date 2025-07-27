@@ -73,10 +73,10 @@ impl ProxyService {
             let bedrock_provider = Arc::new(BedrockProvider::with_base_url(endpoint_override));
             registry.register(bedrock_provider);
         } else {
-            let bedrock_region = config
-                .bedrock_region
-                .clone()
-                .unwrap_or_else(|| AwsRegion::try_new("us-east-1".to_string()).unwrap());
+            let bedrock_region = config.bedrock_region.clone().unwrap_or_else(|| {
+                AwsRegion::try_new("us-east-1".to_string())
+                    .expect("Failed to create AWS region 'us-east-1'")
+            });
             let bedrock_provider = Arc::new(BedrockProvider::new(bedrock_region));
             registry.register(bedrock_provider);
         }

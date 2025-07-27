@@ -18,7 +18,7 @@ impl Application {
         let db_pool = PgPool::connect(&settings.database_url()).await?;
 
         // TODO: Implement database migrations once the migration scripts are finalized.
-        // sqlx::migrate!("./migrations").run(&db_pool).await?;
+        // sqlx::migrate!(migration_paths::MIGRATIONS_DIR).run(&db_pool).await?;
 
         Ok(Self { settings, db_pool })
     }
