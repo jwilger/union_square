@@ -282,7 +282,10 @@ impl RingBuffer {
                 let (request_id, data) = unsafe {
                     let request_id_bytes = *slot.request_id.get();
                     let uuid = Uuid::from_bytes(request_id_bytes);
-                    let request_id = RequestId::new_unchecked(uuid);
+                    // SAFETY: The UUID is guaranteed to be valid v7 because write() only
+                    // stores UUIDs created via RequestId::new() which ensures v7 format
+                    let request_id =
+                        RequestId::try_new(uuid).expect("Ring buffer only stores valid v7 UUIDs");
 
                     let data_ref = &*slot.data.get();
                     let data = data_ref[..size].to_vec();

@@ -61,7 +61,6 @@ use uuid::Uuid;
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |size: &usize| *size > 0),
-    new_unchecked,
 )]
 pub struct RequestSizeLimit(usize);
 
@@ -69,7 +68,6 @@ pub struct RequestSizeLimit(usize);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |size: &usize| *size > 0),
-    new_unchecked,
 )]
 pub struct ResponseSizeLimit(usize);
 
@@ -77,7 +75,6 @@ pub struct ResponseSizeLimit(usize);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |size: &usize| *size > 0 && size.is_power_of_two()),
-    new_unchecked,
 )]
 pub struct BufferSize(usize);
 
@@ -85,7 +82,6 @@ pub struct BufferSize(usize);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |size: &usize| *size > 0),
-    new_unchecked,
 )]
 pub struct SlotSize(usize);
 
@@ -93,7 +89,6 @@ pub struct SlotSize(usize);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |size: &usize| *size > 0),
-    new_unchecked,
 )]
 pub struct DataSize(usize);
 
@@ -111,7 +106,6 @@ pub struct DroppedEventCount(u64);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |count: &usize| *count > 0 && count.is_power_of_two()),
-    new_unchecked,
 )]
 pub struct SlotCount(usize);
 
@@ -131,7 +125,6 @@ pub struct TimestampNanos(u64);
 #[nutype(
     derive(Clone, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| !s.is_empty()),
-    new_unchecked,
 )]
 pub struct HttpMethod(String);
 
@@ -139,7 +132,6 @@ pub struct HttpMethod(String);
 #[nutype(
     derive(Clone, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| !s.is_empty()),
-    new_unchecked,
 )]
 pub struct RequestUri(String);
 
@@ -147,7 +139,6 @@ pub struct RequestUri(String);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |code: &u16| (100..=599).contains(code)),
-    new_unchecked,
 )]
 pub struct HttpStatusCode(u16);
 
@@ -155,7 +146,6 @@ pub struct HttpStatusCode(u16);
 #[nutype(
     derive(Clone, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| !s.is_empty()),
-    new_unchecked,
 )]
 pub struct HeaderName(String);
 
@@ -207,7 +197,6 @@ impl Default for Headers {
 #[nutype(
     derive(Clone, Debug, Display, Hash, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| s.starts_with('/')),
-    new_unchecked,
 )]
 pub struct BypassPath(String);
 
@@ -319,7 +308,6 @@ impl Default for RingBufferConfig {
 #[nutype(
     derive(Clone, Copy, Debug, Display, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |id: &Uuid| id.get_version_num() == 7),
-    new_unchecked,
 )]
 pub struct RequestId(Uuid);
 
@@ -341,7 +329,6 @@ impl Default for RequestId {
 #[nutype(
     derive(Clone, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| s.starts_with("http://") || s.starts_with("https://")),
-    new_unchecked,
 )]
 pub struct TargetUrl(String);
 
@@ -349,7 +336,6 @@ pub struct TargetUrl(String);
 #[nutype(
     derive(Clone, Debug, Hash, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |s: &str| !s.is_empty()),
-    new_unchecked,
 )]
 pub struct ApiKey(String);
 
@@ -357,7 +343,6 @@ pub struct ApiKey(String);
 #[nutype(
     derive(Clone, Copy, Debug, Display, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |id: &Uuid| id.get_version_num() == 7),
-    new_unchecked,
 )]
 pub struct SessionId(Uuid);
 

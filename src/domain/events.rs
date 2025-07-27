@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     llm::{ModelVersion, RequestId, ResponseMetadata},
-    session::{SessionId, SessionStatus},
-    user::{EmailAddress, UserId},
+    session::{ApplicationId, SessionId, SessionStatus},
+    types::{ChangeReason, ErrorMessage, LlmParameters, Prompt, ResponseText, Tag},
+    user::{DisplayName, EmailAddress, UserId},
     version::{VersionChangeId, VersionComparison},
 };
 
@@ -21,7 +22,7 @@ pub enum DomainEvent {
     SessionStarted {
         session_id: SessionId,
         user_id: UserId,
-        application_name: String,
+        application_id: ApplicationId,
         started_at: DateTime<Utc>,
     },
     SessionEnded {
@@ -31,7 +32,7 @@ pub enum DomainEvent {
     },
     SessionTagged {
         session_id: SessionId,
-        tag: String,
+        tag: Tag,
         tagged_at: DateTime<Utc>,
     },
 
@@ -40,8 +41,8 @@ pub enum DomainEvent {
         request_id: RequestId,
         session_id: SessionId,
         model_version: ModelVersion,
-        prompt: String,
-        parameters: serde_json::Value,
+        prompt: Prompt,
+        parameters: LlmParameters,
         received_at: DateTime<Utc>,
     },
     LlmRequestStarted {
@@ -50,13 +51,13 @@ pub enum DomainEvent {
     },
     LlmResponseReceived {
         request_id: RequestId,
-        response_text: String,
+        response_text: ResponseText,
         metadata: ResponseMetadata,
         received_at: DateTime<Utc>,
     },
     LlmRequestFailed {
         request_id: RequestId,
-        error_message: String,
+        error_message: ErrorMessage,
         failed_at: DateTime<Utc>,
     },
     LlmRequestCancelled {
@@ -76,7 +77,7 @@ pub enum DomainEvent {
         from_version: ModelVersion,
         to_version: ModelVersion,
         change_type: VersionComparison,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
         changed_at: DateTime<Utc>,
     },
     VersionUsageRecorded {
@@ -86,7 +87,7 @@ pub enum DomainEvent {
     },
     VersionDeactivated {
         model_version: ModelVersion,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
         deactivated_at: DateTime<Utc>,
     },
 
@@ -94,7 +95,7 @@ pub enum DomainEvent {
     UserCreated {
         user_id: UserId,
         email: EmailAddress,
-        display_name: Option<String>,
+        display_name: Option<DisplayName>,
         created_at: DateTime<Utc>,
     },
     UserActivated {
@@ -103,7 +104,7 @@ pub enum DomainEvent {
     },
     UserDeactivated {
         user_id: UserId,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
         deactivated_at: DateTime<Utc>,
     },
 }
@@ -152,7 +153,7 @@ mod tests {
         let event = DomainEvent::SessionStarted {
             session_id,
             user_id,
-            application_name: "test-app".to_string(),
+            application_id: ApplicationId::try_new("test-app".to_string()).unwrap(),
             started_at: now,
         };
 

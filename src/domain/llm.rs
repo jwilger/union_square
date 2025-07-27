@@ -1,3 +1,6 @@
+use crate::domain::types::{
+    FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
+};
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -46,7 +49,7 @@ impl LlmProvider {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub provider: LlmProvider,
-    pub model_id: String, // Opaque identifier from the provider
+    pub model_id: ModelId, // Opaque identifier from the provider
 }
 
 /// LLM request represents a single request to an LLM provider
@@ -55,8 +58,8 @@ pub struct LlmRequest {
     pub id: RequestId,
     pub session_id: crate::domain::SessionId,
     pub model_version: ModelVersion,
-    pub prompt: String,
-    pub parameters: serde_json::Value,
+    pub prompt: Prompt,
+    pub parameters: LlmParameters,
     pub created_at: DateTime<Utc>,
     pub status: RequestStatus,
 }
@@ -65,7 +68,7 @@ pub struct LlmRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LlmResponse {
     pub request_id: RequestId,
-    pub response_text: String,
+    pub response_text: ResponseText,
     pub metadata: ResponseMetadata,
     pub created_at: DateTime<Utc>,
 }
@@ -83,19 +86,18 @@ pub enum RequestStatus {
 /// Metadata associated with an LLM response
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
-    pub tokens_used: Option<u32>,
-    pub cost_cents: Option<u32>,
-    pub latency_ms: Option<u64>,
-    pub finish_reason: Option<String>,
-    pub model_used: Option<String>,
+    pub tokens_used: Option<TokenCount>,
+    pub latency_ms: Option<Latency>,
+    pub finish_reason: Option<FinishReason>,
+    pub model_used: Option<ModelId>,
 }
 
 impl LlmRequest {
     pub fn new(
         session_id: crate::domain::SessionId,
         model_version: ModelVersion,
-        prompt: String,
-        parameters: serde_json::Value,
+        prompt: Prompt,
+        parameters: LlmParameters,
     ) -> Self {
         Self {
             id: RequestId::generate(),
@@ -126,7 +128,11 @@ impl LlmRequest {
 }
 
 impl LlmResponse {
-    pub fn new(request_id: RequestId, response_text: String, metadata: ResponseMetadata) -> Self {
+    pub fn new(
+        request_id: RequestId,
+        response_text: ResponseText,
+        metadata: ResponseMetadata,
+    ) -> Self {
         Self {
             request_id,
             response_text,
@@ -140,6 +146,7 @@ impl LlmResponse {
 mod tests {
     use super::*;
     use crate::domain::SessionId;
+    use proptest::prelude::*;
 
     #[test]
     fn test_request_id_generation() {
@@ -153,18 +160,18 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let request = LlmRequest::new(
             session_id,
             model_version,
-            "Test prompt".to_string(),
-            serde_json::json!({"temperature": 0.7}),
+            Prompt::try_new("Test prompt".to_string()).unwrap(),
+            LlmParameters::new(serde_json::json!({"temperature": 0.7})),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
-        assert_eq!(request.prompt, "Test prompt");
+        assert_eq!(request.prompt.as_ref(), "Test prompt");
     }
 
     #[test]
@@ -172,14 +179,14 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         let mut request = LlmRequest::new(
             session_id,
             model_version,
-            "Test prompt".to_string(),
-            serde_json::json!({}),
+            Prompt::try_new("Test prompt".to_string()).unwrap(),
+            LlmParameters::new(serde_json::json!({})),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
@@ -195,17 +202,115 @@ mod tests {
     fn test_llm_response_creation() {
         let request_id = RequestId::generate();
         let metadata = ResponseMetadata {
-            tokens_used: Some(150),
-            cost_cents: Some(5),
-            latency_ms: Some(1200),
-            finish_reason: Some("stop".to_string()),
-            model_used: Some("gpt-4".to_string()),
+            tokens_used: Some(TokenCount::try_new(150).unwrap()),
+            latency_ms: Some(Latency::try_new(1200).unwrap()),
+            finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
+            model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
         };
 
-        let response = LlmResponse::new(request_id, "Test response".to_string(), metadata);
+        let response = LlmResponse::new(
+            request_id,
+            ResponseText::try_new("Test response".to_string()).unwrap(),
+            metadata,
+        );
 
-        assert_eq!(response.response_text, "Test response");
-        assert_eq!(response.metadata.tokens_used, Some(150));
-        assert_eq!(response.metadata.cost_cents, Some(5));
+        assert_eq!(response.response_text.as_ref(), "Test response");
+        assert_eq!(
+            response.metadata.tokens_used,
+            Some(TokenCount::try_new(150).unwrap())
+        );
+    }
+
+    // Property-based tests
+    proptest! {
+        #[test]
+        fn prop_request_id_uniqueness(n in 1..100usize) {
+            let mut ids = std::collections::HashSet::new();
+            for _ in 0..n {
+                let id = RequestId::generate();
+                assert!(ids.insert(id));
+            }
+        }
+
+        #[test]
+        fn prop_model_version_serialization(
+            provider_choice in 0..5u8,
+            model_id in "[a-zA-Z0-9-]+",
+            custom_name in "[a-zA-Z0-9-]+"
+        ) {
+            let provider = match provider_choice {
+                0 => LlmProvider::OpenAI,
+                1 => LlmProvider::Anthropic,
+                2 => LlmProvider::Google,
+                3 => LlmProvider::Azure,
+                _ => LlmProvider::Other(custom_name),
+            };
+
+            let model_version = ModelVersion {
+                provider: provider.clone(),
+                model_id: ModelId::try_new(model_id.clone()).unwrap(),
+            };
+
+            let json = serde_json::to_string(&model_version).unwrap();
+            let deserialized: ModelVersion = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(model_version, deserialized);
+        }
+
+        #[test]
+        fn prop_llm_request_serialization(
+            prompt in any::<String>(),
+            model_id in "[a-zA-Z0-9-]+",
+            temp in 0.0..2.0f64,
+            max_tokens in 1..4000u32
+        ) {
+            let session_id = SessionId::generate();
+            let model_version = ModelVersion {
+                provider: LlmProvider::OpenAI,
+                model_id: ModelId::try_new(model_id).unwrap(),
+            };
+            // Round temperature to avoid floating point precision issues
+            let rounded_temp = (temp * 1000.0).round() / 1000.0;
+            let parameters = LlmParameters::new(serde_json::json!({
+                "temperature": rounded_temp,
+                "max_tokens": max_tokens
+            }));
+
+            let request = if prompt.is_empty() {
+                return Ok(()); // Skip empty prompts as they're invalid
+            } else {
+                LlmRequest::new(
+                    session_id,
+                    model_version,
+                    Prompt::try_new(prompt).unwrap(),
+                    parameters
+                )
+            };
+
+            let json = serde_json::to_string(&request).unwrap();
+            let deserialized: LlmRequest = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(request, deserialized);
+        }
+
+        #[test]
+        fn prop_response_metadata_defaults(
+            tokens in prop::option::of(0..10000u32),
+            latency in prop::option::of(0..60000u64),
+            finish_reason in prop::option::of("[a-zA-Z_]+"),
+            model_used in prop::option::of("[a-zA-Z0-9-]+")
+        ) {
+            let metadata = ResponseMetadata {
+                tokens_used: tokens.and_then(|t| TokenCount::try_new(t).ok()),
+                latency_ms: latency.and_then(|l| Latency::try_new(l).ok()),
+                finish_reason: finish_reason.and_then(|s| FinishReason::try_new(s).ok()),
+                model_used: model_used.and_then(|s| ModelId::try_new(s).ok()),
+            };
+
+            let json = serde_json::to_string(&metadata).unwrap();
+            let deserialized: ResponseMetadata = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(metadata, deserialized);
+        }
     }
 }
