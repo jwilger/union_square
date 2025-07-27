@@ -34,8 +34,7 @@ impl Default for SessionId {
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct ApplicationId(String);
 
@@ -52,8 +51,7 @@ pub struct ApplicationId(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct EnvironmentId(String);
 

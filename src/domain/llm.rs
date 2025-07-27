@@ -203,9 +203,9 @@ mod tests {
     fn test_llm_response_creation() {
         let request_id = RequestId::generate();
         let metadata = ResponseMetadata {
-            tokens_used: Some(unsafe { TokenCount::new_unchecked(150) }),
-            cost_cents: Some(unsafe { Cost::new_unchecked(5) }),
-            latency_ms: Some(unsafe { Latency::new_unchecked(1200) }),
+            tokens_used: Some(TokenCount::try_new(150).unwrap()),
+            cost_cents: Some(Cost::try_new(5).unwrap()),
+            latency_ms: Some(Latency::try_new(1200).unwrap()),
             finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
             model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
         };
@@ -219,11 +219,11 @@ mod tests {
         assert_eq!(response.response_text.as_ref(), "Test response");
         assert_eq!(
             response.metadata.tokens_used,
-            Some(unsafe { TokenCount::new_unchecked(150) })
+            Some(TokenCount::try_new(150).unwrap())
         );
         assert_eq!(
             response.metadata.cost_cents,
-            Some(unsafe { Cost::new_unchecked(5) })
+            Some(Cost::try_new(5).unwrap())
         );
     }
 
@@ -308,9 +308,9 @@ mod tests {
             model_used in prop::option::of("[a-zA-Z0-9-]+")
         ) {
             let metadata = ResponseMetadata {
-                tokens_used: tokens.map(|t| unsafe { TokenCount::new_unchecked(t) }),
-                cost_cents: cost.map(|c| unsafe { Cost::new_unchecked(c) }),
-                latency_ms: latency.map(|l| unsafe { Latency::new_unchecked(l) }),
+                tokens_used: tokens.and_then(|t| TokenCount::try_new(t).ok()),
+                cost_cents: cost.and_then(|c| Cost::try_new(c).ok()),
+                latency_ms: latency.and_then(|l| Latency::try_new(l).ok()),
                 finish_reason: finish_reason.and_then(|s| FinishReason::try_new(s).ok()),
                 model_used: model_used.and_then(|s| ModelId::try_new(s).ok()),
             };

@@ -37,15 +37,15 @@ impl TrackedVersion {
             version,
             first_seen: now,
             last_seen: now,
-            request_count: unsafe { RequestCount::new_unchecked(1) },
+            request_count: RequestCount::new(1),
             is_active: true,
         }
     }
 
     pub fn record_usage(&mut self) {
         self.last_seen = Utc::now();
-        self.request_count =
-            unsafe { RequestCount::new_unchecked(self.request_count.as_ref() + 1) };
+        // Saturating add to prevent overflow
+        self.request_count = RequestCount::new(self.request_count.as_ref().saturating_add(1));
     }
 
     pub fn deactivate(&mut self) {
@@ -226,15 +226,11 @@ mod tests {
         };
 
         let mut tracked = TrackedVersion::new(version);
-        assert_eq!(tracked.request_count, unsafe {
-            RequestCount::new_unchecked(1)
-        });
+        assert_eq!(tracked.request_count, RequestCount::new(1));
         assert!(tracked.is_active);
 
         tracked.record_usage();
-        assert_eq!(tracked.request_count, unsafe {
-            RequestCount::new_unchecked(2)
-        });
+        assert_eq!(tracked.request_count, RequestCount::new(2));
 
         tracked.deactivate();
         assert!(!tracked.is_active);

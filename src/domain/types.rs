@@ -20,8 +20,7 @@ use serde::{Deserialize, Serialize};
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct UserAgent(String);
 
@@ -40,8 +39,7 @@ pub struct UserAgent(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct IpAddress(String);
 
@@ -62,24 +60,21 @@ pub struct IpAddress(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct Tag(String);
 
 /// Test case description
 #[nutype(
     validate(not_empty, len_char_max = 1000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct TestCaseDescription(String);
 
 /// Prompt template for test cases
 #[nutype(
     validate(not_empty, len_char_max = 10000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct PromptTemplate(String);
 
@@ -96,32 +91,28 @@ pub struct PromptTemplate(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct Pattern(String);
 
 /// LLM response text
 #[nutype(
     validate(len_char_max = 100000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct ResponseText(String);
 
 /// Assertion description
 #[nutype(
     validate(not_empty, len_char_max = 500),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct AssertionDescription(String);
 
 /// Error message
 #[nutype(
     validate(not_empty, len_char_max = 5000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct ErrorMessage(String);
 
@@ -138,16 +129,14 @@ pub struct ErrorMessage(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct ModelId(String);
 
 /// LLM prompt text
 #[nutype(
     validate(not_empty, len_char_max = 100000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct Prompt(String);
 
@@ -164,8 +153,7 @@ pub struct Prompt(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct FinishReason(String);
 
@@ -185,8 +173,7 @@ pub struct FinishReason(String);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct TokenCount(u32);
 
@@ -206,8 +193,7 @@ pub struct TokenCount(u32);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct Cost(u32);
 
@@ -227,48 +213,40 @@ pub struct Cost(u32);
         Deserialize,
         AsRef,
         Display
-    ),
-    new_unchecked
+    )
 )]
 pub struct Latency(u64);
 
 /// Request count for tracking usage
-#[nutype(
-    derive(
-        Debug,
-        Clone,
-        Copy,
-        PartialEq,
-        Eq,
-        PartialOrd,
-        Ord,
-        Hash,
-        Serialize,
-        Deserialize,
-        AsRef,
-        Display
-    ),
-    new_unchecked
-)]
+#[nutype(derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    AsRef,
+    Display
+))]
 pub struct RequestCount(u64);
 
 /// Reason for version change or deactivation
 #[nutype(
     validate(not_empty, len_char_max = 1000),
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
-    new_unchecked
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct ChangeReason(String);
 
 /// LLM request parameters as JSON
-#[nutype(
-    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize),
-    new_unchecked
-)]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize))]
 pub struct LlmParameters(serde_json::Value);
 
 /// Test case metadata assertions as JSON
-#[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize), new_unchecked)]
+#[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize))]
 pub struct MetadataAssertions(serde_json::Value);
 
 #[cfg(test)]
