@@ -169,6 +169,108 @@ pub struct Prompt(String);
 )]
 pub struct FinishReason(String);
 
+/// Token count for LLM usage
+#[nutype(
+    validate(less_or_equal = 1000000),
+    derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    ),
+    new_unchecked
+)]
+pub struct TokenCount(u32);
+
+/// Cost in cents (to avoid floating point for money)
+#[nutype(
+    validate(less_or_equal = 100000000), // $1,000,000 max
+    derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    ),
+    new_unchecked
+)]
+pub struct Cost(u32);
+
+/// Latency in milliseconds
+#[nutype(
+    validate(less_or_equal = 300000), // 5 minutes max
+    derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    ),
+    new_unchecked
+)]
+pub struct Latency(u64);
+
+/// Request count for tracking usage
+#[nutype(
+    derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    ),
+    new_unchecked
+)]
+pub struct RequestCount(u64);
+
+/// Reason for version change or deactivation
+#[nutype(
+    validate(not_empty, len_char_max = 1000),
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display),
+    new_unchecked
+)]
+pub struct ChangeReason(String);
+
+/// LLM request parameters as JSON
+#[nutype(
+    derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize),
+    new_unchecked
+)]
+pub struct LlmParameters(serde_json::Value);
+
+/// Test case metadata assertions as JSON
+#[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize), new_unchecked)]
+pub struct MetadataAssertions(serde_json::Value);
+
 #[cfg(test)]
 mod tests {
     use super::*;

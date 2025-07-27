@@ -4,7 +4,8 @@
 //! following the type-state pattern to ensure valid state transitions.
 
 use crate::domain::types::{
-    AssertionDescription, ErrorMessage, Pattern, PromptTemplate, ResponseText, TestCaseDescription,
+    AssertionDescription, ErrorMessage, MetadataAssertions, Pattern, PromptTemplate, ResponseText,
+    TestCaseDescription,
 };
 use chrono::{DateTime, Utc};
 use nutype::nutype;
@@ -91,7 +92,7 @@ pub struct ExpectedBehavior {
     pub prompt_template: PromptTemplate,
     pub expected_patterns: Vec<Pattern>,
     pub forbidden_patterns: Vec<Pattern>,
-    pub metadata_assertions: serde_json::Value,
+    pub metadata_assertions: MetadataAssertions,
 }
 
 /// Validation error for test cases
@@ -118,7 +119,9 @@ impl TestCase<Draft> {
                 prompt_template: unsafe { PromptTemplate::new_unchecked(String::new()) },
                 expected_patterns: Vec::new(),
                 forbidden_patterns: Vec::new(),
-                metadata_assertions: serde_json::Value::Object(serde_json::Map::new()),
+                metadata_assertions: MetadataAssertions::new(serde_json::Value::Object(
+                    serde_json::Map::new(),
+                )),
             },
             created_at: now,
             updated_at: now,
@@ -304,7 +307,7 @@ mod tests {
             prompt_template: PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap(),
             expected_patterns: vec![Pattern::try_new("greeting".to_string()).unwrap()],
             forbidden_patterns: vec![Pattern::try_new("error".to_string()).unwrap()],
-            metadata_assertions: serde_json::json!({"min_tokens": 10}),
+            metadata_assertions: MetadataAssertions::new(serde_json::json!({"min_tokens": 10})),
         };
         let draft = draft.with_expected_behavior(behavior);
 
@@ -350,7 +353,7 @@ mod tests {
             prompt_template: PromptTemplate::try_new("Hello".to_string()).unwrap(),
             expected_patterns: vec![],
             forbidden_patterns: vec![],
-            metadata_assertions: serde_json::Value::Null,
+            metadata_assertions: MetadataAssertions::new(serde_json::Value::Null),
         };
         let draft = draft.with_expected_behavior(behavior);
         let result = draft.finalize();
@@ -448,14 +451,14 @@ mod tests {
                     prompt_template: unsafe { PromptTemplate::new_unchecked(prompt.clone()) },
                     expected_patterns: (0..expected_count).map(|i| Pattern::try_new(format!("Pattern {i}")).unwrap()).collect(),
                     forbidden_patterns: (0..forbidden_count).map(|i| Pattern::try_new(format!("Forbidden {i}")).unwrap()).collect(),
-                    metadata_assertions: serde_json::json!({}),
+                    metadata_assertions: MetadataAssertions::new(serde_json::json!({})),
                 }
             } else {
                 ExpectedBehavior {
                     prompt_template: PromptTemplate::try_new(prompt.clone()).unwrap(),
                     expected_patterns: (0..expected_count).map(|i| Pattern::try_new(format!("Pattern {i}")).unwrap()).collect(),
                     forbidden_patterns: (0..forbidden_count).map(|i| Pattern::try_new(format!("Forbidden {i}")).unwrap()).collect(),
-                    metadata_assertions: serde_json::json!({}),
+                    metadata_assertions: MetadataAssertions::new(serde_json::json!({})),
                 }
             };
 

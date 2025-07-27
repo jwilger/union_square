@@ -16,6 +16,7 @@ use crate::domain::{
     events::DomainEvent,
     llm::ModelVersion,
     session::SessionId,
+    types::ChangeReason,
     version::{TrackedVersion, VersionChangeId},
 };
 
@@ -136,7 +137,7 @@ pub struct RecordVersionChange {
     pub session_id: SessionId,
     pub from_version: ModelVersion,
     pub to_version: ModelVersion,
-    pub reason: Option<String>,
+    pub reason: Option<ChangeReason>,
 }
 
 impl RecordVersionChange {
@@ -144,7 +145,7 @@ impl RecordVersionChange {
         session_id: SessionId,
         from_version: ModelVersion,
         to_version: ModelVersion,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
     ) -> Self {
         let from_stream = Self::version_stream_id(&from_version);
         let to_stream = Self::version_stream_id(&to_version);
@@ -212,11 +213,11 @@ pub struct DeactivateVersion {
     #[stream]
     version_stream: StreamId,
     pub model_version: ModelVersion,
-    pub reason: Option<String>,
+    pub reason: Option<ChangeReason>,
 }
 
 impl DeactivateVersion {
-    pub fn new(model_version: ModelVersion, reason: Option<String>) -> Self {
+    pub fn new(model_version: ModelVersion, reason: Option<ChangeReason>) -> Self {
         let version_stream = Self::version_stream_id(&model_version);
         Self {
             version_stream,
@@ -373,7 +374,7 @@ mod tests {
             session_id.clone(),
             from_version.clone(),
             to_version.clone(),
-            Some("Performance upgrade".to_string()),
+            Some(ChangeReason::try_new("Performance upgrade".to_string()).unwrap()),
         );
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
@@ -405,7 +406,10 @@ mod tests {
                 assert_eq!(event_session_id, &session_id);
                 assert_eq!(event_from, &from_version);
                 assert_eq!(event_to, &to_version);
-                assert_eq!(reason, &Some("Performance upgrade".to_string()));
+                assert_eq!(
+                    reason.as_ref().map(|r| r.as_ref()),
+                    Some("Performance upgrade")
+                );
                 assert_eq!(change_type, &from_version.compare(&to_version));
             }
             _ => panic!("Expected VersionChanged event"),
@@ -443,8 +447,10 @@ mod tests {
             .unwrap();
 
         // Now deactivate it
-        let deactivate_command =
-            DeactivateVersion::new(model_version.clone(), Some("Model deprecated".to_string()));
+        let deactivate_command = DeactivateVersion::new(
+            model_version.clone(),
+            Some(ChangeReason::try_new("Model deprecated".to_string()).unwrap()),
+        );
         let result = executor
             .execute(deactivate_command.clone(), ExecutionOptions::default())
             .await;

@@ -1,4 +1,6 @@
-use crate::domain::types::{FinishReason, ModelId, Prompt, ResponseText};
+use crate::domain::types::{
+    Cost, FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
+};
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -57,7 +59,7 @@ pub struct LlmRequest {
     pub session_id: crate::domain::SessionId,
     pub model_version: ModelVersion,
     pub prompt: Prompt,
-    pub parameters: serde_json::Value,
+    pub parameters: LlmParameters,
     pub created_at: DateTime<Utc>,
     pub status: RequestStatus,
 }
@@ -84,9 +86,9 @@ pub enum RequestStatus {
 /// Metadata associated with an LLM response
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
-    pub tokens_used: Option<u32>,
-    pub cost_cents: Option<u32>,
-    pub latency_ms: Option<u64>,
+    pub tokens_used: Option<TokenCount>,
+    pub cost_cents: Option<Cost>,
+    pub latency_ms: Option<Latency>,
     pub finish_reason: Option<FinishReason>,
     pub model_used: Option<ModelId>,
 }
@@ -96,7 +98,7 @@ impl LlmRequest {
         session_id: crate::domain::SessionId,
         model_version: ModelVersion,
         prompt: Prompt,
-        parameters: serde_json::Value,
+        parameters: LlmParameters,
     ) -> Self {
         Self {
             id: RequestId::generate(),
@@ -166,7 +168,7 @@ mod tests {
             session_id,
             model_version,
             Prompt::try_new("Test prompt".to_string()).unwrap(),
-            serde_json::json!({"temperature": 0.7}),
+            LlmParameters::new(serde_json::json!({"temperature": 0.7})),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
@@ -185,7 +187,7 @@ mod tests {
             session_id,
             model_version,
             Prompt::try_new("Test prompt".to_string()).unwrap(),
-            serde_json::json!({}),
+            LlmParameters::new(serde_json::json!({})),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
@@ -201,9 +203,9 @@ mod tests {
     fn test_llm_response_creation() {
         let request_id = RequestId::generate();
         let metadata = ResponseMetadata {
-            tokens_used: Some(150),
-            cost_cents: Some(5),
-            latency_ms: Some(1200),
+            tokens_used: Some(unsafe { TokenCount::new_unchecked(150) }),
+            cost_cents: Some(unsafe { Cost::new_unchecked(5) }),
+            latency_ms: Some(unsafe { Latency::new_unchecked(1200) }),
             finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
             model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
         };
@@ -215,8 +217,14 @@ mod tests {
         );
 
         assert_eq!(response.response_text.as_ref(), "Test response");
-        assert_eq!(response.metadata.tokens_used, Some(150));
-        assert_eq!(response.metadata.cost_cents, Some(5));
+        assert_eq!(
+            response.metadata.tokens_used,
+            Some(unsafe { TokenCount::new_unchecked(150) })
+        );
+        assert_eq!(
+            response.metadata.cost_cents,
+            Some(unsafe { Cost::new_unchecked(5) })
+        );
     }
 
     // Property-based tests
@@ -269,10 +277,10 @@ mod tests {
             };
             // Round temperature to avoid floating point precision issues
             let rounded_temp = (temp * 1000.0).round() / 1000.0;
-            let parameters = serde_json::json!({
+            let parameters = LlmParameters::new(serde_json::json!({
                 "temperature": rounded_temp,
                 "max_tokens": max_tokens
-            });
+            }));
 
             let request = if prompt.is_empty() {
                 return Ok(()); // Skip empty prompts as they're invalid
@@ -300,9 +308,9 @@ mod tests {
             model_used in prop::option::of("[a-zA-Z0-9-]+")
         ) {
             let metadata = ResponseMetadata {
-                tokens_used: tokens,
-                cost_cents: cost,
-                latency_ms: latency,
+                tokens_used: tokens.map(|t| unsafe { TokenCount::new_unchecked(t) }),
+                cost_cents: cost.map(|c| unsafe { Cost::new_unchecked(c) }),
+                latency_ms: latency.map(|l| unsafe { Latency::new_unchecked(l) }),
                 finish_reason: finish_reason.and_then(|s| FinishReason::try_new(s).ok()),
                 model_used: model_used.and_then(|s| ModelId::try_new(s).ok()),
             };

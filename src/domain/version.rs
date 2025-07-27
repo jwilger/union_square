@@ -8,6 +8,7 @@ use nutype::nutype;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::llm::{LlmProvider, ModelVersion};
+use crate::domain::types::{ChangeReason, RequestCount};
 
 /// Unique identifier for a version change event
 #[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
@@ -25,7 +26,7 @@ pub struct TrackedVersion {
     pub version: ModelVersion,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
-    pub request_count: u64,
+    pub request_count: RequestCount,
     pub is_active: bool,
 }
 
@@ -36,14 +37,15 @@ impl TrackedVersion {
             version,
             first_seen: now,
             last_seen: now,
-            request_count: 1,
+            request_count: unsafe { RequestCount::new_unchecked(1) },
             is_active: true,
         }
     }
 
     pub fn record_usage(&mut self) {
         self.last_seen = Utc::now();
-        self.request_count += 1;
+        self.request_count =
+            unsafe { RequestCount::new_unchecked(self.request_count.as_ref() + 1) };
     }
 
     pub fn deactivate(&mut self) {
@@ -130,7 +132,7 @@ pub struct VersionChangeEvent {
     pub to_version: ModelVersion,
     pub change_type: VersionComparison,
     pub occurred_at: DateTime<Utc>,
-    pub reason: Option<String>,
+    pub reason: Option<ChangeReason>,
 }
 
 impl VersionChangeEvent {
@@ -138,7 +140,7 @@ impl VersionChangeEvent {
         session_id: crate::domain::SessionId,
         from_version: ModelVersion,
         to_version: ModelVersion,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
     ) -> Self {
         let change_type = from_version.compare(&to_version);
         Self {
@@ -224,11 +226,15 @@ mod tests {
         };
 
         let mut tracked = TrackedVersion::new(version);
-        assert_eq!(tracked.request_count, 1);
+        assert_eq!(tracked.request_count, unsafe {
+            RequestCount::new_unchecked(1)
+        });
         assert!(tracked.is_active);
 
         tracked.record_usage();
-        assert_eq!(tracked.request_count, 2);
+        assert_eq!(tracked.request_count, unsafe {
+            RequestCount::new_unchecked(2)
+        });
 
         tracked.deactivate();
         assert!(!tracked.is_active);
@@ -271,7 +277,7 @@ mod tests {
             session_id,
             v1.clone(),
             v2.clone(),
-            Some("Upgrade for better performance".to_string()),
+            Some(ChangeReason::try_new("Upgrade for better performance".to_string()).unwrap()),
         );
 
         assert_eq!(event.from_version, v1);
@@ -286,8 +292,8 @@ mod tests {
             }
         );
         assert_eq!(
-            event.reason,
-            Some("Upgrade for better performance".to_string())
+            event.reason.as_ref().map(|r| r.as_ref()),
+            Some("Upgrade for better performance")
         );
     }
 
