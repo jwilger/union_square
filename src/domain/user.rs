@@ -77,6 +77,7 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn test_user_id_generation() {
@@ -124,5 +125,66 @@ mod tests {
 
         user.activate();
         assert!(user.is_active);
+    }
+
+    // Property-based tests
+    proptest! {
+        #[test]
+        fn prop_user_id_uniqueness(n in 1..100usize) {
+            let mut ids = std::collections::HashSet::new();
+            for _ in 0..n {
+                let id = UserId::generate();
+                assert!(ids.insert(id));
+            }
+        }
+
+        #[test]
+        fn prop_email_validation(s in any::<String>()) {
+            let result = EmailAddress::parse(s.clone());
+            if s.contains('@') && s.len() > 3 {
+                // Could be valid
+                if result.is_ok() {
+                    let email = result.unwrap();
+                    assert_eq!(email.into_inner(), s);
+                }
+            } else {
+                // Must be invalid
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn prop_display_name_validation(s in any::<String>()) {
+            let result = DisplayName::parse(s.clone());
+            let trimmed = s.trim();
+            if !trimmed.is_empty() && trimmed.len() <= 255 {
+                assert!(result.is_ok());
+                let name = result.unwrap();
+                assert_eq!(name.into_inner(), trimmed.to_string());
+            } else {
+                assert!(result.is_err());
+            }
+        }
+
+        #[test]
+        fn prop_user_serialization_roundtrip(
+            email_str in "[a-z]+@[a-z]+\\.[a-z]+",
+            name_str in "[a-zA-Z ]{1,100}"
+        ) {
+            if let (Ok(email), Ok(name)) = (
+                EmailAddress::parse(email_str),
+                DisplayName::parse(name_str)
+            ) {
+                let user = User::new(email, name);
+
+                let json = serde_json::to_string(&user).unwrap();
+                let deserialized: User = serde_json::from_str(&json).unwrap();
+
+                // IDs will be different, but other fields should match
+                assert_eq!(user.email, deserialized.email);
+                assert_eq!(user.display_name, deserialized.display_name);
+                assert_eq!(user.is_active, deserialized.is_active);
+            }
+        }
     }
 }

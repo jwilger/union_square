@@ -8,6 +8,7 @@ use nutype::nutype;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::llm::{LlmProvider, ModelVersion};
+use crate::domain::types::{ChangeReason, RequestCount};
 
 /// Unique identifier for a version change event
 #[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
@@ -25,7 +26,7 @@ pub struct TrackedVersion {
     pub version: ModelVersion,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
-    pub request_count: u64,
+    pub request_count: RequestCount,
     pub is_active: bool,
 }
 
@@ -36,14 +37,14 @@ impl TrackedVersion {
             version,
             first_seen: now,
             last_seen: now,
-            request_count: 1,
+            request_count: RequestCount::new(1),
             is_active: true,
         }
     }
 
     pub fn record_usage(&mut self) {
         self.last_seen = Utc::now();
-        self.request_count += 1;
+        self.request_count = self.request_count.increment();
     }
 
     pub fn deactivate(&mut self) {
@@ -71,16 +72,16 @@ impl ModelVersion {
         } else {
             VersionComparison::Changed {
                 from_provider: self.provider.clone(),
-                from_model_id: self.model_id.clone(),
+                from_model_id: self.model_id.as_ref().to_string(),
                 to_provider: other.provider.clone(),
-                to_model_id: other.model_id.clone(),
+                to_model_id: other.model_id.as_ref().to_string(),
             }
         }
     }
 
     /// Create a version identifier string for display
     pub fn to_version_string(&self) -> String {
-        format!("{}/{}", self.provider.as_str(), self.model_id)
+        format!("{}/{}", self.provider.as_str(), self.model_id.as_ref())
     }
 }
 
@@ -130,7 +131,7 @@ pub struct VersionChangeEvent {
     pub to_version: ModelVersion,
     pub change_type: VersionComparison,
     pub occurred_at: DateTime<Utc>,
-    pub reason: Option<String>,
+    pub reason: Option<ChangeReason>,
 }
 
 impl VersionChangeEvent {
@@ -138,7 +139,7 @@ impl VersionChangeEvent {
         session_id: crate::domain::SessionId,
         from_version: ModelVersion,
         to_version: ModelVersion,
-        reason: Option<String>,
+        reason: Option<ChangeReason>,
     ) -> Self {
         let change_type = from_version.compare(&to_version);
         Self {
@@ -156,13 +157,14 @@ impl VersionChangeEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::types::ModelId;
     use crate::domain::SessionId;
 
     #[test]
     fn test_version_comparison_same() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let v2 = v1.clone();
@@ -173,12 +175,12 @@ mod tests {
     fn test_version_comparison_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-3.5-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -196,12 +198,12 @@ mod tests {
     fn test_version_comparison_provider_changed() {
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -219,15 +221,15 @@ mod tests {
     fn test_tracked_version_usage() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let mut tracked = TrackedVersion::new(version);
-        assert_eq!(tracked.request_count, 1);
+        assert_eq!(tracked.request_count, RequestCount::new(1));
         assert!(tracked.is_active);
 
         tracked.record_usage();
-        assert_eq!(tracked.request_count, 2);
+        assert_eq!(tracked.request_count, RequestCount::new(2));
 
         tracked.deactivate();
         assert!(!tracked.is_active);
@@ -237,14 +239,14 @@ mod tests {
     fn test_version_string_formatting() {
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         assert_eq!(version.to_version_string(), "openai/gpt-4-turbo-2024-01");
 
         let version_anthropic = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: "claude-3-opus-20240229".to_string(),
+            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
         };
 
         assert_eq!(
@@ -258,19 +260,19 @@ mod tests {
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-3.5-turbo".to_string(),
+            model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
         };
 
         let v2 = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: "gpt-4-turbo-2024-01".to_string(),
+            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
         let event = VersionChangeEvent::new(
             session_id,
             v1.clone(),
             v2.clone(),
-            Some("Upgrade for better performance".to_string()),
+            Some(ChangeReason::try_new("Upgrade for better performance".to_string()).unwrap()),
         );
 
         assert_eq!(event.from_version, v1);
@@ -285,8 +287,8 @@ mod tests {
             }
         );
         assert_eq!(
-            event.reason,
-            Some("Upgrade for better performance".to_string())
+            event.reason.as_ref().map(|r| r.as_ref()),
+            Some("Upgrade for better performance")
         );
     }
 
