@@ -1,3 +1,4 @@
+use crate::providers::constants::{error_messages, sql};
 use crate::{Error, Result};
 use sqlx::{PgPool, Row};
 
@@ -17,16 +18,18 @@ impl Database {
 
     /// Health check for the database connection
     pub async fn health_check(&self) -> Result<()> {
-        let row = sqlx::query("SELECT 1 as health_check")
+        let row = sqlx::query(sql::HEALTH_CHECK_QUERY)
             .fetch_one(&self.pool)
             .await?;
 
-        let health_check: i32 = row.try_get("health_check")?;
+        let health_check: i32 = row.try_get(sql::HEALTH_CHECK_COLUMN)?;
 
-        if health_check == 1 {
+        if health_check == sql::HEALTH_CHECK_EXPECTED_VALUE {
             Ok(())
         } else {
-            Err(Error::application("Database health check failed"))
+            Err(Error::application(
+                error_messages::DATABASE_HEALTH_CHECK_FAILED,
+            ))
         }
     }
 }

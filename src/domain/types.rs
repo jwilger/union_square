@@ -291,6 +291,40 @@ impl RequestCount {
     }
 }
 
+/// Field name for error context
+#[nutype(
+    validate(not_empty, len_char_max = 100),
+    derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    )
+)]
+pub struct FieldName(String);
+
+/// Resource identifier for error context
+#[nutype(
+    validate(not_empty, len_char_max = 200),
+    derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Display
+    )
+)]
+pub struct ResourceId(String);
+
 /// Reason for version change or deactivation
 ///
 /// Limited to 1000 characters to capture meaningful change rationales

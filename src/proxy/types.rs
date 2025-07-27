@@ -49,6 +49,7 @@
 //! };
 //! ```
 
+use crate::providers::bedrock::types::AwsRegion;
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -270,8 +271,8 @@ pub struct ProxyConfig {
     pub request_timeout: Duration,
     /// Ring buffer configuration
     pub ring_buffer: RingBufferConfig,
-    /// AWS region for Bedrock provider (optional, defaults to us-east-1)
-    pub bedrock_region: Option<String>,
+    /// AWS region for Bedrock provider
+    pub bedrock_region: Option<AwsRegion>,
 }
 
 impl Default for ProxyConfig {

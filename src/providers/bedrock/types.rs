@@ -1,5 +1,6 @@
 //! Type definitions for AWS Bedrock provider
 
+use crate::providers::constants::{model_patterns, paths};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
 
@@ -29,9 +30,9 @@ pub enum BedrockEndpoint {
 impl BedrockEndpoint {
     /// Parse endpoint from path
     pub fn from_path(path: &str) -> Option<Self> {
-        if path.ends_with("/invoke") {
+        if path.ends_with(&format!("/{}", paths::bedrock::INVOKE_ENDPOINT)) {
             Some(Self::InvokeModel)
-        } else if path.ends_with("/invoke-with-response-stream") {
+        } else if path.ends_with(&format!("/{}", paths::bedrock::INVOKE_STREAM_ENDPOINT)) {
             Some(Self::InvokeModelWithResponseStream)
         } else {
             None
@@ -41,8 +42,8 @@ impl BedrockEndpoint {
     /// Get the endpoint suffix
     pub fn suffix(&self) -> &'static str {
         match self {
-            Self::InvokeModel => "invoke",
-            Self::InvokeModelWithResponseStream => "invoke-with-response-stream",
+            Self::InvokeModel => paths::bedrock::INVOKE_ENDPOINT,
+            Self::InvokeModelWithResponseStream => paths::bedrock::INVOKE_STREAM_ENDPOINT,
         }
     }
 }
@@ -63,17 +64,19 @@ impl ModelFamily {
     /// Determine model family from model ID
     pub fn from_model_id(model_id: &ModelId) -> Self {
         let id_str = model_id.as_ref();
-        if id_str.contains("claude") {
+        if id_str.contains(model_patterns::CLAUDE) {
             Self::Claude
-        } else if id_str.contains("titan") {
+        } else if id_str.contains(model_patterns::TITAN) {
             Self::Titan
-        } else if id_str.contains("llama") {
+        } else if id_str.contains(model_patterns::LLAMA) {
             Self::Llama
-        } else if id_str.contains("j2") || id_str.contains("jurassic") {
+        } else if id_str.contains(model_patterns::JURASSIC_J2)
+            || id_str.contains(model_patterns::JURASSIC_FULL)
+        {
             Self::Jurassic
-        } else if id_str.contains("command") {
+        } else if id_str.contains(model_patterns::COMMAND) {
             Self::Command
-        } else if id_str.contains("stable") {
+        } else if id_str.contains(model_patterns::STABLE) {
             Self::Stable
         } else {
             Self::Unknown
@@ -82,17 +85,19 @@ impl ModelFamily {
 
     /// Determine model family from model ID string (for backwards compatibility)
     pub fn from_model_id_str(model_id: &str) -> Self {
-        if model_id.contains("claude") {
+        if model_id.contains(model_patterns::CLAUDE) {
             Self::Claude
-        } else if model_id.contains("titan") {
+        } else if model_id.contains(model_patterns::TITAN) {
             Self::Titan
-        } else if model_id.contains("llama") {
+        } else if model_id.contains(model_patterns::LLAMA) {
             Self::Llama
-        } else if model_id.contains("j2") || model_id.contains("jurassic") {
+        } else if model_id.contains(model_patterns::JURASSIC_J2)
+            || model_id.contains(model_patterns::JURASSIC_FULL)
+        {
             Self::Jurassic
-        } else if model_id.contains("command") {
+        } else if model_id.contains(model_patterns::COMMAND) {
             Self::Command
-        } else if model_id.contains("stable") {
+        } else if model_id.contains(model_patterns::STABLE) {
             Self::Stable
         } else {
             Self::Unknown

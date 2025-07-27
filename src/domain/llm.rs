@@ -1,6 +1,8 @@
+use crate::domain::config_types::ProviderName;
 use crate::domain::types::{
     FinishReason, Latency, LlmParameters, ModelId, Prompt, ResponseText, TokenCount,
 };
+use crate::providers::constants::provider_ids;
 use chrono::{DateTime, Utc};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -29,18 +31,18 @@ pub enum LlmProvider {
     Anthropic,
     Google,
     Azure,
-    Other(String),
+    Other(ProviderName),
 }
 
 impl LlmProvider {
     /// Get the string representation of the provider
     pub fn as_str(&self) -> &str {
         match self {
-            LlmProvider::OpenAI => "openai",
-            LlmProvider::Anthropic => "anthropic",
-            LlmProvider::Google => "google",
-            LlmProvider::Azure => "azure",
-            LlmProvider::Other(name) => name,
+            LlmProvider::OpenAI => provider_ids::OPENAI,
+            LlmProvider::Anthropic => provider_ids::ANTHROPIC,
+            LlmProvider::Google => provider_ids::GOOGLE,
+            LlmProvider::Azure => provider_ids::AZURE,
+            LlmProvider::Other(name) => name.as_ref(),
         }
     }
 }
@@ -145,6 +147,7 @@ impl LlmResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::test_data::{finish_reasons, model_ids, numeric, prompts, responses};
     use crate::domain::SessionId;
     use proptest::prelude::*;
 
@@ -160,18 +163,18 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::OpenAI,
-            model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
+            model_id: ModelId::try_new(model_ids::GPT_4_TURBO.to_string()).unwrap(),
         };
 
         let request = LlmRequest::new(
             session_id,
             model_version,
-            Prompt::try_new("Test prompt".to_string()).unwrap(),
-            LlmParameters::new(serde_json::json!({"temperature": 0.7})),
+            Prompt::try_new(prompts::SIMPLE_PROMPT.to_string()).unwrap(),
+            LlmParameters::new(serde_json::json!({"temperature": numeric::TEMPERATURE_07})),
         );
 
         assert_eq!(request.status, RequestStatus::Pending);
-        assert_eq!(request.prompt.as_ref(), "Test prompt");
+        assert_eq!(request.prompt.as_ref(), prompts::SIMPLE_PROMPT);
     }
 
     #[test]
@@ -179,13 +182,13 @@ mod tests {
         let session_id = SessionId::generate();
         let model_version = ModelVersion {
             provider: LlmProvider::Anthropic,
-            model_id: ModelId::try_new("claude-3-opus-20240229".to_string()).unwrap(),
+            model_id: ModelId::try_new(model_ids::CLAUDE_OPUS.to_string()).unwrap(),
         };
 
         let mut request = LlmRequest::new(
             session_id,
             model_version,
-            Prompt::try_new("Test prompt".to_string()).unwrap(),
+            Prompt::try_new(prompts::SIMPLE_PROMPT.to_string()).unwrap(),
             LlmParameters::new(serde_json::json!({})),
         );
 
@@ -202,22 +205,22 @@ mod tests {
     fn test_llm_response_creation() {
         let request_id = RequestId::generate();
         let metadata = ResponseMetadata {
-            tokens_used: Some(TokenCount::try_new(150).unwrap()),
-            latency_ms: Some(Latency::try_new(1200).unwrap()),
-            finish_reason: Some(FinishReason::try_new("stop".to_string()).unwrap()),
-            model_used: Some(ModelId::try_new("gpt-4".to_string()).unwrap()),
+            tokens_used: Some(TokenCount::try_new(numeric::TOKENS_150).unwrap()),
+            latency_ms: Some(Latency::try_new(numeric::LATENCY_1200_MS).unwrap()),
+            finish_reason: Some(FinishReason::try_new(finish_reasons::STOP.to_string()).unwrap()),
+            model_used: Some(ModelId::try_new(model_ids::GPT_4_TURBO.to_string()).unwrap()),
         };
 
         let response = LlmResponse::new(
             request_id,
-            ResponseText::try_new("Test response".to_string()).unwrap(),
+            ResponseText::try_new(responses::SIMPLE_RESPONSE.to_string()).unwrap(),
             metadata,
         );
 
-        assert_eq!(response.response_text.as_ref(), "Test response");
+        assert_eq!(response.response_text.as_ref(), responses::SIMPLE_RESPONSE);
         assert_eq!(
             response.metadata.tokens_used,
-            Some(TokenCount::try_new(150).unwrap())
+            Some(TokenCount::try_new(numeric::TOKENS_150).unwrap())
         );
     }
 
@@ -236,14 +239,21 @@ mod tests {
         fn prop_model_version_serialization(
             provider_choice in 0..5u8,
             model_id in "[a-zA-Z0-9-]+",
-            custom_name in "[a-zA-Z0-9-]+"
+            custom_name in "[a-zA-Z][a-zA-Z0-9_-]*"
         ) {
             let provider = match provider_choice {
                 0 => LlmProvider::OpenAI,
                 1 => LlmProvider::Anthropic,
                 2 => LlmProvider::Google,
                 3 => LlmProvider::Azure,
-                _ => LlmProvider::Other(custom_name),
+                _ => {
+                    // ProviderName validation requires starting with a letter
+                    if let Ok(name) = ProviderName::try_new(custom_name.clone()) {
+                        LlmProvider::Other(name)
+                    } else {
+                        LlmProvider::Other(ProviderName::try_new("custom_provider".to_string()).unwrap())
+                    }
+                },
             };
 
             let model_version = ModelVersion {
