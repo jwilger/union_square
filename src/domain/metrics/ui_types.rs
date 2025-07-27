@@ -185,6 +185,31 @@ pub enum PerformanceLevelContext {
     ApproachingAcceptable,
 }
 
+/// Performance category labels for demo data display
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PerformanceCategory {
+    /// High quality performance (90%+ F-score)
+    Excellent,
+    /// Good performance (75-90% F-score)
+    Good,
+    /// Needs improvement (50-75% F-score)
+    NeedsImprovement,
+    /// Critical issues (<50% F-score)
+    Critical,
+}
+
+impl PerformanceCategory {
+    /// Get the display label for this category
+    pub fn display_label(&self) -> &'static str {
+        match self {
+            Self::Excellent => "Excellent Performance",
+            Self::Good => "Good Performance",
+            Self::NeedsImprovement => "Needs Improvement",
+            Self::Critical => "Critical Issues",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -111,17 +111,28 @@ pub struct RecordModelFScore {
 mod stream_ids {
     use super::*;
 
+    /// Stream ID prefix for model metrics
+    const MODEL_STREAM_PREFIX: &str = "metrics:model:";
+
+    /// Stream ID prefix for application metrics
+    const APPLICATION_STREAM_PREFIX: &str = "metrics:app:";
+
     pub fn model_stream_id(model_version: &ModelVersion) -> StreamId {
         StreamId::try_new(format!(
-            "metrics:model:{}",
+            "{}{}",
+            MODEL_STREAM_PREFIX,
             model_version.to_version_string()
         ))
         .expect("Valid stream ID")
     }
 
     pub fn application_stream_id(application_id: &ApplicationId) -> StreamId {
-        StreamId::try_new(format!("metrics:app:{}", application_id.as_ref()))
-            .expect("Valid stream ID")
+        StreamId::try_new(format!(
+            "{}{}",
+            APPLICATION_STREAM_PREFIX,
+            application_id.as_ref()
+        ))
+        .expect("Valid stream ID")
     }
 }
 
@@ -170,6 +181,18 @@ mod event_builders {
     }
 }
 
+/// Common trait for F-score commands
+trait FScoreCommand {
+    fn precision(&self) -> Precision;
+    fn recall(&self) -> Recall;
+
+    /// Calculate F-score from precision and recall
+    fn calculate_f_score(&self) -> FScore {
+        FScore::from_precision_recall(self.precision(), self.recall())
+            .expect("F-score calculation should succeed with valid precision and recall")
+    }
+}
+
 impl RecordModelFScore {
     pub fn new(
         session_id: SessionId,
@@ -190,6 +213,16 @@ impl RecordModelFScore {
     }
 }
 
+impl FScoreCommand for RecordModelFScore {
+    fn precision(&self) -> Precision {
+        self.precision
+    }
+
+    fn recall(&self) -> Recall {
+        self.recall
+    }
+}
+
 #[async_trait]
 impl CommandLogic for RecordModelFScore {
     type State = MetricsState;
@@ -207,10 +240,7 @@ impl CommandLogic for RecordModelFScore {
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
         let mut events = Vec::new();
 
-        // Calculate F-score from precision and recall
-        // This should never fail since precision and recall are validated at construction
-        let f_score = FScore::from_precision_recall(self.precision, self.recall)
-            .expect("F-score calculation should succeed with valid precision and recall");
+        let f_score = self.calculate_f_score();
 
         emit!(
             events,
@@ -269,6 +299,16 @@ impl RecordApplicationFScore {
     }
 }
 
+impl FScoreCommand for RecordApplicationFScore {
+    fn precision(&self) -> Precision {
+        self.precision
+    }
+
+    fn recall(&self) -> Recall {
+        self.recall
+    }
+}
+
 #[async_trait]
 impl CommandLogic for RecordApplicationFScore {
     type State = MetricsState;
@@ -286,10 +326,7 @@ impl CommandLogic for RecordApplicationFScore {
     ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
         let mut events = Vec::new();
 
-        // Calculate F-score from precision and recall
-        // This should never fail since precision and recall are validated at construction
-        let f_score = FScore::from_precision_recall(self.precision, self.recall)
-            .expect("F-score calculation should succeed with valid precision and recall");
+        let f_score = self.calculate_f_score();
 
         // Emit to application stream
         emit!(
@@ -329,7 +366,11 @@ impl CommandLogic for RecordApplicationFScore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{llm::LlmProvider, test_data, types::ModelId};
+    use crate::domain::{
+        llm::LlmProvider,
+        test_data::{self, f_scores, numeric},
+        types::ModelId,
+    };
     use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
     use eventcore_memory::InMemoryEventStore;
 
@@ -340,15 +381,15 @@ mod tests {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
         };
-        let precision = Precision::try_new(0.8).unwrap();
-        let recall = Recall::try_new(0.7).unwrap();
+        let precision = Precision::try_new(f_scores::MEDIUM_PRECISION).unwrap();
+        let recall = Recall::try_new(f_scores::MEDIUM_RECALL).unwrap();
 
         let command = RecordModelFScore::new(
             session_id,
             model_version.clone(),
             precision,
             recall,
-            SampleCount::try_new(100).unwrap(),
+            SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap(),
         );
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
@@ -379,10 +420,14 @@ mod tests {
                 assert_eq!(event_model, &model_version);
                 assert_eq!(event_precision, &Some(precision));
                 assert_eq!(event_recall, &Some(recall));
-                assert_eq!(sample_count, &SampleCount::try_new(100).unwrap());
+                assert_eq!(
+                    sample_count,
+                    &SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap()
+                );
 
                 // Verify F-score calculation
-                let expected_f_score = 2.0 * (0.8 * 0.7) / (0.8 + 0.7);
+                let expected_f_score = 2.0 * (f_scores::MEDIUM_PRECISION * f_scores::MEDIUM_RECALL)
+                    / (f_scores::MEDIUM_PRECISION + f_scores::MEDIUM_RECALL);
                 assert!((f_score.into_inner() - expected_f_score).abs() < 1e-10);
             }
             _ => panic!("Expected FScoreCalculated event"),
@@ -398,8 +443,8 @@ mod tests {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
         };
-        let precision = Precision::try_new(0.9).unwrap();
-        let recall = Recall::try_new(0.85).unwrap();
+        let precision = Precision::try_new(f_scores::HIGH_PRECISION).unwrap();
+        let recall = Recall::try_new(f_scores::GOOD_F_SCORE).unwrap();
 
         let command = RecordApplicationFScore::new(
             session_id,
@@ -407,7 +452,7 @@ mod tests {
             model_version.clone(),
             precision,
             recall,
-            SampleCount::try_new(200).unwrap(),
+            SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
         );
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
@@ -436,10 +481,14 @@ mod tests {
             } => {
                 assert_eq!(event_app_id, &application_id);
                 assert_eq!(event_model, &model_version);
-                assert_eq!(sample_count, &SampleCount::try_new(200).unwrap());
+                assert_eq!(
+                    sample_count,
+                    &SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap()
+                );
 
                 // Verify F-score calculation
-                let expected_f_score = 2.0 * (0.9 * 0.85) / (0.9 + 0.85);
+                let expected_f_score = 2.0 * (f_scores::HIGH_PRECISION * f_scores::GOOD_F_SCORE)
+                    / (f_scores::HIGH_PRECISION + f_scores::GOOD_F_SCORE);
                 assert!((f_score.into_inner() - expected_f_score).abs() < 1e-10);
             }
             _ => panic!("Expected ApplicationFScoreCalculated event"),
@@ -467,9 +516,9 @@ mod tests {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
         };
-        let f_score = FScore::try_new(0.85).unwrap();
-        let precision = Precision::try_new(0.9).unwrap();
-        let recall = Recall::try_new(0.8).unwrap();
+        let f_score = FScore::try_new(f_scores::GOOD_F_SCORE).unwrap();
+        let precision = Precision::try_new(f_scores::HIGH_PRECISION).unwrap();
+        let recall = Recall::try_new(f_scores::MEDIUM_PRECISION).unwrap();
 
         let event = DomainEvent::FScoreCalculated {
             session_id: SessionId::generate(),
@@ -477,7 +526,7 @@ mod tests {
             f_score,
             precision: Some(precision),
             recall: Some(recall),
-            sample_count: SampleCount::try_new(150).unwrap(),
+            sample_count: SampleCount::try_new(numeric::TOKENS_150 as u64).unwrap(),
             calculated_at: Timestamp::now(),
         };
 
@@ -490,7 +539,10 @@ mod tests {
         assert_eq!(latest.f_score, f_score);
         assert_eq!(latest.precision, Some(precision));
         assert_eq!(latest.recall, Some(recall));
-        assert_eq!(latest.sample_count, SampleCount::try_new(150).unwrap());
+        assert_eq!(
+            latest.sample_count,
+            SampleCount::try_new(numeric::TOKENS_150 as u64).unwrap()
+        );
 
         // Verify history tracking
         let history = state.f_score_history(&model_version);

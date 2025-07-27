@@ -8,9 +8,10 @@ use crate::domain::{
     config_types::ProviderName,
     llm::{LlmProvider, ModelVersion},
     metrics::{
-        constants, ApplicationCount, ConfidenceLevel, DataPointCount, DaysBack, FScore,
-        FScoreDataPoint, MetricValue, ModelCount, PointsPerDay, Precision, Recall, SampleCount,
-        StabilityThreshold, TimePeriod, Timestamp, TrendAnalysis, TrendDirection, TrendMagnitude,
+        constants, ui_types::PerformanceCategory, ApplicationCount, ConfidenceLevel,
+        DataPointCount, DaysBack, FScore, FScoreDataPoint, MetricValue, ModelCount, PointsPerDay,
+        Precision, Recall, SampleCount, StabilityThreshold, TimePeriod, Timestamp, TrendAnalysis,
+        TrendDirection, TrendMagnitude,
     },
     session::ApplicationId,
     test_data::{self, f_scores},
@@ -151,13 +152,15 @@ impl FScoreDemoDataGenerator {
         let points_per_day = time_period.points_per_day.into_inner();
 
         // Each application has different baseline performance
-        let (base_precision, base_recall) = match application_id.as_ref() {
-            app if app.contains("MY_APP") => (f_scores::HIGH_PRECISION, f_scores::HIGH_RECALL),
-            app if app.contains("MyApplication") => {
+        // For demo purposes, we map specific test applications to performance levels
+        let (base_precision, base_recall) =
+            if application_id.as_ref() == test_data::application_ids::MY_APP {
+                (f_scores::HIGH_PRECISION, f_scores::HIGH_RECALL)
+            } else if application_id.as_ref() == test_data::application_ids::MY_APPLICATION {
                 (f_scores::MEDIUM_PRECISION, f_scores::MEDIUM_RECALL)
-            }
-            _ => (f_scores::LOW_PRECISION, f_scores::LOW_RECALL),
-        };
+            } else {
+                (f_scores::LOW_PRECISION, f_scores::LOW_RECALL)
+            };
 
         for day in 0..days_back {
             let day_start = now - Duration::days(day);
@@ -168,14 +171,17 @@ impl FScoreDemoDataGenerator {
                 let timestamp = Timestamp::try_new(datetime).unwrap_or_else(|_| Timestamp::now());
 
                 // Application-specific trends
-                let precision_trend = match application_id.as_ref() {
-                    app if app.contains("MY_APP") => {
-                        constants::demo_generation::application_trends::IMPROVING_TREND_RATE
-                    } // Improving
-                    app if app.contains("MyApplication") => {
-                        constants::demo_generation::application_trends::SLIGHT_DECLINE_RATE
-                    } // Slightly declining
-                    _ => constants::demo_generation::application_trends::RAPID_DECLINE_RATE, // Declining more rapidly
+                let precision_trend = if application_id.as_ref()
+                    == test_data::application_ids::MY_APP
+                {
+                    constants::demo_generation::application_trends::IMPROVING_TREND_RATE
+                // Improving
+                } else if application_id.as_ref() == test_data::application_ids::MY_APPLICATION {
+                    constants::demo_generation::application_trends::SLIGHT_DECLINE_RATE
+                // Slightly declining
+                } else {
+                    constants::demo_generation::application_trends::RAPID_DECLINE_RATE
+                    // Declining more rapidly
                 };
 
                 let precision =
@@ -220,12 +226,12 @@ impl FScoreDemoDataGenerator {
     }
 
     /// Generate demo data showing F-score performance ranges
-    pub fn generate_performance_categories() -> Vec<(String, FScoreDataPoint)> {
+    pub fn generate_performance_categories() -> Vec<(PerformanceCategory, FScoreDataPoint)> {
         let now = Timestamp::now();
 
         vec![
             (
-                "Excellent Performance".to_string(),
+                PerformanceCategory::Excellent,
                 Self::create_demo_point(
                     now,
                     f_scores::HIGH_PRECISION,
@@ -234,7 +240,7 @@ impl FScoreDemoDataGenerator {
                 ),
             ),
             (
-                "Good Performance".to_string(),
+                PerformanceCategory::Good,
                 Self::create_demo_point(
                     // Use slightly older timestamp that's still valid
                     Timestamp::try_new(now.into_datetime() - Duration::hours(1)).unwrap_or(now),
@@ -244,7 +250,7 @@ impl FScoreDemoDataGenerator {
                 ),
             ),
             (
-                "Needs Improvement".to_string(),
+                PerformanceCategory::NeedsImprovement,
                 Self::create_demo_point(
                     Timestamp::try_new(now.into_datetime() - Duration::hours(2)).unwrap_or(now),
                     f_scores::LOW_PRECISION,
@@ -253,7 +259,7 @@ impl FScoreDemoDataGenerator {
                 ),
             ),
             (
-                "Critical Issues".to_string(),
+                PerformanceCategory::Critical,
                 Self::create_demo_point(
                     Timestamp::try_new(now.into_datetime() - Duration::hours(3)).unwrap_or(now),
                     constants::demo_generation::bounds::CRITICAL_PRECISION_THRESHOLD,
@@ -403,11 +409,11 @@ mod tests {
 
         assert_eq!(categories.len(), 4);
 
-        let category_names: Vec<_> = categories.iter().map(|(name, _)| name.clone()).collect();
-        assert!(category_names.contains(&"Excellent Performance".to_string()));
-        assert!(category_names.contains(&"Good Performance".to_string()));
-        assert!(category_names.contains(&"Needs Improvement".to_string()));
-        assert!(category_names.contains(&"Critical Issues".to_string()));
+        let category_types: Vec<_> = categories.iter().map(|(cat, _)| cat.clone()).collect();
+        assert!(category_types.contains(&PerformanceCategory::Excellent));
+        assert!(category_types.contains(&PerformanceCategory::Good));
+        assert!(category_types.contains(&PerformanceCategory::NeedsImprovement));
+        assert!(category_types.contains(&PerformanceCategory::Critical));
     }
 
     #[test]
