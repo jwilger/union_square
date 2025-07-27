@@ -3,11 +3,11 @@
 //! This module defines all domain events that are stored
 //! in the event store using EventCore.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     llm::{ModelVersion, RequestId, ResponseMetadata},
+    metrics::{SampleCount, Timestamp},
     session::{ApplicationId, SessionId, SessionStatus},
     types::{ChangeReason, ErrorMessage, LlmParameters, Prompt, ResponseText, Tag},
     user::{DisplayName, EmailAddress, UserId},
@@ -23,17 +23,17 @@ pub enum DomainEvent {
         session_id: SessionId,
         user_id: UserId,
         application_id: ApplicationId,
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
     },
     SessionEnded {
         session_id: SessionId,
-        ended_at: DateTime<Utc>,
+        ended_at: Timestamp,
         final_status: SessionStatus,
     },
     SessionTagged {
         session_id: SessionId,
         tag: Tag,
-        tagged_at: DateTime<Utc>,
+        tagged_at: Timestamp,
     },
 
     // LLM Request Events
@@ -43,33 +43,33 @@ pub enum DomainEvent {
         model_version: ModelVersion,
         prompt: Prompt,
         parameters: LlmParameters,
-        received_at: DateTime<Utc>,
+        received_at: Timestamp,
     },
     LlmRequestStarted {
         request_id: RequestId,
-        started_at: DateTime<Utc>,
+        started_at: Timestamp,
     },
     LlmResponseReceived {
         request_id: RequestId,
         response_text: ResponseText,
         metadata: ResponseMetadata,
-        received_at: DateTime<Utc>,
+        received_at: Timestamp,
     },
     LlmRequestFailed {
         request_id: RequestId,
         error_message: ErrorMessage,
-        failed_at: DateTime<Utc>,
+        failed_at: Timestamp,
     },
     LlmRequestCancelled {
         request_id: RequestId,
-        cancelled_at: DateTime<Utc>,
+        cancelled_at: Timestamp,
     },
 
     // Version Tracking Events
     VersionFirstSeen {
         model_version: ModelVersion,
         session_id: SessionId,
-        first_seen_at: DateTime<Utc>,
+        first_seen_at: Timestamp,
     },
     VersionChanged {
         change_id: VersionChangeId,
@@ -78,17 +78,38 @@ pub enum DomainEvent {
         to_version: ModelVersion,
         change_type: VersionComparison,
         reason: Option<ChangeReason>,
-        changed_at: DateTime<Utc>,
+        changed_at: Timestamp,
     },
     VersionUsageRecorded {
         model_version: ModelVersion,
         session_id: SessionId,
-        recorded_at: DateTime<Utc>,
+        recorded_at: Timestamp,
     },
     VersionDeactivated {
         model_version: ModelVersion,
         reason: Option<ChangeReason>,
-        deactivated_at: DateTime<Utc>,
+        deactivated_at: Timestamp,
+    },
+
+    // F-score and Metrics Events
+    FScoreCalculated {
+        session_id: SessionId,
+        model_version: ModelVersion,
+        f_score: crate::domain::metrics::FScore,
+        precision: Option<crate::domain::metrics::Precision>,
+        recall: Option<crate::domain::metrics::Recall>,
+        sample_count: SampleCount,
+        calculated_at: Timestamp,
+    },
+    ApplicationFScoreCalculated {
+        session_id: SessionId,
+        application_id: ApplicationId,
+        model_version: ModelVersion,
+        f_score: crate::domain::metrics::FScore,
+        precision: Option<crate::domain::metrics::Precision>,
+        recall: Option<crate::domain::metrics::Recall>,
+        sample_count: SampleCount,
+        calculated_at: Timestamp,
     },
 
     // User Events
@@ -96,22 +117,22 @@ pub enum DomainEvent {
         user_id: UserId,
         email: EmailAddress,
         display_name: Option<DisplayName>,
-        created_at: DateTime<Utc>,
+        created_at: Timestamp,
     },
     UserActivated {
         user_id: UserId,
-        activated_at: DateTime<Utc>,
+        activated_at: Timestamp,
     },
     UserDeactivated {
         user_id: UserId,
         reason: Option<ChangeReason>,
-        deactivated_at: DateTime<Utc>,
+        deactivated_at: Timestamp,
     },
 }
 
 impl DomainEvent {
     /// Get the timestamp of when this event occurred
-    pub fn occurred_at(&self) -> DateTime<Utc> {
+    pub fn occurred_at(&self) -> Timestamp {
         match self {
             DomainEvent::SessionStarted { started_at, .. } => *started_at,
             DomainEvent::SessionEnded { ended_at, .. } => *ended_at,
@@ -125,6 +146,8 @@ impl DomainEvent {
             DomainEvent::VersionChanged { changed_at, .. } => *changed_at,
             DomainEvent::VersionUsageRecorded { recorded_at, .. } => *recorded_at,
             DomainEvent::VersionDeactivated { deactivated_at, .. } => *deactivated_at,
+            DomainEvent::FScoreCalculated { calculated_at, .. } => *calculated_at,
+            DomainEvent::ApplicationFScoreCalculated { calculated_at, .. } => *calculated_at,
             DomainEvent::UserCreated { created_at, .. } => *created_at,
             DomainEvent::UserActivated { activated_at, .. } => *activated_at,
             DomainEvent::UserDeactivated { deactivated_at, .. } => *deactivated_at,
@@ -146,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_event_timestamp_extraction() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let session_id = SessionId::generate();
         let user_id = UserId::generate();
 
