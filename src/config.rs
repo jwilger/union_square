@@ -1,3 +1,8 @@
+use crate::domain::config_types::{
+    BatchSize, DatabaseName, DatabasePassword, DatabaseUsername, FlushIntervalMs, Host, LogFormat,
+    LogLevel, MaxConnections, Port,
+};
+use crate::domain::session::EnvironmentId;
 use config::{Config, Environment, File};
 use serde::Deserialize;
 use std::env;
@@ -15,31 +20,31 @@ pub struct Settings {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationSettings {
-    pub host: String,
-    pub port: u16,
-    pub environment: String,
+    pub host: Host,
+    pub port: Port,
+    pub environment: EnvironmentId,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseSettings {
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    pub password: String,
-    pub database_name: String,
-    pub max_connections: u32,
+    pub host: Host,
+    pub port: Port,
+    pub username: DatabaseUsername,
+    pub password: DatabasePassword,
+    pub database_name: DatabaseName,
+    pub max_connections: MaxConnections,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventCoreSettings {
-    pub batch_size: usize,
-    pub flush_interval_ms: u64,
+    pub batch_size: BatchSize,
+    pub flush_interval_ms: FlushIntervalMs,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LoggingSettings {
-    pub level: String,
-    pub format: String,
+    pub level: LogLevel,
+    pub format: LogFormat,
 }
 
 impl Settings {
@@ -76,7 +81,7 @@ impl Settings {
         format!(
             "postgres://{}:{}@{}:{}/{}",
             self.database.username,
-            self.database.password,
+            self.database.password.as_ref(),
             self.database.host,
             self.database.port,
             self.database.database_name
@@ -105,7 +110,7 @@ mod tests {
         let settings = Settings::new().unwrap();
         let url = settings.database_url();
         assert!(url.starts_with("postgres://"));
-        assert!(url.contains(&settings.database.username));
-        assert!(url.contains(&settings.database.database_name));
+        assert!(url.contains(settings.database.username.as_ref()));
+        assert!(url.contains(settings.database.database_name.as_ref()));
     }
 }
