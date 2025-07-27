@@ -4,6 +4,7 @@
 //! supporting multiple LLM providers with URL-based routing and preserving API compatibility.
 
 pub mod bedrock;
+pub mod constants;
 pub mod response_processor;
 
 use crate::proxy::types::ProxyError;

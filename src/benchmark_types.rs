@@ -55,12 +55,8 @@ pub struct PayloadSize(usize);
 )]
 pub struct ConcurrentUsers(usize);
 
-/// Maximum number of database connections in pool
-#[nutype(
-    validate(greater = 0),
-    derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)
-)]
-pub struct MaxConnections(u32);
+// MaxConnections is now defined in crate::domain::config_types to avoid duplication
+pub use crate::domain::config_types::MaxConnections;
 
 /// Minimum number of database connections in pool
 #[nutype(

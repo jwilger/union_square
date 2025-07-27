@@ -1,3 +1,5 @@
+use crate::domain::types::{ErrorMessage, FieldName, ResourceId};
+use crate::providers::constants::error_messages;
 use thiserror::Error;
 
 /// Union Square application error types
@@ -10,7 +12,7 @@ pub enum Error {
     Database(#[from] sqlx::Error),
 
     #[error("EventCore error: {0}")]
-    EventCore(String),
+    EventCore(ErrorMessage),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
@@ -19,13 +21,13 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Application error: {message}")]
-    Application { message: String },
+    Application { message: ErrorMessage },
 
     #[error("Invalid input: {field}")]
-    InvalidInput { field: String },
+    InvalidInput { field: FieldName },
 
     #[error("Not found: {resource}")]
-    NotFound { resource: String },
+    NotFound { resource: ResourceId },
 
     #[error("Unauthorized")]
     Unauthorized,
@@ -37,44 +39,27 @@ pub enum Error {
 impl Error {
     pub fn application(message: impl Into<String>) -> Self {
         Self::Application {
-            message: message.into(),
+            message: ErrorMessage::try_new(message.into()).unwrap_or_else(|_| {
+                ErrorMessage::try_new(error_messages::INVALID_ERROR_MESSAGE.to_string()).unwrap()
+            }),
         }
     }
 
     pub fn invalid_input(field: impl Into<String>) -> Self {
         Self::InvalidInput {
-            field: field.into(),
+            field: FieldName::try_new(field.into()).unwrap_or_else(|_| {
+                FieldName::try_new(error_messages::UNKNOWN_FIELD.to_string()).unwrap()
+            }),
         }
     }
 
     pub fn not_found(resource: impl Into<String>) -> Self {
         Self::NotFound {
-            resource: resource.into(),
+            resource: ResourceId::try_new(resource.into()).unwrap_or_else(|_| {
+                ResourceId::try_new(error_messages::UNKNOWN_RESOURCE.to_string()).unwrap()
+            }),
         }
     }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// Application-specific error type for service layer
-#[derive(Error, Debug)]
-pub enum ApplicationError {
-    #[error("Not found: {0}")]
-    NotFound(String),
-
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-
-    #[error("Internal error: {0}")]
-    InternalError(String),
-}
-
-impl From<ApplicationError> for Error {
-    fn from(err: ApplicationError) -> Self {
-        match err {
-            ApplicationError::NotFound(resource) => Error::not_found(resource),
-            ApplicationError::ValidationError(msg) => Error::invalid_input(msg),
-            ApplicationError::InternalError(msg) => Error::application(msg),
-        }
-    }
-}

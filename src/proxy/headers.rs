@@ -4,7 +4,7 @@
 //! constants used throughout the proxy service to ensure consistency
 //! and make maintenance easier.
 
-use http::header;
+use ::http::header;
 
 /// Custom header name for the target URL that the proxy should forward requests to
 pub const X_TARGET_URL: &str = "x-target-url";
@@ -36,16 +36,9 @@ pub mod paths {
     pub const METRICS: &str = "/metrics";
 }
 
-/// Common content types
+/// Common content types (re-exported from centralized constants)
 pub mod content_types {
-    /// JSON content type
-    pub const APPLICATION_JSON: &str = "application/json";
-
-    /// Plain text content type
-    pub const TEXT_PLAIN: &str = "text/plain";
-
-    /// HTML content type
-    pub const TEXT_HTML: &str = "text/html; charset=utf-8";
+    pub use crate::providers::constants::http::content_types::*;
 }
 
 #[cfg(test)]
