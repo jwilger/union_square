@@ -83,9 +83,21 @@ pub struct TestCaseDescription(String);
 /// Prompt template for test cases
 ///
 /// Hard limit of 10MB (10,485,760 chars) for DoS protection.
-/// This is approximately 2.6M tokens, well beyond current LLM context windows.
+/// Soft limit of 100k chars logs warnings for unusual usage patterns.
 #[nutype(
-    validate(not_empty, len_char_max = 10485760),
+    validate(
+        not_empty,
+        len_char_max = 10485760,
+        predicate = |s| {
+            if s.len() > 100_000 {
+                warn!(
+                    "Prompt template exceeds soft limit of 100k chars (actual: {} chars)",
+                    s.len()
+                );
+            }
+            true // Always valid, just log warning
+        }
+    ),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct PromptTemplate(String);
@@ -113,9 +125,21 @@ pub struct Pattern(String);
 /// LLM response text
 ///
 /// Hard limit of 10MB (10,485,760 chars) for DoS protection.
-/// This is approximately 2.6M tokens, well beyond current LLM context windows.
+/// Soft limit of 100k chars logs warnings for unusual usage patterns.
 #[nutype(
-    validate(len_char_max = 10485760),
+    validate(
+        len_char_max = 10485760,
+        predicate = |s| {
+            if s.len() > 100_000 {
+                warn!(
+                    "Response text exceeds soft limit of 100k chars (actual: {} chars, ~{} tokens)",
+                    s.len(),
+                    s.len() / 4
+                );
+            }
+            true // Always valid, just log warning
+        }
+    ),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct ResponseText(String);
@@ -163,9 +187,22 @@ pub struct ModelId(String);
 /// LLM prompt text
 ///
 /// Hard limit of 10MB (10,485,760 chars) for DoS protection.
-/// This is approximately 2.6M tokens, well beyond current LLM context windows.
+/// Soft limit of 100k chars logs warnings for unusual usage patterns.
 #[nutype(
-    validate(not_empty, len_char_max = 10485760),
+    validate(
+        not_empty,
+        len_char_max = 10485760,
+        predicate = |s| {
+            if s.len() > 100_000 {
+                warn!(
+                    "Prompt exceeds soft limit of 100k chars (actual: {} chars, ~{} tokens)",
+                    s.len(),
+                    s.len() / 4
+                );
+            }
+            true // Always valid, just log warning
+        }
+    ),
     derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, AsRef, Display)
 )]
 pub struct Prompt(String);
@@ -272,51 +309,6 @@ pub struct LlmParameters(serde_json::Value);
 #[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize))]
 pub struct MetadataAssertions(serde_json::Value);
 
-/// Soft limit validation for logging warnings when limits are exceeded
-pub mod soft_limits {
-    use super::*;
-
-    /// Soft limit for prompt/response text (100k chars, ~25k tokens)
-    const SOFT_LIMIT_LLM_TEXT: usize = 100_000;
-
-    /// Check if a prompt exceeds soft limits and log warning
-    pub fn check_prompt(prompt: &Prompt) {
-        let len = prompt.as_ref().len();
-        if len > SOFT_LIMIT_LLM_TEXT {
-            warn!(
-                "Prompt exceeds soft limit of {} chars (actual: {} chars, ~{} tokens)",
-                SOFT_LIMIT_LLM_TEXT,
-                len,
-                len / 4
-            );
-        }
-    }
-
-    /// Check if a response exceeds soft limits and log warning
-    pub fn check_response(response: &ResponseText) {
-        let len = response.as_ref().len();
-        if len > SOFT_LIMIT_LLM_TEXT {
-            warn!(
-                "Response exceeds soft limit of {} chars (actual: {} chars, ~{} tokens)",
-                SOFT_LIMIT_LLM_TEXT,
-                len,
-                len / 4
-            );
-        }
-    }
-
-    /// Check if a prompt template exceeds soft limits and log warning
-    pub fn check_prompt_template(template: &PromptTemplate) {
-        let len = template.as_ref().len();
-        if len > SOFT_LIMIT_LLM_TEXT {
-            warn!(
-                "Prompt template exceeds soft limit of {} chars (actual: {} chars)",
-                SOFT_LIMIT_LLM_TEXT, len
-            );
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,19 +370,16 @@ mod tests {
     }
 
     #[test]
-    fn test_soft_limits() {
-        // Test that soft limit functions don't panic on valid inputs
-        let small_prompt = Prompt::try_new("Hello".to_string()).unwrap();
-        soft_limits::check_prompt(&small_prompt);
-
-        let small_response = ResponseText::try_new("Response".to_string()).unwrap();
-        soft_limits::check_response(&small_response);
-
-        let small_template = PromptTemplate::try_new("Template".to_string()).unwrap();
-        soft_limits::check_prompt_template(&small_template);
-
-        // Large inputs (would trigger warning logs in real usage)
+    fn test_soft_limit_warnings() {
+        // Test that large inputs can be created (would trigger warning logs)
+        // The predicate always returns true, so these should succeed
         let large_prompt = Prompt::try_new("a".repeat(200_000)).unwrap();
-        soft_limits::check_prompt(&large_prompt);
+        assert_eq!(large_prompt.as_ref().len(), 200_000);
+
+        let large_response = ResponseText::try_new("b".repeat(200_000)).unwrap();
+        assert_eq!(large_response.as_ref().len(), 200_000);
+
+        let large_template = PromptTemplate::try_new("c".repeat(200_000)).unwrap();
+        assert_eq!(large_template.as_ref().len(), 200_000);
     }
 }
