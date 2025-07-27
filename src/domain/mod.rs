@@ -7,6 +7,7 @@ pub mod commands;
 pub mod config_types;
 pub mod events;
 pub mod llm;
+pub mod metrics;
 pub mod network_types;
 pub mod session;
 pub mod test_case;
@@ -18,6 +19,7 @@ pub mod version;
 
 pub use events::*;
 pub use llm::*;
+pub use metrics::*;
 pub use session::*;
 pub use test_case::*;
 pub use user::*;

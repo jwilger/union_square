@@ -182,6 +182,48 @@ pub mod numeric {
     pub const FLUSH_INTERVAL_500_MS: u32 = 500;
 }
 
+/// F-score and metrics constants for testing
+pub mod f_scores {
+    /// High-quality F-scores (good model performance)
+    pub const EXCELLENT_F_SCORE: f64 = 0.95;
+    pub const GOOD_F_SCORE: f64 = 0.85;
+    pub const DECENT_F_SCORE: f64 = 0.75;
+
+    /// Poor F-scores (needs improvement)
+    pub const POOR_F_SCORE: f64 = 0.55;
+    pub const BAD_F_SCORE: f64 = 0.35;
+
+    /// Perfect and zero scores for edge cases
+    pub const PERFECT_F_SCORE: f64 = 1.0;
+    pub const ZERO_F_SCORE: f64 = 0.0;
+
+    /// Precision values for testing
+    pub const HIGH_PRECISION: f64 = 0.92;
+    pub const MEDIUM_PRECISION: f64 = 0.78;
+    pub const LOW_PRECISION: f64 = 0.64;
+
+    /// Recall values for testing
+    pub const HIGH_RECALL: f64 = 0.89;
+    pub const MEDIUM_RECALL: f64 = 0.71;
+    pub const LOW_RECALL: f64 = 0.58;
+
+    /// Sample counts for statistical significance
+    pub const LARGE_SAMPLE: u64 = 1000;
+    pub const MEDIUM_SAMPLE: u64 = 250;
+    pub const SMALL_SAMPLE: u64 = 50;
+    pub const TINY_SAMPLE: u64 = 10;
+
+    /// Beta values for F-beta scores
+    pub const BETA_F1: f64 = 1.0;
+    pub const BETA_F2: f64 = 2.0; // Emphasizes recall
+    pub const BETA_F05: f64 = 0.5; // Emphasizes precision
+
+    /// Confidence levels for statistical analysis
+    pub const CONFIDENCE_95: f64 = 0.95;
+    pub const CONFIDENCE_99: f64 = 0.99;
+    pub const CONFIDENCE_90: f64 = 0.90;
+}
+
 /// JSON parameter keys
 pub mod json_keys {
     pub const TEMPERATURE: &str = "temperature";
