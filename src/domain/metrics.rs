@@ -11,6 +11,7 @@ pub mod sample_count;
 pub mod time_period;
 pub mod timestamp;
 pub mod trend;
+pub mod ui_types;
 pub mod values;
 
 // Re-export commonly used types

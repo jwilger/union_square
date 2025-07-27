@@ -99,6 +99,21 @@ pub mod performance_thresholds {
     pub const CRITICAL_THRESHOLD: f64 = 0.5;
 }
 
+/// Quality rating thresholds for precision/recall balance
+pub mod quality_thresholds {
+    /// High precision/recall threshold
+    pub const HIGH_THRESHOLD: f64 = 0.8;
+
+    /// Moderate precision/recall threshold
+    pub const MODERATE_THRESHOLD: f64 = 0.6;
+
+    /// Good but not great threshold for imbalance detection
+    pub const GOOD_THRESHOLD: f64 = 0.7;
+
+    /// Poor performance threshold for imbalance detection
+    pub const POOR_THRESHOLD: f64 = 0.5;
+}
+
 /// Statistical significance constants
 pub mod statistical {
     /// Minimum sample size for statistical significance (Central Limit Theorem)

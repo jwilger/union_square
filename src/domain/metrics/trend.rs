@@ -21,6 +21,7 @@ pub enum TrendDirection {
 
 impl TrendDirection {
     /// Determine trend direction from change value and threshold
+    #[deprecated(note = "Use from_values with MetricValue types instead")]
     pub fn from_change(change: f64, stability_threshold: StabilityThreshold) -> Self {
         if change.abs() <= stability_threshold.into_inner() {
             Self::Stable
@@ -37,8 +38,27 @@ impl TrendDirection {
         previous: MetricValue,
         stability_threshold: StabilityThreshold,
     ) -> Self {
-        let change = current.into_inner() - previous.into_inner();
-        Self::from_change(change, stability_threshold)
+        // Check if we can calculate percentage change
+        if let Some(percentage_change) = current.percentage_change_from(previous) {
+            // Use percentage change to determine if change is significant
+            if percentage_change.into_inner().abs() <= stability_threshold.into_inner() {
+                Self::Stable
+            } else if percentage_change.is_improvement() {
+                Self::Improving
+            } else {
+                Self::Declining
+            }
+        } else {
+            // If previous is zero, use absolute change
+            let change = current.into_inner() - previous.into_inner();
+            if change.abs() <= stability_threshold.into_inner() {
+                Self::Stable
+            } else if change > 0.0 {
+                Self::Improving
+            } else {
+                Self::Declining
+            }
+        }
     }
 }
 
@@ -91,6 +111,7 @@ impl TrendMagnitude {
     }
 
     /// Calculate magnitude from raw values (for backward compatibility)
+    #[deprecated(note = "Use from_values with MetricValue types instead")]
     pub fn from_raw_values(current: f64, previous: f64) -> Result<Self, TrendError> {
         if previous == 0.0 {
             return Err(TrendError::ZeroDivision);
@@ -148,23 +169,20 @@ impl TrendAnalysis {
     }
 
     /// Create trend analysis from raw f64 values (for backward compatibility)
+    #[deprecated(note = "Use from_values with MetricValue types instead")]
     pub fn from_raw_values(
         current: f64,
         previous: f64,
         stability_threshold: f64,
     ) -> Result<Self, TrendError> {
-        let change = current - previous;
+        let current_metric =
+            MetricValue::try_new(current).map_err(|_| TrendError::InvalidMagnitude(current))?;
+        let previous_metric =
+            MetricValue::try_new(previous).map_err(|_| TrendError::InvalidMagnitude(previous))?;
         let threshold = StabilityThreshold::try_new(stability_threshold)
             .map_err(|_| TrendError::InvalidThreshold(stability_threshold))?;
-        let direction = TrendDirection::from_change(change, threshold);
-        let magnitude = TrendMagnitude::from_raw_values(current, previous)?;
-        let category = magnitude.category();
 
-        Ok(Self {
-            direction,
-            magnitude,
-            category,
-        })
+        Self::from_values(current_metric, previous_metric, threshold)
     }
 
     /// Create a new trend analysis from direction and magnitude
@@ -211,17 +229,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_trend_direction_from_change() {
+    fn test_trend_direction_from_values() {
+        let threshold = StabilityThreshold::try_new(0.01).unwrap();
+
+        // Test improving trend
         assert_eq!(
-            TrendDirection::from_change(0.05, StabilityThreshold::try_new(0.01).unwrap()),
+            TrendDirection::from_values(
+                MetricValue::try_new(0.85).unwrap(),
+                MetricValue::try_new(0.80).unwrap(),
+                threshold
+            ),
             TrendDirection::Improving
         );
+
+        // Test declining trend
         assert_eq!(
-            TrendDirection::from_change(-0.05, StabilityThreshold::try_new(0.01).unwrap()),
+            TrendDirection::from_values(
+                MetricValue::try_new(0.75).unwrap(),
+                MetricValue::try_new(0.80).unwrap(),
+                threshold
+            ),
             TrendDirection::Declining
         );
+
+        // Test stable trend
         assert_eq!(
-            TrendDirection::from_change(0.005, StabilityThreshold::try_new(0.01).unwrap()),
+            TrendDirection::from_values(
+                MetricValue::try_new(0.805).unwrap(),
+                MetricValue::try_new(0.800).unwrap(),
+                threshold
+            ),
             TrendDirection::Stable
         );
     }

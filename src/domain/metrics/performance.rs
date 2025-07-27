@@ -3,7 +3,14 @@
 //! Provides domain types for categorizing and rating the quality of
 //! machine learning model performance based on F-scores and other metrics.
 
-use crate::domain::metrics::{FScore, Precision, Recall};
+use crate::domain::metrics::{
+    constants,
+    ui_types::{
+        ColorCode, PerformanceLevelContext, QualityAdvice, Recommendation, RecommendationAdvice,
+        RemediationSteps,
+    },
+    FScore, Precision, Recall,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -32,11 +39,13 @@ impl PerformanceLevel {
     pub fn from_f_score(f_score: FScore) -> Self {
         let value = f_score.into_inner();
         match value {
-            v if v >= 0.9 => Self::Exceptional,
-            v if v >= 0.8 => Self::Excellent,
-            v if v >= 0.7 => Self::Good,
-            v if v >= 0.6 => Self::Acceptable,
-            v if v >= 0.5 => Self::Poor,
+            v if v >= constants::performance_thresholds::EXCELLENT_THRESHOLD => Self::Exceptional,
+            v if v >= constants::performance_thresholds::GOOD_THRESHOLD => Self::Excellent,
+            v if v >= constants::performance_thresholds::ACCEPTABLE_THRESHOLD => Self::Good,
+            v if v >= constants::performance_thresholds::NEEDS_IMPROVEMENT_THRESHOLD => {
+                Self::Acceptable
+            }
+            v if v >= constants::performance_thresholds::CRITICAL_THRESHOLD => Self::Poor,
             _ => Self::Critical,
         }
     }
@@ -44,11 +53,11 @@ impl PerformanceLevel {
     /// Get the minimum F-score for this performance level
     pub fn min_f_score(&self) -> FScore {
         let value = match self {
-            Self::Exceptional => 0.9,
-            Self::Excellent => 0.8,
-            Self::Good => 0.7,
-            Self::Acceptable => 0.6,
-            Self::Poor => 0.5,
+            Self::Exceptional => constants::performance_thresholds::EXCELLENT_THRESHOLD,
+            Self::Excellent => constants::performance_thresholds::GOOD_THRESHOLD,
+            Self::Good => constants::performance_thresholds::ACCEPTABLE_THRESHOLD,
+            Self::Acceptable => constants::performance_thresholds::NEEDS_IMPROVEMENT_THRESHOLD,
+            Self::Poor => constants::performance_thresholds::CRITICAL_THRESHOLD,
             Self::Critical => 0.0,
         };
         FScore::try_new(value).unwrap()
@@ -77,14 +86,14 @@ impl PerformanceLevel {
     }
 
     /// Get color code for UI display
-    pub fn color_code(&self) -> &'static str {
+    pub fn color_code(&self) -> ColorCode {
         match self {
-            Self::Exceptional => "#00C851", // Green
-            Self::Excellent => "#007E33",   // Dark Green
-            Self::Good => "#39C0ED",        // Light Blue
-            Self::Acceptable => "#ffbb33",  // Orange
-            Self::Poor => "#FF6900",        // Dark Orange
-            Self::Critical => "#FF1744",    // Red
+            Self::Exceptional => ColorCode::green(),
+            Self::Excellent => ColorCode::dark_green(),
+            Self::Good => ColorCode::light_blue(),
+            Self::Acceptable => ColorCode::orange(),
+            Self::Poor => ColorCode::dark_orange(),
+            Self::Critical => ColorCode::red(),
         }
     }
 }
@@ -130,24 +139,66 @@ impl QualityRating {
         let r = recall.into_inner();
 
         match (p, r) {
-            (p, r) if p >= 0.8 && r >= 0.8 => Self::Balanced,
-            (p, r) if p >= 0.8 && r >= 0.6 => Self::PrecisionFocused,
-            (p, r) if r >= 0.8 && p >= 0.6 => Self::RecallFocused,
-            (p, r) if p >= 0.6 && r >= 0.6 => Self::Moderate,
-            (p, r) if (p >= 0.7 && r < 0.5) || (r >= 0.7 && p < 0.5) => Self::Imbalanced,
+            (p, r)
+                if p >= constants::quality_thresholds::HIGH_THRESHOLD
+                    && r >= constants::quality_thresholds::HIGH_THRESHOLD =>
+            {
+                Self::Balanced
+            }
+            (p, r)
+                if p >= constants::quality_thresholds::HIGH_THRESHOLD
+                    && r >= constants::quality_thresholds::MODERATE_THRESHOLD =>
+            {
+                Self::PrecisionFocused
+            }
+            (p, r)
+                if r >= constants::quality_thresholds::HIGH_THRESHOLD
+                    && p >= constants::quality_thresholds::MODERATE_THRESHOLD =>
+            {
+                Self::RecallFocused
+            }
+            (p, r)
+                if p >= constants::quality_thresholds::MODERATE_THRESHOLD
+                    && r >= constants::quality_thresholds::MODERATE_THRESHOLD =>
+            {
+                Self::Moderate
+            }
+            (p, r)
+                if (p >= constants::quality_thresholds::GOOD_THRESHOLD
+                    && r < constants::quality_thresholds::POOR_THRESHOLD)
+                    || (r >= constants::quality_thresholds::GOOD_THRESHOLD
+                        && p < constants::quality_thresholds::POOR_THRESHOLD) =>
+            {
+                Self::Imbalanced
+            }
             _ => Self::Inadequate,
         }
     }
 
     /// Get recommendation for this quality rating
-    pub fn recommendation(&self) -> &'static str {
+    pub fn recommendation(&self) -> Recommendation {
         match self {
-            Self::Balanced => "Excellent balance - maintain current approach",
-            Self::PrecisionFocused => "Consider techniques to improve recall",
-            Self::RecallFocused => "Consider techniques to improve precision",
-            Self::Moderate => "Good foundation - optimize for specific needs",
-            Self::Imbalanced => "Address the weaker metric for better balance",
-            Self::Inadequate => "Both metrics need significant improvement",
+            Self::Balanced => Recommendation::Standard {
+                advice: RecommendationAdvice::MaintainCurrentApproach,
+            },
+            Self::PrecisionFocused => Recommendation::NeedsImprovement {
+                quality_advice: QualityAdvice::ImproveRecall,
+                level_context: PerformanceLevelContext::MonitorClosely,
+            },
+            Self::RecallFocused => Recommendation::NeedsImprovement {
+                quality_advice: QualityAdvice::ImprovePrecision,
+                level_context: PerformanceLevelContext::MonitorClosely,
+            },
+            Self::Moderate => Recommendation::Standard {
+                advice: RecommendationAdvice::OptimizeForSpecificNeeds,
+            },
+            Self::Imbalanced => Recommendation::NeedsImprovement {
+                quality_advice: QualityAdvice::ImproveBalance,
+                level_context: PerformanceLevelContext::RequiresAttention,
+            },
+            Self::Inadequate => Recommendation::Critical {
+                remediation: RemediationSteps::SignificantImprovement,
+            },
         }
     }
 
@@ -176,7 +227,7 @@ impl fmt::Display for QualityRating {
 pub struct PerformanceAssessment {
     pub f_score_level: PerformanceLevel,
     pub quality_rating: QualityRating,
-    pub recommendation: String,
+    pub recommendation: Recommendation,
 }
 
 impl PerformanceAssessment {
@@ -205,15 +256,11 @@ impl PerformanceAssessment {
 
         let recommendation = match (&f_score_level, &quality_rating) {
             (PerformanceLevel::Exceptional, QualityRating::Balanced) => {
-                "Outstanding performance - document and replicate approach".to_string()
+                Recommendation::outstanding()
             }
-            (PerformanceLevel::Critical, _) => {
-                "Critical performance requires immediate investigation and remediation".to_string()
-            }
-            (level, rating) if level.requires_attention() => {
-                format!("Performance needs improvement. {}", rating.recommendation())
-            }
-            (_, rating) => rating.recommendation().to_string(),
+            (PerformanceLevel::Critical, _) => Recommendation::critical(),
+            (level, _) if level.requires_attention() => quality_rating.recommendation(),
+            _ => quality_rating.recommendation(),
         };
 
         Self {
