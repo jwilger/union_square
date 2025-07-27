@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use crate::domain::{
     events::DomainEvent,
     llm::ModelVersion,
-    metrics::{FScore, FScoreDataPoint, Precision, Recall},
+    metrics::{FScore, FScoreDataPoint, Precision, Recall, SampleCount, Timestamp},
     session::{ApplicationId, SessionId},
 };
 
@@ -104,7 +104,70 @@ pub struct RecordModelFScore {
     pub model_version: ModelVersion,
     pub precision: Precision,
     pub recall: Recall,
-    pub sample_count: u64,
+    pub sample_count: SampleCount,
+}
+
+/// Stream ID utilities for metrics commands
+mod stream_ids {
+    use super::*;
+
+    pub fn model_stream_id(model_version: &ModelVersion) -> StreamId {
+        StreamId::try_new(format!(
+            "metrics:model:{}",
+            model_version.to_version_string()
+        ))
+        .expect("Valid stream ID")
+    }
+
+    pub fn application_stream_id(application_id: &ApplicationId) -> StreamId {
+        StreamId::try_new(format!("metrics:app:{}", application_id.as_ref()))
+            .expect("Valid stream ID")
+    }
+}
+
+/// Event construction utilities for metrics commands
+mod event_builders {
+    use super::*;
+
+    pub fn build_f_score_calculated_event(
+        session_id: SessionId,
+        model_version: ModelVersion,
+        f_score: FScore,
+        precision: Precision,
+        recall: Recall,
+        sample_count: SampleCount,
+    ) -> DomainEvent {
+        DomainEvent::FScoreCalculated {
+            session_id,
+            model_version,
+            f_score,
+            precision: Some(precision),
+            recall: Some(recall),
+            sample_count,
+            calculated_at: Timestamp::now(),
+        }
+    }
+
+    pub fn build_application_f_score_calculated_event(
+        session_id: SessionId,
+        application_id: ApplicationId,
+        model_version: ModelVersion,
+        f_score: FScore,
+        precision: Precision,
+        recall: Recall,
+        sample_count: SampleCount,
+    ) -> DomainEvent {
+        DomainEvent::ApplicationFScoreCalculated {
+            session_id,
+            application_id,
+            model_version,
+            f_score,
+            precision: Some(precision),
+            recall: Some(recall),
+            sample_count,
+            calculated_at: Timestamp::now(),
+        }
+    }
 }
 
 impl RecordModelFScore {
@@ -113,9 +176,9 @@ impl RecordModelFScore {
         model_version: ModelVersion,
         precision: Precision,
         recall: Recall,
-        sample_count: u64,
+        sample_count: SampleCount,
     ) -> Self {
-        let model_stream = Self::model_stream_id(&model_version);
+        let model_stream = stream_ids::model_stream_id(&model_version);
         Self {
             model_stream,
             session_id,
@@ -124,14 +187,6 @@ impl RecordModelFScore {
             recall,
             sample_count,
         }
-    }
-
-    fn model_stream_id(model_version: &ModelVersion) -> StreamId {
-        StreamId::try_new(format!(
-            "metrics:model:{}",
-            model_version.to_version_string()
-        ))
-        .expect("Valid stream ID")
     }
 }
 
@@ -161,15 +216,14 @@ impl CommandLogic for RecordModelFScore {
             events,
             &read_streams,
             self.model_stream.clone(),
-            DomainEvent::FScoreCalculated {
-                session_id: self.session_id.clone(),
-                model_version: self.model_version.clone(),
+            event_builders::build_f_score_calculated_event(
+                self.session_id.clone(),
+                self.model_version.clone(),
                 f_score,
-                precision: Some(self.precision),
-                recall: Some(self.recall),
-                sample_count: self.sample_count,
-                calculated_at: chrono::Utc::now(),
-            }
+                self.precision,
+                self.recall,
+                self.sample_count,
+            )
         );
 
         Ok(events)
@@ -188,7 +242,7 @@ pub struct RecordApplicationFScore {
     pub model_version: ModelVersion,
     pub precision: Precision,
     pub recall: Recall,
-    pub sample_count: u64,
+    pub sample_count: SampleCount,
 }
 
 impl RecordApplicationFScore {
@@ -198,10 +252,10 @@ impl RecordApplicationFScore {
         model_version: ModelVersion,
         precision: Precision,
         recall: Recall,
-        sample_count: u64,
+        sample_count: SampleCount,
     ) -> Self {
-        let application_stream = Self::application_stream_id(&application_id);
-        let model_stream = Self::model_stream_id(&model_version);
+        let application_stream = stream_ids::application_stream_id(&application_id);
+        let model_stream = stream_ids::model_stream_id(&model_version);
         Self {
             application_stream,
             model_stream,
@@ -212,19 +266,6 @@ impl RecordApplicationFScore {
             recall,
             sample_count,
         }
-    }
-
-    fn application_stream_id(application_id: &ApplicationId) -> StreamId {
-        StreamId::try_new(format!("metrics:app:{}", application_id.as_ref()))
-            .expect("Valid stream ID")
-    }
-
-    fn model_stream_id(model_version: &ModelVersion) -> StreamId {
-        StreamId::try_new(format!(
-            "metrics:model:{}",
-            model_version.to_version_string()
-        ))
-        .expect("Valid stream ID")
     }
 }
 
@@ -255,16 +296,15 @@ impl CommandLogic for RecordApplicationFScore {
             events,
             &read_streams,
             self.application_stream.clone(),
-            DomainEvent::ApplicationFScoreCalculated {
-                session_id: self.session_id.clone(),
-                application_id: self.application_id.clone(),
-                model_version: self.model_version.clone(),
+            event_builders::build_application_f_score_calculated_event(
+                self.session_id.clone(),
+                self.application_id.clone(),
+                self.model_version.clone(),
                 f_score,
-                precision: Some(self.precision),
-                recall: Some(self.recall),
-                sample_count: self.sample_count,
-                calculated_at: chrono::Utc::now(),
-            }
+                self.precision,
+                self.recall,
+                self.sample_count,
+            )
         );
 
         // Also emit to model stream for cross-application analysis
@@ -272,15 +312,14 @@ impl CommandLogic for RecordApplicationFScore {
             events,
             &read_streams,
             self.model_stream.clone(),
-            DomainEvent::FScoreCalculated {
-                session_id: self.session_id.clone(),
-                model_version: self.model_version.clone(),
+            event_builders::build_f_score_calculated_event(
+                self.session_id.clone(),
+                self.model_version.clone(),
                 f_score,
-                precision: Some(self.precision),
-                recall: Some(self.recall),
-                sample_count: self.sample_count,
-                calculated_at: chrono::Utc::now(),
-            }
+                self.precision,
+                self.recall,
+                self.sample_count,
+            )
         );
 
         Ok(events)
@@ -304,8 +343,13 @@ mod tests {
         let precision = Precision::try_new(0.8).unwrap();
         let recall = Recall::try_new(0.7).unwrap();
 
-        let command =
-            RecordModelFScore::new(session_id, model_version.clone(), precision, recall, 100);
+        let command = RecordModelFScore::new(
+            session_id,
+            model_version.clone(),
+            precision,
+            recall,
+            SampleCount::try_new(100).unwrap(),
+        );
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
 
@@ -335,7 +379,7 @@ mod tests {
                 assert_eq!(event_model, &model_version);
                 assert_eq!(event_precision, &Some(precision));
                 assert_eq!(event_recall, &Some(recall));
-                assert_eq!(sample_count, &100);
+                assert_eq!(sample_count, &SampleCount::try_new(100).unwrap());
 
                 // Verify F-score calculation
                 let expected_f_score = 2.0 * (0.8 * 0.7) / (0.8 + 0.7);
@@ -363,7 +407,7 @@ mod tests {
             model_version.clone(),
             precision,
             recall,
-            200,
+            SampleCount::try_new(200).unwrap(),
         );
         let event_store = InMemoryEventStore::new();
         let executor = CommandExecutor::new(event_store);
@@ -392,7 +436,7 @@ mod tests {
             } => {
                 assert_eq!(event_app_id, &application_id);
                 assert_eq!(event_model, &model_version);
-                assert_eq!(sample_count, &200);
+                assert_eq!(sample_count, &SampleCount::try_new(200).unwrap());
 
                 // Verify F-score calculation
                 let expected_f_score = 2.0 * (0.9 * 0.85) / (0.9 + 0.85);
@@ -433,8 +477,8 @@ mod tests {
             f_score,
             precision: Some(precision),
             recall: Some(recall),
-            sample_count: 150,
-            calculated_at: chrono::Utc::now(),
+            sample_count: SampleCount::try_new(150).unwrap(),
+            calculated_at: Timestamp::now(),
         };
 
         state.apply(&event);
@@ -446,7 +490,7 @@ mod tests {
         assert_eq!(latest.f_score, f_score);
         assert_eq!(latest.precision, Some(precision));
         assert_eq!(latest.recall, Some(recall));
-        assert_eq!(latest.sample_count, 150);
+        assert_eq!(latest.sample_count, SampleCount::try_new(150).unwrap());
 
         // Verify history tracking
         let history = state.f_score_history(&model_version);

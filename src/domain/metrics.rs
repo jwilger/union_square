@@ -3,6 +3,25 @@
 //! This module provides type-safe F-score calculation and tracking functionality
 //! following type-driven development principles for precision/recall metrics.
 
+pub mod constants;
+pub mod counts;
+pub mod demo_data;
+pub mod performance;
+pub mod sample_count;
+pub mod time_period;
+pub mod timestamp;
+pub mod trend;
+pub mod values;
+
+// Re-export commonly used types
+pub use counts::{ApplicationCount, DataPointCount, ModelCount};
+pub use performance::{PerformanceAssessment, PerformanceLevel, QualityRating};
+pub use sample_count::{SampleConfidence, SampleCount};
+pub use time_period::{DaysBack, PointsPerDay, TimePeriod};
+pub use timestamp::{Timestamp, TimestampAge};
+pub use trend::{TrendAnalysis, TrendDirection, TrendMagnitude};
+pub use values::{MetricValue, PercentageChange, StabilityThreshold};
+
 use nutype::nutype;
 #[allow(unused_imports)] // These are used by nutype derive macros
 use serde::{Deserialize, Serialize};
@@ -42,7 +61,7 @@ impl FScore {
             return Ok(Self::zero());
         }
 
-        let f_score = 2.0 * (p * r) / (p + r);
+        let f_score = constants::calculation::F1_MULTIPLIER * (p * r) / (p + r);
         Self::try_new(f_score).map_err(|_| MetricsError::InvalidValue(f_score))
     }
 
@@ -54,15 +73,22 @@ impl FScore {
     ) -> Result<Self, MetricsError> {
         let p = precision.into_inner();
         let r = recall.into_inner();
-        let b = beta.into_inner();
 
         if p + r == 0.0 {
             return Ok(Self::zero());
         }
 
-        let beta_squared = b * b;
-        let f_score = (1.0 + beta_squared) * (p * r) / ((beta_squared * p) + r);
+        let f_score = Self::calculate_f_beta_formula(p, r, beta.into_inner());
         Self::try_new(f_score).map_err(|_| MetricsError::InvalidValue(f_score))
+    }
+
+    /// Calculate F-beta score using the mathematical formula
+    /// F-beta = (1 + beta²) × (precision × recall) / ((beta² × precision) + recall)
+    fn calculate_f_beta_formula(precision: f64, recall: f64, beta: f64) -> f64 {
+        let beta_squared = beta * beta;
+        let numerator = (1.0 + beta_squared) * (precision * recall);
+        let denominator = (beta_squared * precision) + recall;
+        numerator / denominator
     }
 }
 
@@ -203,7 +229,7 @@ impl std::error::Error for MetricsError {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FScoreDataPoint {
     /// Timestamp for this measurement
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: Timestamp,
     /// F-score value at this time
     pub f_score: FScore,
     /// Optional precision value
@@ -211,18 +237,14 @@ pub struct FScoreDataPoint {
     /// Optional recall value
     pub recall: Option<Recall>,
     /// Number of samples this measurement is based on
-    pub sample_count: u64,
+    pub sample_count: SampleCount,
     /// Optional confidence level for statistical analysis
     pub confidence_level: Option<ConfidenceLevel>,
 }
 
 impl FScoreDataPoint {
     /// Create a new F-score data point
-    pub fn new(
-        timestamp: chrono::DateTime<chrono::Utc>,
-        f_score: FScore,
-        sample_count: u64,
-    ) -> Self {
+    pub fn new(timestamp: Timestamp, f_score: FScore, sample_count: SampleCount) -> Self {
         Self {
             timestamp,
             f_score,
@@ -235,10 +257,10 @@ impl FScoreDataPoint {
 
     /// Create a new F-score data point with precision and recall
     pub fn with_precision_recall(
-        timestamp: chrono::DateTime<chrono::Utc>,
+        timestamp: Timestamp,
         precision: Precision,
         recall: Recall,
-        sample_count: u64,
+        sample_count: SampleCount,
     ) -> Result<Self, MetricsError> {
         let f_score = FScore::from_precision_recall(precision, recall)?;
         Ok(Self {
@@ -256,12 +278,26 @@ impl FScoreDataPoint {
         self.confidence_level = Some(confidence_level);
         self
     }
+
+    /// Get performance assessment for this data point
+    pub fn performance_assessment(&self) -> PerformanceAssessment {
+        PerformanceAssessment::from_components(self.f_score, self.precision, self.recall)
+    }
+
+    /// Check if this data point is recent
+    pub fn is_recent(&self) -> bool {
+        self.timestamp.is_recent()
+    }
+
+    /// Get the age category of this data point
+    pub fn age_category(&self) -> TimestampAge {
+        self.timestamp.age_category()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     #[test]
     fn test_f_score_validation() {
@@ -356,21 +392,28 @@ mod tests {
 
     #[test]
     fn test_f_score_data_point() {
-        let timestamp = Utc::now();
+        let timestamp = Timestamp::now();
         let precision = Precision::try_new(0.8).unwrap();
         let recall = Recall::try_new(0.7).unwrap();
+        let sample_count = SampleCount::try_new(100).unwrap();
 
         let data_point =
-            FScoreDataPoint::with_precision_recall(timestamp, precision, recall, 100).unwrap();
+            FScoreDataPoint::with_precision_recall(timestamp, precision, recall, sample_count)
+                .unwrap();
 
         assert_eq!(data_point.timestamp, timestamp);
         assert_eq!(data_point.precision, Some(precision));
         assert_eq!(data_point.recall, Some(recall));
-        assert_eq!(data_point.sample_count, 100);
+        assert_eq!(data_point.sample_count, sample_count);
 
         // Verify F-score calculation
-        let expected_f_score = 2.0 * (0.8 * 0.7) / (0.8 + 0.7);
+        let expected_f_score = constants::calculation::F1_MULTIPLIER * (0.8 * 0.7) / (0.8 + 0.7);
         assert!((data_point.f_score.into_inner() - expected_f_score).abs() < 1e-10);
+
+        // Test new methods
+        assert!(data_point.is_recent());
+        let assessment = data_point.performance_assessment();
+        assert_eq!(assessment.f_score_level, PerformanceLevel::Good);
     }
 
     #[test]

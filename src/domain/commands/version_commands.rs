@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use crate::domain::{
     events::DomainEvent,
     llm::ModelVersion,
+    metrics::Timestamp,
     session::SessionId,
     types::ChangeReason,
     version::{TrackedVersion, VersionChangeId},
@@ -106,7 +107,7 @@ impl CommandLogic for RecordVersionUsage {
                 DomainEvent::VersionFirstSeen {
                     model_version: self.model_version.clone(),
                     session_id: self.session_id.clone(),
-                    first_seen_at: chrono::Utc::now(),
+                    first_seen_at: Timestamp::now(),
                 }
             );
         }
@@ -119,7 +120,7 @@ impl CommandLogic for RecordVersionUsage {
             DomainEvent::VersionUsageRecorded {
                 model_version: self.model_version.clone(),
                 session_id: self.session_id.clone(),
-                recorded_at: chrono::Utc::now(),
+                recorded_at: Timestamp::now(),
             }
         );
 
@@ -191,7 +192,7 @@ impl CommandLogic for RecordVersionChange {
             to_version: self.to_version.clone(),
             change_type,
             reason: self.reason.clone(),
-            changed_at: chrono::Utc::now(),
+            changed_at: Timestamp::now(),
         };
 
         // Write to both streams
@@ -265,7 +266,7 @@ impl CommandLogic for DeactivateVersion {
             DomainEvent::VersionDeactivated {
                 model_version: self.model_version.clone(),
                 reason: self.reason.clone(),
-                deactivated_at: chrono::Utc::now(),
+                deactivated_at: Timestamp::now(),
             }
         );
 
