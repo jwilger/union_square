@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/jwilger/union_square/compare/v0.1.2...v0.2.0) - 2025-07-28
+
+### Added
+
+- complete EventCore integration in production code ([#153](https://github.com/jwilger/union_square/pull/153))
+- implement F-score tracking and analytics (issue #91) ([#140](https://github.com/jwilger/union_square/pull/140))
+- implement core domain types and newtypes ([#137](https://github.com/jwilger/union_square/pull/137))
+
+### Other
+
+- update expert review with EventCore stream-centric understanding ([#152](https://github.com/jwilger/union_square/pull/152))
+- add expert agent coordination section and update CLAUDE.md ([#151](https://github.com/jwilger/union_square/pull/151))
+- comprehensive type-driven design implementation with centralized constants ([#139](https://github.com/jwilger/union_square/pull/139))
+
 ## [0.1.2](https://github.com/jwilger/union_square/compare/v0.1.1...v0.1.2) - 2025-07-26
 
 ### Added
