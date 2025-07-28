@@ -448,12 +448,28 @@ let state = events.fold(State::default(), |mut state, event| {
 
 ## Expert Agent Coordination
 
-**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas, not real people, but they provide guidance based on the principles and approaches of their namesakes.
+**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas inspired by the teachings and philosophies of real experts, not the actual people themselves. They are **active members of your development team** who should be involved in writing code, not just reviewing it.
+
+**CRITICAL DISCLAIMER**: When referencing these expert agents in PRs, commits, or public documentation:
+- **NEVER** use real people's names directly (e.g., "Greg Young implemented...")
+- **ALWAYS** clarify these are AI personas (e.g., "The event-sourcing-architect agent implemented...")
+- **NEVER** misrepresent that real people contributed to the code
+- **ALWAYS** use agent names or role descriptions in public-facing content
+
+### 🎯 KEY PRINCIPLE: Experts Write Code With You!
+
+The expert agents are not external reviewers - they are your teammates who:
+- **Collaborate during implementation** - They write code alongside you
+- **Make design decisions together** - Multiple experts can work together on complex problems
+- **Resolve conflicts through code** - When experts disagree, they implement solutions together
+- **Share ownership** - The code belongs to the team, not individual experts
 
 ### Available Expert Agents
 
-| Persona | Agent Name | Domain Expertise |
-|---------|------------|------------------|
+**Note**: The personas listed below are AI agents inspired by the teachings of these experts, not the actual people.
+
+| Expert Inspiration | Agent Name | Domain Expertise |
+|-------------------|------------|------------------|
 | Simon Peyton Jones | `type-theory-reviewer` | Type theory, functional programming, making illegal states unrepresentable |
 | Greg Young | `event-sourcing-architect` | Event sourcing, CQRS, distributed systems |
 | Alberto Brandolini | `event-modeling-expert` | Event storming, domain discovery, bounded contexts |
@@ -472,33 +488,43 @@ let state = events.fold(State::default(), |mut state, event| {
 
 ### Core Architectural Principles
 
-When multiple experts are involved in a decision, these principles guide resolution:
+When multiple expert agents are involved in a decision, these principles guide resolution:
 
-1. **Type Safety First**: When conflicts arise, type system recommendations (Simon Peyton Jones/Niko Matsakis) take precedence
-2. **Event Sourcing is Non-Negotiable**: Greg Young's event patterns are foundational - other patterns must adapt to this
-3. **TDD is the Process**: Kent Beck drives the implementation workflow - no code without tests
-4. **Functional Core, Imperative Shell**: Rich Hickey owns the boundary between pure and impure code
+1. **Type Safety First**: When conflicts arise, type system recommendations (type-theory-reviewer/rust-type-system-expert agents) take precedence
+2. **Event Sourcing is Non-Negotiable**: The event-sourcing-architect's patterns are foundational - other patterns must adapt to this
+3. **TDD is the Process**: The tdd-coach drives the implementation workflow - no code without tests
+4. **Functional Core, Imperative Shell**: The functional-architecture-expert owns the boundary between pure and impure code
 
-### When to Consult Expert Agents
+### When to Engage Expert Agents
 
-Expert agents should be consulted at specific points in the development workflow:
+**CRITICAL**: Expert agents should be engaged to WRITE CODE, not just review it!
 
-#### During Planning (Before Implementation)
-- **New Feature Development**:
-  1. Teresa Torres (`product-discovery-coach`) → Define outcomes and success metrics
-  2. Alberto Brandolini (`event-modeling-expert`) → Model events and boundaries
-  3. Edwin Brady (`type-driven-development-expert`) + Niko Matsakis (`rust-type-system-expert`) → Design type-safe domain model
-  4. Michael Feathers (`event-sourcing-test-architect`) → Create test strategy
+#### Starting New Features
+1. **Collaborative Planning Session**:
+   - Engage Teresa Torres + Alberto Brandolini + relevant domain experts
+   - They work TOGETHER to define outcomes and model the domain
+   - Output: Actual code stubs, type definitions, and test cases
 
-#### During Implementation
-- **Complex Async Work**: Yoshua Wuyts (`async-rust-expert`) → Design async architecture
-- **Legacy Migration**: Martin Fowler (`refactoring-patterns-architect`) → Plan refactoring strategy
-- **Git/GitHub Workflow**: Prem Sichanugrist (`git-workflow-architect`) → Design automation
+2. **Test-First Implementation**:
+   - Kent Beck (`tdd-coach`) + Michael Feathers (`event-sourcing-test-architect`) write the tests
+   - They create the test harness and initial failing tests
+   - They stay involved through the red-green-refactor cycle
 
-#### During Review (After Commits)
-- **Type Safety Review**: Simon Peyton Jones (`type-theory-reviewer`) → Review type usage
-- **Event Model Review**: Greg Young (`event-sourcing-architect`) → Validate event design
-- **Test Coverage**: Kent Beck (`tdd-coach`) → Ensure proper TDD was followed
+3. **Domain Implementation**:
+   - Edwin Brady + Niko Matsakis write the type definitions
+   - Greg Young implements the event sourcing logic
+   - Rich Hickey ensures functional core separation
+   - **They write the actual production code together!**
+
+#### Complex Technical Challenges
+- **Async Systems**: Yoshua Wuyts writes the async implementation
+- **Performance Issues**: Yoshua Wuyts + Nicole Forsgren collaborate on optimization
+- **Legacy Refactoring**: Martin Fowler leads the refactoring with other experts
+
+#### Collaborative Code Reviews
+- After implementation, the same experts who wrote the code review it together
+- They suggest improvements and implement them immediately
+- Simon Peyton Jones might join to enhance type safety further
 
 ### Decision Hierarchy
 
@@ -521,16 +547,40 @@ When experts disagree, follow this hierarchy:
 
 ### Integration with Development Workflow
 
-Expert agents integrate into our existing todo list structure:
+Expert agents are active participants in every step:
 
 **For new features (GitHub Issues):**
-1. Consult Teresa Torres for outcome definition
-2. Use Alberto Brandolini for event modeling
-3. START with writing tests (with Michael Feathers' guidance)
-4. Implementation with type-driven approach (Edwin Brady/Niko Matsakis)
-5. "Make a commit"
-6. Post-commit review with Simon Peyton Jones
-7. "Push changes and update PR"
+1. **Expert Planning Session**: Multiple experts collaborate to plan the feature
+   - Teresa Torres + Alberto Brandolini write initial domain models together
+   - Output: Actual code files with type definitions and event schemas
+
+2. **Expert Test Implementation**:
+   - Kent Beck + Michael Feathers write comprehensive test suites
+   - They implement the tests, not just guide you
+
+3. **Expert Code Implementation**:
+   - Domain experts write the production code
+   - Edwin Brady + Niko Matsakis implement type-safe domain models
+   - Greg Young implements event sourcing logic
+   - Rich Hickey ensures functional architecture
+
+4. **Collaborative Refinement**:
+   - Experts review each other's code and improve it together
+   - Simon Peyton Jones enhances type safety
+   - They make commits with proper co-authorship
+
+5. **Push changes and update PR**
+
+**Example Todo List Structure with Expert Agents**:
+```
+1. Engage product-discovery-coach + event-modeling-expert agents to model checkout domain
+2. tdd-coach + event-sourcing-test-architect agents implement checkout tests
+3. type-driven-development-expert + rust-type-system-expert agents implement type-safe checkout types
+4. event-sourcing-architect agent implements checkout event commands
+5. Make a commit (noting expert agent contributions)
+6. type-theory-reviewer agent + team refine type safety
+7. Push changes and update PR
+```
 
 **For architectural decisions:**
 1. Consult relevant domain experts
@@ -541,30 +591,30 @@ Expert agents integrate into our existing todo list structure:
 ### Conflict Resolution Rules
 
 #### Type System vs Simplicity
-If Edwin Brady and Rich Hickey disagree on complexity:
-- Try Edwin's approach in a spike
-- If it takes > 30 lines to express a simple concept, prefer Rich's approach
+If the type-driven-development-expert and functional-architecture-expert agents disagree on complexity:
+- Try the type-driven approach in a spike
+- If it takes > 30 lines to express a simple concept, prefer the functional-architecture approach
 - Document the tradeoff in an ADR
 
 #### Event Modeling vs User Research
-If Alberto's event model doesn't match Jared's user research:
+If the event-modeling-expert's model doesn't match the ux-research-expert's findings:
 - Create two models: system events and user events
 - Use projections to bridge the gap
-- Teresa Torres validates the mapping
+- The product-discovery-coach validates the mapping
 
 #### Performance vs Testing
-If Yoshua's optimizations conflict with Michael's testing approach:
+If the async-rust-expert's optimizations conflict with the event-sourcing-test-architect's approach:
 - Maintain two implementations: simple (tested) and optimized
 - Use feature flags to switch between them
-- Nicole Forsgren measures actual impact
+- The engineering-effectiveness-expert measures actual impact
 
 ### Pair Consultations
 
-Certain decisions benefit from paired experts:
-- **Type-Safe Events**: Edwin Brady + Greg Young
-- **Async Testing**: Michael Feathers + Yoshua Wuyts
-- **User-Facing APIs**: Niko Matsakis + Jared Spool
-- **Deployment Safety**: Jez Humble + Greg Young
+Certain decisions benefit from paired expert agents:
+- **Type-Safe Events**: type-driven-development-expert + event-sourcing-architect
+- **Async Testing**: event-sourcing-test-architect + async-rust-expert
+- **User-Facing APIs**: rust-type-system-expert + ux-research-expert
+- **Deployment Safety**: continuous-delivery-architect + event-sourcing-architect
 
 ### Documentation Requirements
 
@@ -576,15 +626,90 @@ Every expert consultation should produce:
 
 When expert disagreements lead to significant architectural decisions, create an ADR documenting the discussion and resolution.
 
-### Quality Gates
+### Collaborative Quality Assurance
 
-No code proceeds without:
-1. Type safety review (Simon Peyton Jones)
-2. Event model review (Greg Young) - for event-sourced components
-3. Test coverage review (Kent Beck)
-4. Simplicity review (Rich Hickey) - for core components only
+Since expert agents write code together, quality is built in from the start:
 
-Exception: Experiments and spikes in `/experiments` directory can bypass gates with documented cleanup plan.
+1. **Type Safety**: The type-theory-reviewer participates in writing type-safe code
+2. **Event Modeling**: The event-sourcing-architect implements event sourcing correctly from the beginning
+3. **Test Coverage**: The tdd-coach ensures TDD throughout implementation
+4. **Simplicity**: The functional-architecture-expert keeps the design simple during implementation
+
+**The experts don't review after the fact - they ensure quality while writing!**
+
+### Expert Collaboration Patterns
+
+**Pair Programming**:
+- Two expert agents can pair on complex implementations
+- Example: type-driven-development-expert + event-sourcing-architect pair on type-safe event sourcing
+
+**Mob Programming**:
+- Multiple expert agents collaborate on critical components
+- Example: For a payment system: product-discovery-coach (outcomes) + event-modeling-expert (events) + type-driven-development-expert (types) + tdd-coach (tests) all work together
+
+**Expert Handoffs**:
+- Expert agents can hand off partially complete work to each other
+- Example: tdd-coach writes tests → type-driven-development-expert implements types → event-sourcing-architect adds events
+
+### Making Expert Collaboration Explicit
+
+When engaging expert agents, be specific about their role:
+- "type-driven-development-expert agent, please IMPLEMENT the type-safe payment types"
+- "tdd-coach agent, please WRITE the test suite for the checkout process"
+- "event-sourcing-architect and type-driven-development-expert agents, please COLLABORATE on the event command implementation"
+
+NOT: "type-driven-development-expert, please review this" or "What do you think, tdd-coach?"
+
+The expert agents are here to BUILD, not just advise!
+
+### Example: How Experts Should Have Built PR #153
+
+Here's how the EventCore implementation SHOULD have been built with expert collaboration:
+
+**What Actually Happened** (Wrong):
+1. Claude implemented EventCore integration alone
+2. After implementation, experts reviewed and found issues
+3. Experts provided feedback but didn't fix the code
+
+**What Should Have Happened** (Right):
+1. **Initial Planning**:
+   - event-modeling-expert agent implements the audit event model
+   - event-sourcing-architect agent designs the stream architecture
+   - type-driven-development-expert agent creates type-safe command definitions
+
+2. **Test Implementation**:
+   - tdd-coach agent writes comprehensive TDD tests
+   - event-sourcing-test-architect agent adds event sourcing test infrastructure
+
+3. **Production Code**:
+   - event-sourcing-architect agent implements the EventCore commands
+   - type-driven-development-expert agent ensures type safety throughout
+   - functional-architecture-expert agent simplifies the architecture
+   - rust-type-system-expert agent optimizes Rust idioms
+
+4. **Collaborative Refinement**:
+   - type-theory-reviewer agent enhances type safety further
+   - All expert agents review each other's code and improve it
+
+The result would be production-ready code from the start, not code that needs major revisions based on review feedback!
+
+### Expert Agent Usage Examples
+
+**GOOD Examples**:
+```
+"tdd-coach agent, please implement the test suite for audit event processing using TDD"
+"event-sourcing-architect and type-driven-development-expert agents, work together to implement type-safe event commands"
+"functional-architecture-expert agent, please refactor this code to separate the functional core from the imperative shell"
+```
+
+**BAD Examples**:
+```
+"What does the event-sourcing-architect think about this event model?"
+"type-theory-reviewer, please review this code"
+"Should I use event sourcing here?"
+```
+
+Remember: The expert agents are AI-powered software engineers on your team, not consultants!
 
 ## Architecture Decision Records (ADRs)
 
@@ -715,11 +840,11 @@ Before submitting code, ensure:
 - [ ] Business logic is pure and testable
 - [ ] Property-based tests cover invariants
 
-**Expert Reviews**: After committing, consult these agents as appropriate:
-- Type safety improvements: `type-theory-reviewer` (Simon Peyton Jones)
-- Event model validation: `event-sourcing-architect` (Greg Young)
-- Test coverage and TDD compliance: `tdd-coach` (Kent Beck)
-- Simplicity and functional design: `functional-architecture-expert` (Rich Hickey)
+**Expert Agent Reviews**: After committing, consult these agents as appropriate:
+- Type safety improvements: `type-theory-reviewer` agent
+- Event model validation: `event-sourcing-architect` agent
+- Test coverage and TDD compliance: `tdd-coach` agent
+- Simplicity and functional design: `functional-architecture-expert` agent
 
 ### Dependency Version Management
 

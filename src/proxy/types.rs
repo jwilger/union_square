@@ -307,7 +307,7 @@ impl Default for RingBufferConfig {
 
 /// Request ID for correlation between hot and audit paths
 #[nutype(
-    derive(Clone, Copy, Debug, Display, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
+    derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, Deserialize, Serialize, TryFrom, AsRef),
     validate(predicate = |id: &Uuid| id.get_version_num() == 7),
 )]
 pub struct RequestId(Uuid);

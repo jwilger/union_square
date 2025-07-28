@@ -65,6 +65,30 @@ pub enum DomainEvent {
         cancelled_at: Timestamp,
     },
 
+    // Audit Error Events
+    LlmRequestParsingFailed {
+        request_id: RequestId,
+        session_id: SessionId,
+        parsing_error: ErrorMessage,
+        raw_uri: String,
+        occurred_at: Timestamp,
+    },
+    InvalidStateTransition {
+        request_id: RequestId,
+        session_id: SessionId,
+        from_state: String,
+        event_type: String,
+        reason: ErrorMessage,
+        occurred_at: Timestamp,
+    },
+    AuditEventProcessingFailed {
+        request_id: RequestId,
+        session_id: SessionId,
+        event_type: String,
+        error_message: ErrorMessage,
+        occurred_at: Timestamp,
+    },
+
     // Version Tracking Events
     VersionFirstSeen {
         model_version: ModelVersion,
@@ -142,6 +166,9 @@ impl DomainEvent {
             DomainEvent::LlmResponseReceived { received_at, .. } => *received_at,
             DomainEvent::LlmRequestFailed { failed_at, .. } => *failed_at,
             DomainEvent::LlmRequestCancelled { cancelled_at, .. } => *cancelled_at,
+            DomainEvent::LlmRequestParsingFailed { occurred_at, .. } => *occurred_at,
+            DomainEvent::InvalidStateTransition { occurred_at, .. } => *occurred_at,
+            DomainEvent::AuditEventProcessingFailed { occurred_at, .. } => *occurred_at,
             DomainEvent::VersionFirstSeen { first_seen_at, .. } => *first_seen_at,
             DomainEvent::VersionChanged { changed_at, .. } => *changed_at,
             DomainEvent::VersionUsageRecorded { recorded_at, .. } => *recorded_at,
