@@ -18,6 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **🔧 Setting up environment?** → Read [Development Commands](#development-commands)
 - **💻 Writing code?** → Read [Architecture](#architecture), [Type-Driven Development](#type-driven-development-philosophy), [EventCore Library Usage](#eventcore-library-usage)
 - **📊 Working with events?** → Read [EventCore Library Usage](#eventcore-library-usage)
+- **🤖 Need expert guidance?** → Read [Expert Agent Coordination](#expert-agent-coordination)
 - **🏛️ Making architectural decisions?** → Read [Architecture Decision Records](#architecture-decision-records-adrs)
 - **📤 Making commits?** → Read [Commit Rules](#commit-rules), [Pre-commit Hooks](#pre-commit-hooks)
 - **🔄 Creating/updating PRs?** → Read [Pull Request Workflow](#pull-request-workflow), [🚨 Critical Rules](#critical-rules---always-apply)
@@ -32,14 +33,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. [Development Commands](#development-commands)
 6. [Architecture](#architecture)
 7. [EventCore Library Usage](#eventcore-library-usage) (Event sourcing with EventCore)
-8. [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
-9. [Performance Targets](#performance-targets)
-10. [Pre-commit Hooks](#pre-commit-hooks)
-11. [Development Principles](#development-principles)
-12. [GitHub MCP Integration](#github-mcp-integration)
-13. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
-14. [Pull Request Workflow](#pull-request-workflow)
-15. [Memories](#memories) (Important reminders)
+8. [Expert Agent Coordination](#expert-agent-coordination) (How to use specialized AI agents)
+9. [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
+10. [Performance Targets](#performance-targets)
+11. [Pre-commit Hooks](#pre-commit-hooks)
+12. [Development Principles](#development-principles)
+13. [GitHub MCP Integration](#github-mcp-integration)
+14. [GitHub Issues Workflow](#github-issues-workflow) (How to work with issues)
+15. [Pull Request Workflow](#pull-request-workflow)
+16. [Memories](#memories) (Important reminders)
 
 ## Project Overview
 
@@ -444,6 +446,146 @@ let state = events.fold(State::default(), |mut state, event| {
 
 **Remember**: When in doubt, consult the full EventCore documentation at https://docs.rs/eventcore/latest/eventcore/
 
+## Expert Agent Coordination
+
+**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas, not real people, but they provide guidance based on the principles and approaches of their namesakes.
+
+### Available Expert Agents
+
+| Persona | Agent Name | Domain Expertise |
+|---------|------------|------------------|
+| Simon Peyton Jones | `type-theory-reviewer` | Type theory, functional programming, making illegal states unrepresentable |
+| Greg Young | `event-sourcing-architect` | Event sourcing, CQRS, distributed systems |
+| Alberto Brandolini | `event-modeling-expert` | Event storming, domain discovery, bounded contexts |
+| Edwin Brady | `type-driven-development-expert` | Type-driven development, dependent types, formal verification |
+| Niko Matsakis | `rust-type-system-expert`<br>`rust-type-safety-architect` | Rust type system, ownership, lifetimes, trait design |
+| Michael Feathers | `event-sourcing-test-architect` | Testing event-sourced systems, characterization tests |
+| Kent Beck | `tdd-coach` | Test-driven development, red-green-refactor cycle |
+| Rich Hickey | `functional-architecture-expert` | Functional design, simplicity, immutability |
+| Nicole Forsgren | `engineering-effectiveness-expert` | DORA metrics, development workflow optimization |
+| Teresa Torres | `product-discovery-coach` | Continuous discovery, outcome-driven development |
+| Jared Spool | `ux-research-expert` | User research, API design, developer experience |
+| Jez Humble | `continuous-delivery-architect` | CI/CD, deployment strategies, zero-downtime deployments |
+| Yoshua Wuyts | `async-rust-expert` | Async Rust, concurrent systems, performance optimization |
+| Martin Fowler | `refactoring-patterns-architect` | Refactoring, design patterns, evolutionary architecture |
+| Prem Sichanugrist | `git-workflow-architect` | Git workflows, GitHub automation, version control strategies |
+
+### Core Architectural Principles
+
+When multiple experts are involved in a decision, these principles guide resolution:
+
+1. **Type Safety First**: When conflicts arise, type system recommendations (Simon Peyton Jones/Niko Matsakis) take precedence
+2. **Event Sourcing is Non-Negotiable**: Greg Young's event patterns are foundational - other patterns must adapt to this
+3. **TDD is the Process**: Kent Beck drives the implementation workflow - no code without tests
+4. **Functional Core, Imperative Shell**: Rich Hickey owns the boundary between pure and impure code
+
+### When to Consult Expert Agents
+
+Expert agents should be consulted at specific points in the development workflow:
+
+#### During Planning (Before Implementation)
+- **New Feature Development**:
+  1. Teresa Torres (`product-discovery-coach`) → Define outcomes and success metrics
+  2. Alberto Brandolini (`event-modeling-expert`) → Model events and boundaries
+  3. Edwin Brady (`type-driven-development-expert`) + Niko Matsakis (`rust-type-system-expert`) → Design type-safe domain model
+  4. Michael Feathers (`event-sourcing-test-architect`) → Create test strategy
+
+#### During Implementation
+- **Complex Async Work**: Yoshua Wuyts (`async-rust-expert`) → Design async architecture
+- **Legacy Migration**: Martin Fowler (`refactoring-patterns-architect`) → Plan refactoring strategy
+- **Git/GitHub Workflow**: Prem Sichanugrist (`git-workflow-architect`) → Design automation
+
+#### During Review (After Commits)
+- **Type Safety Review**: Simon Peyton Jones (`type-theory-reviewer`) → Review type usage
+- **Event Model Review**: Greg Young (`event-sourcing-architect`) → Validate event design
+- **Test Coverage**: Kent Beck (`tdd-coach`) → Ensure proper TDD was followed
+
+### Decision Hierarchy
+
+When experts disagree, follow this hierarchy:
+
+1. **Domain Modeling Conflicts**
+   - Primary: Alberto Brandolini (discovers the events)
+   - Secondary: Greg Young (structures the events)
+   - Tiebreaker: Edwin Brady (encodes in types)
+
+2. **Implementation Approach Conflicts**
+   - Primary: The expert whose domain is most affected
+   - Secondary: Niko Matsakis (if type safety is involved)
+   - Tiebreaker: Rich Hickey (simplicity wins)
+
+3. **Performance vs Correctness**
+   - Default: Correctness first (Edwin Brady/Niko Matsakis)
+   - Exception: When measurably impacting user experience (Nicole Forsgren provides metrics)
+   - Resolution: Yoshua Wuyts finds the optimal async solution
+
+### Integration with Development Workflow
+
+Expert agents integrate into our existing todo list structure:
+
+**For new features (GitHub Issues):**
+1. Consult Teresa Torres for outcome definition
+2. Use Alberto Brandolini for event modeling
+3. START with writing tests (with Michael Feathers' guidance)
+4. Implementation with type-driven approach (Edwin Brady/Niko Matsakis)
+5. "Make a commit"
+6. Post-commit review with Simon Peyton Jones
+7. "Push changes and update PR"
+
+**For architectural decisions:**
+1. Consult relevant domain experts
+2. Document conflicts and resolutions in an ADR
+3. Get consensus from affected experts
+4. Implement with agreed approach
+
+### Conflict Resolution Rules
+
+#### Type System vs Simplicity
+If Edwin Brady and Rich Hickey disagree on complexity:
+- Try Edwin's approach in a spike
+- If it takes > 30 lines to express a simple concept, prefer Rich's approach
+- Document the tradeoff in an ADR
+
+#### Event Modeling vs User Research
+If Alberto's event model doesn't match Jared's user research:
+- Create two models: system events and user events
+- Use projections to bridge the gap
+- Teresa Torres validates the mapping
+
+#### Performance vs Testing
+If Yoshua's optimizations conflict with Michael's testing approach:
+- Maintain two implementations: simple (tested) and optimized
+- Use feature flags to switch between them
+- Nicole Forsgren measures actual impact
+
+### Pair Consultations
+
+Certain decisions benefit from paired experts:
+- **Type-Safe Events**: Edwin Brady + Greg Young
+- **Async Testing**: Michael Feathers + Yoshua Wuyts
+- **User-Facing APIs**: Niko Matsakis + Jared Spool
+- **Deployment Safety**: Jez Humble + Greg Young
+
+### Documentation Requirements
+
+Every expert consultation should produce:
+1. **Decision**: What was decided
+2. **Rationale**: Why this approach
+3. **Tradeoffs**: What we're giving up
+4. **Reversal**: How to change if wrong
+
+When expert disagreements lead to significant architectural decisions, create an ADR documenting the discussion and resolution.
+
+### Quality Gates
+
+No code proceeds without:
+1. Type safety review (Simon Peyton Jones)
+2. Event model review (Greg Young) - for event-sourced components
+3. Test coverage review (Kent Beck)
+4. Simplicity review (Rich Hickey) - for core components only
+
+Exception: Experiments and spikes in `/experiments` directory can bypass gates with documented cleanup plan.
+
 ## Architecture Decision Records (ADRs)
 
 This project uses Architecture Decision Records (ADRs) to document all significant architectural decisions. ADRs help future developers understand not just what decisions were made, but why they were made and what alternatives were considered.
@@ -572,6 +714,12 @@ Before submitting code, ensure:
 - [ ] Errors are modeled in the type system
 - [ ] Business logic is pure and testable
 - [ ] Property-based tests cover invariants
+
+**Expert Reviews**: After committing, consult these agents as appropriate:
+- Type safety improvements: `type-theory-reviewer` (Simon Peyton Jones)
+- Event model validation: `event-sourcing-architect` (Greg Young)
+- Test coverage and TDD compliance: `tdd-coach` (Kent Beck)
+- Simplicity and functional design: `functional-architecture-expert` (Rich Hickey)
 
 ### Dependency Version Management
 
