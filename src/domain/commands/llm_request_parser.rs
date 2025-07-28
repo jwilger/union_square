@@ -32,7 +32,7 @@ pub enum ParseError {
 type ParseResult<T> = Result<T, ParseError>;
 
 /// Parsed LLM request data
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedLlmRequest {
     pub model_version: ModelVersion,
     pub prompt: Prompt,
