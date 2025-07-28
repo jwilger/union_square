@@ -40,11 +40,12 @@ The Union Square project demonstrates strong architectural thinking with excelle
 
 ## High Priority Issues
 
-### 4. Missing Aggregate Boundaries (Issue #148)
-- Commands are CRUD-like without business logic
-- No domain-driven design aggregates
-- No saga/process manager patterns
-- **Impact**: Weak domain modeling
+### 4. ~~Missing Aggregate Boundaries~~ Stream Design Needed (Issue #148)
+**[UPDATED after EventCore review]**
+- EventCore uses stream-centric design, not aggregates
+- Commands need to declare their stream dependencies
+- Stream naming conventions not yet established
+- **Impact**: Need clear stream design patterns
 
 ### 5. Incomplete Testing Strategy (Issues #145, #149)
 - No temporal logic testing
@@ -79,7 +80,7 @@ The Union Square project demonstrates strong architectural thinking with excelle
 4. **Implement database schema** - Enable persistence
 
 ### Short Term (2-4 weeks)
-1. **Define aggregate boundaries** - Proper domain modeling
+1. **Define stream design patterns** - EventCore-aligned modeling
 2. **Build test infrastructure** - Event sourcing specific
 3. **Fix type safety issues** - Maximize compile-time guarantees
 4. **Refactor to pure functions** - Improve testability
@@ -96,7 +97,7 @@ The Union Square project demonstrates strong architectural thinking with excelle
 - Good event schema design
 - Missing production integration
 - No projection infrastructure
-- Weak aggregate boundaries
+- ~~Weak aggregate boundaries~~ Stream design aligned with EventCore
 
 ### Functional Architecture: ✅ Good Foundation
 - Clear separation of concerns
@@ -153,7 +154,7 @@ The Union Square project demonstrates strong architectural thinking with excelle
 - Database schema
 
 ### Phase 1: Core Infrastructure (2-3 weeks)
-- Aggregate boundaries
+- Stream design patterns
 - Test infrastructure
 - Type safety fixes
 - Functional refactoring
@@ -176,6 +177,41 @@ The Union Square project demonstrates strong architectural thinking with excelle
 Union Square has excellent architectural bones and strong engineering practices in many areas. The type-driven development approach and ring buffer implementation are particularly noteworthy. However, the incomplete EventCore integration means the application literally cannot perform its core function of recording audit trails.
 
 **The path forward is clear**: Fix the critical blockers first, then strengthen the foundation, and only then proceed with features. The team should be proud of what they've built so far, but must acknowledge that significant work remains before this can be considered production-ready.
+
+## EventCore Architecture Update
+
+**[Added after initial review]**
+
+After reviewing EventCore's documentation, the expert panel acknowledges that EventCore represents an innovative evolution in event sourcing architecture. Key insights:
+
+### EventCore's Stream-Centric Approach
+- **No predefined aggregates** - Commands dynamically define consistency boundaries
+- **Multi-stream atomic operations** - Natural for cross-entity business operations
+- **Type-driven command design** - Leverages Rust's type system for safety
+- **Flexible consistency** - Each command declares its own requirements
+
+### Revised Recommendations for Union Square
+
+1. **Stream Design Patterns**
+   ```rust
+   // Suggested stream naming conventions
+   StreamId::new("session:{session_id}")
+   StreamId::new("analysis:{analysis_id}")
+   StreamId::new("extraction:{extraction_id}")
+   StreamId::new("user:{user_id}:settings")
+   ```
+
+2. **Command-Centric Modeling**
+   - Design commands around complete business operations
+   - Let commands declare stream dependencies via `#[stream]` attributes
+   - Use the `#[derive(Command)]` macro to reduce boilerplate
+
+3. **Benefits for Union Square**
+   - Natural fit for session analysis crossing traditional boundaries
+   - Atomic updates across session and analysis streams
+   - Flexibility to evolve consistency requirements
+
+The experts conclude that EventCore's approach is well-suited to Union Square's needs. The original concern about "missing aggregates" was based on traditional assumptions that don't apply to EventCore's architecture.
 
 ## Appendix: Expert Review Team
 
