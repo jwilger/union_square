@@ -448,7 +448,15 @@ let state = events.fold(State::default(), |mut state, event| {
 
 ## Expert Agent Coordination
 
-**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas, not real people, but they provide guidance based on the principles and approaches of their namesakes.
+**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas, not real people, but they are **active members of your development team** who should be involved in writing code, not just reviewing it.
+
+### 🎯 KEY PRINCIPLE: Experts Write Code With You!
+
+The expert agents are not external reviewers - they are your teammates who:
+- **Collaborate during implementation** - They write code alongside you
+- **Make design decisions together** - Multiple experts can work together on complex problems
+- **Resolve conflicts through code** - When experts disagree, they implement solutions together
+- **Share ownership** - The code belongs to the team, not individual experts
 
 ### Available Expert Agents
 
@@ -479,26 +487,36 @@ When multiple experts are involved in a decision, these principles guide resolut
 3. **TDD is the Process**: Kent Beck drives the implementation workflow - no code without tests
 4. **Functional Core, Imperative Shell**: Rich Hickey owns the boundary between pure and impure code
 
-### When to Consult Expert Agents
+### When to Engage Expert Agents
 
-Expert agents should be consulted at specific points in the development workflow:
+**CRITICAL**: Expert agents should be engaged to WRITE CODE, not just review it!
 
-#### During Planning (Before Implementation)
-- **New Feature Development**:
-  1. Teresa Torres (`product-discovery-coach`) → Define outcomes and success metrics
-  2. Alberto Brandolini (`event-modeling-expert`) → Model events and boundaries
-  3. Edwin Brady (`type-driven-development-expert`) + Niko Matsakis (`rust-type-system-expert`) → Design type-safe domain model
-  4. Michael Feathers (`event-sourcing-test-architect`) → Create test strategy
+#### Starting New Features
+1. **Collaborative Planning Session**:
+   - Engage Teresa Torres + Alberto Brandolini + relevant domain experts
+   - They work TOGETHER to define outcomes and model the domain
+   - Output: Actual code stubs, type definitions, and test cases
 
-#### During Implementation
-- **Complex Async Work**: Yoshua Wuyts (`async-rust-expert`) → Design async architecture
-- **Legacy Migration**: Martin Fowler (`refactoring-patterns-architect`) → Plan refactoring strategy
-- **Git/GitHub Workflow**: Prem Sichanugrist (`git-workflow-architect`) → Design automation
+2. **Test-First Implementation**:
+   - Kent Beck (`tdd-coach`) + Michael Feathers (`event-sourcing-test-architect`) write the tests
+   - They create the test harness and initial failing tests
+   - They stay involved through the red-green-refactor cycle
 
-#### During Review (After Commits)
-- **Type Safety Review**: Simon Peyton Jones (`type-theory-reviewer`) → Review type usage
-- **Event Model Review**: Greg Young (`event-sourcing-architect`) → Validate event design
-- **Test Coverage**: Kent Beck (`tdd-coach`) → Ensure proper TDD was followed
+3. **Domain Implementation**:
+   - Edwin Brady + Niko Matsakis write the type definitions
+   - Greg Young implements the event sourcing logic
+   - Rich Hickey ensures functional core separation
+   - **They write the actual production code together!**
+
+#### Complex Technical Challenges
+- **Async Systems**: Yoshua Wuyts writes the async implementation
+- **Performance Issues**: Yoshua Wuyts + Nicole Forsgren collaborate on optimization
+- **Legacy Refactoring**: Martin Fowler leads the refactoring with other experts
+
+#### Collaborative Code Reviews
+- After implementation, the same experts who wrote the code review it together
+- They suggest improvements and implement them immediately
+- Simon Peyton Jones might join to enhance type safety further
 
 ### Decision Hierarchy
 
@@ -521,16 +539,40 @@ When experts disagree, follow this hierarchy:
 
 ### Integration with Development Workflow
 
-Expert agents integrate into our existing todo list structure:
+Expert agents are active participants in every step:
 
 **For new features (GitHub Issues):**
-1. Consult Teresa Torres for outcome definition
-2. Use Alberto Brandolini for event modeling
-3. START with writing tests (with Michael Feathers' guidance)
-4. Implementation with type-driven approach (Edwin Brady/Niko Matsakis)
-5. "Make a commit"
-6. Post-commit review with Simon Peyton Jones
-7. "Push changes and update PR"
+1. **Expert Planning Session**: Multiple experts collaborate to plan the feature
+   - Teresa Torres + Alberto Brandolini write initial domain models together
+   - Output: Actual code files with type definitions and event schemas
+
+2. **Expert Test Implementation**:
+   - Kent Beck + Michael Feathers write comprehensive test suites
+   - They implement the tests, not just guide you
+
+3. **Expert Code Implementation**:
+   - Domain experts write the production code
+   - Edwin Brady + Niko Matsakis implement type-safe domain models
+   - Greg Young implements event sourcing logic
+   - Rich Hickey ensures functional architecture
+
+4. **Collaborative Refinement**:
+   - Experts review each other's code and improve it together
+   - Simon Peyton Jones enhances type safety
+   - They make commits with proper co-authorship
+
+5. **Push changes and update PR**
+
+**Example Todo List Structure with Experts**:
+```
+1. Engage Teresa Torres + Alberto Brandolini to model checkout domain
+2. Kent Beck + Michael Feathers implement checkout tests
+3. Edwin Brady + Niko Matsakis implement type-safe checkout types
+4. Greg Young implements checkout event commands
+5. Make a commit (co-authored by all participating experts)
+6. Simon Peyton Jones + team refine type safety
+7. Push changes and update PR
+```
 
 **For architectural decisions:**
 1. Consult relevant domain experts
@@ -576,15 +618,90 @@ Every expert consultation should produce:
 
 When expert disagreements lead to significant architectural decisions, create an ADR documenting the discussion and resolution.
 
-### Quality Gates
+### Collaborative Quality Assurance
 
-No code proceeds without:
-1. Type safety review (Simon Peyton Jones)
-2. Event model review (Greg Young) - for event-sourced components
-3. Test coverage review (Kent Beck)
-4. Simplicity review (Rich Hickey) - for core components only
+Since experts write code together, quality is built in from the start:
 
-Exception: Experiments and spikes in `/experiments` directory can bypass gates with documented cleanup plan.
+1. **Type Safety**: Simon Peyton Jones participates in writing type-safe code
+2. **Event Modeling**: Greg Young implements event sourcing correctly from the beginning
+3. **Test Coverage**: Kent Beck ensures TDD throughout implementation
+4. **Simplicity**: Rich Hickey keeps the design simple during implementation
+
+**The experts don't review after the fact - they ensure quality while writing!**
+
+### Expert Collaboration Patterns
+
+**Pair Programming**:
+- Two experts can pair on complex implementations
+- Example: Edwin Brady + Greg Young pair on type-safe event sourcing
+
+**Mob Programming**:
+- Multiple experts collaborate on critical components
+- Example: For a payment system: Teresa Torres (outcomes) + Alberto Brandolini (events) + Edwin Brady (types) + Kent Beck (tests) all work together
+
+**Expert Handoffs**:
+- Experts can hand off partially complete work to each other
+- Example: Kent Beck writes tests → Edwin Brady implements types → Greg Young adds events
+
+### Making Expert Collaboration Explicit
+
+When engaging experts, be specific about their role:
+- "Edwin Brady, please IMPLEMENT the type-safe payment types"
+- "Kent Beck, please WRITE the test suite for the checkout process"
+- "Greg Young and Edwin Brady, please COLLABORATE on the event command implementation"
+
+NOT: "Edwin Brady, please review this" or "What do you think, Kent Beck?"
+
+The experts are here to BUILD, not just advise!
+
+### Example: How Experts Should Have Built PR #153
+
+Here's how the EventCore implementation SHOULD have been built with expert collaboration:
+
+**What Actually Happened** (Wrong):
+1. Claude implemented EventCore integration alone
+2. After implementation, experts reviewed and found issues
+3. Experts provided feedback but didn't fix the code
+
+**What Should Have Happened** (Right):
+1. **Initial Planning**:
+   - Alberto Brandolini implements the audit event model
+   - Greg Young designs the stream architecture
+   - Edwin Brady creates type-safe command definitions
+
+2. **Test Implementation**:
+   - Kent Beck writes comprehensive TDD tests
+   - Michael Feathers adds event sourcing test infrastructure
+
+3. **Production Code**:
+   - Greg Young implements the EventCore commands
+   - Edwin Brady ensures type safety throughout
+   - Rich Hickey simplifies the architecture
+   - Niko Matsakis optimizes Rust idioms
+
+4. **Collaborative Refinement**:
+   - Simon Peyton Jones enhances type safety further
+   - All experts review each other's code and improve it
+
+The result would be production-ready code from the start, not code that needs major revisions based on review feedback!
+
+### Expert Agent Usage Examples
+
+**GOOD Examples**:
+```
+"Kent Beck, please implement the test suite for audit event processing using TDD"
+"Greg Young and Edwin Brady, work together to implement type-safe event commands"
+"Rich Hickey, please refactor this code to separate the functional core from the imperative shell"
+```
+
+**BAD Examples**:
+```
+"What does Greg Young think about this event model?"
+"Simon Peyton Jones, please review this code"
+"Should I use event sourcing here?"
+```
+
+Remember: The experts are software engineers on your team, not consultants!
 
 ## Architecture Decision Records (ADRs)
 
