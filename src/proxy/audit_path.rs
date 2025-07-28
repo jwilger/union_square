@@ -1,9 +1,7 @@
 //! Audit path implementation for processing events from the ring buffer
 
 #[cfg(test)]
-use crate::domain::commands::audit_commands::{
-    RecordRequestForwarded, RecordRequestReceived, RecordResponseReceived, RecordResponseReturned,
-};
+use crate::domain::commands::RecordAuditEvent;
 use crate::infrastructure::eventcore::service::EventCoreService;
 use crate::proxy::{ring_buffer::RingBuffer, types::*};
 use std::sync::Arc;
@@ -150,44 +148,16 @@ impl AuditPathProcessor {
     ) -> ProxyResult<()> {
         #[cfg(test)]
         {
+            // Use the unified command for all audit event types
             match &event.event_type {
-                AuditEventType::RequestReceived { .. } => {
-                    let command = RecordRequestReceived::from_audit_event(event).map_err(|e| {
+                AuditEventType::RequestReceived { .. }
+                | AuditEventType::RequestForwarded { .. }
+                | AuditEventType::ResponseReceived { .. }
+                | AuditEventType::ResponseReturned { .. } => {
+                    let command = RecordAuditEvent::from_audit_event(event).map_err(|e| {
                         ProxyError::Internal(format!("Failed to create command: {e}"))
                     })?;
-                    event_store
-                        .execute_command_memory(command)
-                        .await
-                        .map_err(|e| {
-                            ProxyError::Internal(format!("EventCore execution failed: {e}"))
-                        })?;
-                }
-                AuditEventType::RequestForwarded { .. } => {
-                    let command = RecordRequestForwarded::from_audit_event(event).map_err(|e| {
-                        ProxyError::Internal(format!("Failed to create command: {e}"))
-                    })?;
-                    event_store
-                        .execute_command_memory(command)
-                        .await
-                        .map_err(|e| {
-                            ProxyError::Internal(format!("EventCore execution failed: {e}"))
-                        })?;
-                }
-                AuditEventType::ResponseReceived { .. } => {
-                    let command = RecordResponseReceived::from_audit_event(event).map_err(|e| {
-                        ProxyError::Internal(format!("Failed to create command: {e}"))
-                    })?;
-                    event_store
-                        .execute_command_memory(command)
-                        .await
-                        .map_err(|e| {
-                            ProxyError::Internal(format!("EventCore execution failed: {e}"))
-                        })?;
-                }
-                AuditEventType::ResponseReturned { .. } => {
-                    let command = RecordResponseReturned::from_audit_event(event).map_err(|e| {
-                        ProxyError::Internal(format!("Failed to create command: {e}"))
-                    })?;
+
                     event_store
                         .execute_command_memory(command)
                         .await

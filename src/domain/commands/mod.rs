@@ -6,9 +6,6 @@ pub mod llm_request_parser;
 pub mod metrics_commands;
 pub mod version_commands;
 
-pub use audit_commands::{
-    AuditCommandError, ProcessRequestBody, RecordRequestForwarded, RecordRequestReceived,
-    RecordResponseReceived, RecordResponseReturned,
-};
+pub use audit_commands::{AuditCommandError, ProcessRequestBody, RecordAuditEvent};
 pub use metrics_commands::{RecordApplicationFScore, RecordModelFScore};
 pub use version_commands::{DeactivateVersion, RecordVersionChange, RecordVersionUsage};
