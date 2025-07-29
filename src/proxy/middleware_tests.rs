@@ -307,59 +307,31 @@ mod tests {
     }
 
     mod rate_limiting_middleware {
-        use super::*;
 
         #[tokio::test]
+        #[ignore = "Rate limiting not yet implemented"]
         async fn test_rate_limit_per_api_key() {
             // Test that rate limiting is applied per API key
-            let api_key = "test-key";
+            // This test is written first following TDD principles
+            // Once we implement rate limiting, we'll remove the #[ignore]
 
-            // TODO: Create rate limiter with low limit for testing
-            // let rate_limiter = RateLimiter::new(2, Duration::from_secs(1));
-
-            // First two requests should succeed
-            for _ in 0..2 {
-                let _request = Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/completion")
-                    .header(header::AUTHORIZATION, format!("Bearer {api_key}"))
-                    .body(Body::empty())
-                    .unwrap();
-
-                // let response = rate_limit_middleware.oneshot(request).await.unwrap();
-                // assert_eq!(response.status(), StatusCode::OK);
-            }
-
-            // Third request should be rate limited
-            let _request = Request::builder()
-                .method("POST")
-                .uri("/api/v1/completion")
-                .header(header::AUTHORIZATION, format!("Bearer {api_key}"))
-                .body(Body::empty())
-                .unwrap();
-
-            // let response = rate_limit_middleware.oneshot(request).await.unwrap();
-            // assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-            // assert!(response.headers().contains_key("retry-after"));
+            // TODO: Implement rate limiting middleware with:
+            // - Per-API-key tracking
+            // - Configurable requests per second
+            // - Burst capacity
+            // - Proper 429 responses with retry-after header
         }
 
         #[tokio::test]
+        #[ignore = "Rate limiting not yet implemented"]
         async fn test_rate_limit_headers() {
             // Test that rate limit headers are included
-            let _request = Request::builder()
-                .method("POST")
-                .uri("/api/v1/completion")
-                .header(header::AUTHORIZATION, "Bearer test-key")
-                .body(Body::empty())
-                .unwrap();
+            // Following TDD, we define the expected behavior first
 
-            // TODO: Apply rate limiting middleware
-            // let response = rate_limit_middleware.oneshot(request).await.unwrap();
-
-            // Should include rate limit headers
-            // assert!(response.headers().contains_key("x-ratelimit-limit"));
-            // assert!(response.headers().contains_key("x-ratelimit-remaining"));
-            // assert!(response.headers().contains_key("x-ratelimit-reset"));
+            // TODO: Ensure rate limiting middleware adds these headers:
+            // - X-RateLimit-Limit: Maximum requests allowed
+            // - X-RateLimit-Remaining: Requests remaining in window
+            // - X-RateLimit-Reset: Unix timestamp when window resets
         }
     }
 }

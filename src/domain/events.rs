@@ -152,6 +152,45 @@ pub enum DomainEvent {
         reason: Option<ChangeReason>,
         deactivated_at: Timestamp,
     },
+
+    // Analysis Events
+    AnalysisStarted {
+        session_id: SessionId,
+        analysis_id: crate::domain::streams::AnalysisId,
+    },
+    AnalysisCreated {
+        analysis_id: crate::domain::streams::AnalysisId,
+        session_id: SessionId,
+        config: serde_json::Value,
+        created_at: Timestamp,
+    },
+    AnalysisCompleted {
+        analysis_id: crate::domain::streams::AnalysisId,
+        results: serde_json::Value,
+        completed_at: Timestamp,
+    },
+    SessionAnalysisCompleted {
+        session_id: SessionId,
+        analysis_id: crate::domain::streams::AnalysisId,
+        summary: String,
+    },
+
+    // Test Extraction Events
+    ExtractionStarted {
+        extraction_id: crate::domain::streams::ExtractionId,
+        session_id: SessionId,
+        started_at: Timestamp,
+    },
+    TestCasesExtracted {
+        extraction_id: crate::domain::streams::ExtractionId,
+        test_case_ids: Vec<crate::domain::test_case::TestCaseId>,
+        extracted_at: Timestamp,
+    },
+    ExtractionCompleted {
+        extraction_id: crate::domain::streams::ExtractionId,
+        approved_test_count: u32,
+        completed_at: Timestamp,
+    },
 }
 
 impl DomainEvent {
@@ -178,6 +217,13 @@ impl DomainEvent {
             DomainEvent::UserCreated { created_at, .. } => *created_at,
             DomainEvent::UserActivated { activated_at, .. } => *activated_at,
             DomainEvent::UserDeactivated { deactivated_at, .. } => *deactivated_at,
+            DomainEvent::AnalysisStarted { .. } => Timestamp::now(), // No timestamp in this event
+            DomainEvent::AnalysisCreated { created_at, .. } => *created_at,
+            DomainEvent::AnalysisCompleted { completed_at, .. } => *completed_at,
+            DomainEvent::SessionAnalysisCompleted { .. } => Timestamp::now(), // No timestamp in this event
+            DomainEvent::ExtractionStarted { started_at, .. } => *started_at,
+            DomainEvent::TestCasesExtracted { extracted_at, .. } => *extracted_at,
+            DomainEvent::ExtractionCompleted { completed_at, .. } => *completed_at,
         }
     }
 }
