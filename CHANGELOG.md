@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/jwilger/union_square/compare/v0.2.0...v0.2.1) - 2025-07-29
+
+### Added
+
+- add binary release infrastructure for cross-platform distribution ([#156](https://github.com/jwilger/union_square/pull/156))
+
+### Fixed
+
+- *(version)* replace primitive String with ModelId in VersionComparison ([#154](https://github.com/jwilger/union_square/pull/154))
+
+### Other
+
+- complete TDD adoption and implement remaining streaming tests ([#158](https://github.com/jwilger/union_square/pull/158))
+
 ## [0.2.0](https://github.com/jwilger/union_square/compare/v0.1.2...v0.2.0) - 2025-07-28
 
 ### Added
