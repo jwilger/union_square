@@ -30,7 +30,14 @@ print_warning() {
 
 # Check if we're in the project root
 if [[ ! -f "${PROJECT_ROOT}/Cargo.toml" ]]; then
-    print_error "This script must be run from the Union Square project directory"
+    print_error "This script must be run from a Rust project directory with Cargo.toml"
+    exit 1
+fi
+
+# Extract project name from Cargo.toml
+PROJECT_NAME=$(grep -E '^name = ' "${PROJECT_ROOT}/Cargo.toml" | head -1 | sed 's/name = "\(.*\)"/\1/')
+if [[ -z "${PROJECT_NAME}" ]]; then
+    print_error "Could not extract project name from Cargo.toml"
     exit 1
 fi
 
