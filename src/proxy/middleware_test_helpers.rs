@@ -30,7 +30,9 @@ pub mod helpers {
             let router = Router::new()
                 .route("/test", axum::routing::any(test_handler))
                 .route("/echo", axum::routing::any(echo_handler))
-                .route("/error", axum::routing::any(error_handler));
+                .route("/error", axum::routing::any(error_handler))
+                .route("/health", axum::routing::get(health_handler))
+                .route("/metrics", axum::routing::get(metrics_handler));
 
             Self { router }
         }
@@ -84,6 +86,16 @@ pub mod helpers {
 
     /// Simple test handler that returns OK
     async fn test_handler() -> StatusCode {
+        StatusCode::OK
+    }
+
+    /// Health check handler
+    async fn health_handler() -> StatusCode {
+        StatusCode::OK
+    }
+
+    /// Metrics handler
+    async fn metrics_handler() -> StatusCode {
         StatusCode::OK
     }
 
