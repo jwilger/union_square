@@ -327,7 +327,7 @@ mod tests {
                 assert_eq!(from_model_id.as_ref(), "gpt-4");
                 assert_eq!(to_model_id.as_ref(), "claude-3-opus");
 
-                // We CAN now do this - they are proper ModelId types!
+                // Verify that ModelId types are used correctly and the type system ensures validity.
                 let _model_id: &ModelId = from_model_id; // This compiles!
 
                 // The type system now prevents invalid VersionComparisons
