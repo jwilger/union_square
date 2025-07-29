@@ -34,6 +34,12 @@ pub enum Error {
 
     #[error("Internal server error")]
     Internal,
+
+    #[error("Invalid stream ID: {0}")]
+    InvalidStreamId(String),
+
+    #[error("Invalid state transition: {0}")]
+    InvalidStateTransition(String),
 }
 
 impl Error {

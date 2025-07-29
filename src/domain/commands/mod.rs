@@ -4,6 +4,7 @@ pub mod audit_buffer;
 pub mod audit_commands;
 pub mod llm_request_parser;
 pub mod metrics_commands;
+pub mod session_commands;
 pub mod version_commands;
 
 pub use audit_commands::{AuditCommandError, ProcessRequestBody, RecordAuditEvent};
