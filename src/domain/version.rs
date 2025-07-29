@@ -350,7 +350,7 @@ mod tests {
 
         let comparison = v1.compare(&v2);
 
-        // Once we fix the implementation, this should work with ModelId types
+        
         match comparison {
             VersionComparison::Changed {
                 ref from_model_id,
