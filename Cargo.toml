@@ -58,6 +58,8 @@ eventcore-memory = "0.1.8"
 criterion = { version = "0.6", features = ["async_tokio"] }
 mockito = "1.6"
 dhat = "0.3.3"
+quickcheck = "1.0.3"
+quickcheck_macros = "1.1.0"
 
 
 [[bin]]
