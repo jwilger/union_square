@@ -210,22 +210,32 @@ mod tests {
             // Test that panics are caught and converted to 500 errors
             // We'll test this by sending a request that would cause a panic
             // The panic middleware should catch it
-            let auth_config = AuthConfig::default();
+            let valid_key = "test-key";
+            let mut auth_config = AuthConfig::default();
+            auth_config
+                .api_keys
+                .insert(ApiKey::try_new(valid_key.to_string()).unwrap());
             let mut harness = MiddlewareTestHarness::new().with_full_stack(auth_config);
 
             // Create a request that might cause issues if not handled properly
             let request = Request::builder()
                 .method("GET")
                 .uri("/test")
+                .header("authorization", format!("Bearer {valid_key}"))
                 .header("content-length", "invalid") // Invalid content-length
                 .body(Body::empty())
                 .unwrap();
 
             let response = harness.send_request(request).await;
 
-            // Even if something goes wrong, we should get a response
-            // (not panic the server)
-            assert!(response.status().is_client_error() || response.status().is_server_error());
+            // The server should handle invalid content-length gracefully
+            // In this case, the middleware stack processes the request normally
+            // since the invalid header doesn't cause a panic
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "Server should handle invalid headers gracefully without panicking"
+            );
         }
 
         #[tokio::test]

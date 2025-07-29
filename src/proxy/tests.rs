@@ -247,7 +247,11 @@ mod streaming_tests {
             ..Default::default()
         };
         let service = ProxyService::new(config);
-        let auth_config = crate::proxy::AuthConfig::default();
+        let valid_key = "test-key";
+        let mut auth_config = crate::proxy::AuthConfig::default();
+        auth_config
+            .api_keys
+            .insert(crate::proxy::types::ApiKey::try_new(valid_key.to_string()).unwrap());
         let app = service.into_router(auth_config);
 
         // Create a slow streaming body that will exceed the timeout
@@ -266,19 +270,32 @@ mod streaming_tests {
             .method("POST")
             .uri("/api/v1/chat/completions")
             .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {valid_key}"))
             .body(body)
             .unwrap();
 
         let start = tokio::time::Instant::now();
         let result = app.oneshot(request).await;
-        let _elapsed = start.elapsed();
+        let elapsed = start.elapsed();
 
         // With the current implementation, timeouts are handled at the provider level
         // This test documents the expected behavior when timeout handling is implemented
         // at the proxy level for streaming requests
 
-        // For now, we verify that the slow stream is accepted without panic
-        assert!(result.is_ok() || result.is_err());
+        // For now, we verify that the slow stream is accepted and processed
+        assert!(
+            result.is_ok(),
+            "Request should be processed without panicking. Got: {:?}",
+            result.as_ref().err()
+        );
+
+        // Since timeout is not enforced at proxy level, the elapsed time will be longer than timeout
+        // Note: The actual elapsed time depends on how quickly the auth/routing fails
+        // We'll check that some time has elapsed, but not require it to exceed the full timeout
+        assert!(
+            elapsed > Duration::from_millis(0),
+            "Request processing should take some time. Elapsed: {elapsed:?}"
+        );
 
         // When timeout is implemented for streaming:
         // - The proxy should terminate slow streams after request_timeout

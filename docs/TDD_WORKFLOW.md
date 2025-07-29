@@ -422,7 +422,7 @@ Practice with simple exercises:
 ## Resources
 
 ### Videos
-- [TDD in Rust - YouTube](https://www.youtube.com/results?search_query=tdd+rust)
+- [TDD in Rust - A Practical Introduction](https://www.youtube.com/watch?v=_M1ykLJB5u0)
 - [Kent Beck TDD Demo](https://www.youtube.com/watch?v=58jGpV2Cg50)
 
 ### Books
