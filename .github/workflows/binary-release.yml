@@ -275,4 +275,26 @@ jobs:
 
           # Extract and test binary
           tar xzf union_square-x86_64-linux.tar.gz
-          ./union_square --version || echo "Version check failed (might be expected if --version flag not implemented)"
+
+          # Smoke test: Verify the binary can start up without crashing
+          # Since this is a server application, we'll run it with a timeout
+          # and check that it doesn't exit with an error immediately
+          echo "Running smoke test on binary..."
+
+          # Set minimal environment to avoid database connection attempts
+          export DATABASE_URL="postgresql://test:test@localhost/test"
+          export RUST_LOG="error"
+
+          # Run the binary for 2 seconds and capture the exit code
+          # We expect it to either:
+          # - Run successfully and be killed by timeout (exit code 124)
+          # - Exit cleanly within 2 seconds (exit code 0)
+          # Any other exit code indicates a failure
+          timeout 2s ./union_square || EXIT_CODE=$?
+
+          if [[ $EXIT_CODE -eq 124 ]] || [[ $EXIT_CODE -eq 0 ]]; then
+            echo "✓ Binary smoke test passed - application started successfully"
+          else
+            echo "✗ Binary smoke test failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
