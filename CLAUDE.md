@@ -662,6 +662,61 @@ NOT: "type-driven-development-expert, please review this" or "What do you think,
 
 The expert agents are here to BUILD, not just advise!
 
+### Inter-Agent Communication Protocol
+
+Since expert agents cannot directly invoke each other, the main thread acts as a facilitator for inter-agent communication. This enables rich collaboration and debate between experts.
+
+#### Communication Format
+
+When an expert agent needs input from another agent, they should:
+
+1. **Request Format**: End their response with a clearly marked request:
+   ```
+   [AGENT_REQUEST]
+   TO: event-sourcing-architect, type-driven-development-expert
+   QUESTION: How should we handle event versioning in this type-safe command structure?
+   CONTEXT: [relevant context]
+   [/AGENT_REQUEST]
+   ```
+
+2. **Response Format**: When responding to another agent's question:
+   ```
+   [AGENT_RESPONSE]
+   TO: functional-architecture-expert
+   RE: Your question about immutability in event streams
+   RESPONSE: [detailed response]
+   [/AGENT_RESPONSE]
+   ```
+
+#### Main Thread Responsibilities
+
+When you see an [AGENT_REQUEST]:
+1. Extract the request details
+2. Invoke the requested agents with the question and context
+3. Include the original agent's name and question in the prompt
+4. Return responses to the original conversation thread
+5. Allow for follow-up exchanges until consensus is reached
+
+#### Collaboration Patterns
+
+**Peer Review Pattern**:
+- Agent A implements solution
+- Agent A requests review from Agent B
+- Main thread facilitates the review exchange
+- Consensus achieved or escalated to more agents
+
+**Design Debate Pattern**:
+- Multiple agents have different approaches
+- Each presents their solution with [AGENT_REQUEST] for critique
+- Main thread orchestrates the debate
+- Final implementation incorporates best ideas
+
+**Knowledge Synthesis Pattern**:
+- Agent A needs specialized knowledge from Agent B
+- Request specific information via [AGENT_REQUEST]
+- Agent B provides expertise
+- Agent A incorporates knowledge into solution
+
 ### Example: How Experts Should Have Built PR #153
 
 Here's how the EventCore implementation SHOULD have been built with expert collaboration:
