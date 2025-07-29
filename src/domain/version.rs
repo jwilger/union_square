@@ -350,7 +350,6 @@ mod tests {
 
         let comparison = v1.compare(&v2);
 
-        
         match comparison {
             VersionComparison::Changed {
                 ref from_model_id,
