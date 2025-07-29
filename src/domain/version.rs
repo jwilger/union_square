@@ -306,8 +306,8 @@ mod tests {
 
     #[test]
     fn test_version_comparison_should_use_model_id_not_string() {
-        // This test demonstrates that VersionComparison should contain ModelId types,
-        // not raw strings. The current implementation incorrectly uses String.
+        // This test verifies that VersionComparison correctly uses ModelId types,
+        // ensuring type safety and validation guarantees.
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new("gpt-4".to_string()).unwrap(),
