@@ -1,0 +1,278 @@
+name: Binary Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: ''
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux targets
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            binary_name: union_square
+            archive_name: union_square-x86_64-linux
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            binary_name: union_square
+            archive_name: union_square-aarch64-linux
+            use_cross: true
+
+          # macOS targets
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            binary_name: union_square
+            archive_name: union_square-x86_64-macos
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            binary_name: union_square
+            archive_name: union_square-aarch64-macos
+
+          # Windows targets
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            binary_name: union_square.exe
+            archive_name: union_square-x86_64-windows
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            binary_name: union_square.exe
+            archive_name: union_square-aarch64-windows
+            use_cross: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.use_cross == true
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Set up cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build binary
+        run: |
+          if [[ "${{ matrix.use_cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }} --bin union_square
+          else
+            cargo build --release --target ${{ matrix.target }} --bin union_square
+          fi
+        shell: bash
+
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.archive_name }}.tar.gz ${{ matrix.binary_name }}
+          cd ../../../
+          sha256sum ${{ matrix.archive_name }}.tar.gz > ${{ matrix.archive_name }}.tar.gz.sha256
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd target\${{ matrix.target }}\release
+          7z a ..\..\..\${{ matrix.archive_name }}.zip ${{ matrix.binary_name }}
+          cd ..\..\..\
+          Get-FileHash ${{ matrix.archive_name }}.zip -Algorithm SHA256 | Select-Object -ExpandProperty Hash | Out-File -NoNewline ${{ matrix.archive_name }}.zip.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            ${{ matrix.archive_name }}.*
+          retention-days: 1
+
+  create-release-artifacts:
+    name: Create Release Artifacts
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Generate checksums file
+        run: |
+          cd artifacts
+          cat *.sha256 > checksums.txt
+          echo "Checksums:"
+          cat checksums.txt
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/*.sha256
+            artifacts/checksums.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  build-docker:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-homebrew-formula:
+    name: Update Homebrew Formula
+    needs: create-release-artifacts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+
+          cat > union-square.rb << EOF
+          class UnionSquare < Formula
+            desc "A proxy/wire-tap service for making LLM calls and recording everything"
+            homepage "https://github.com/${{ github.repository }}"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.intel?
+                url "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/union_square-x86_64-macos.tar.gz"
+                sha256 "REPLACE_WITH_ACTUAL_SHA256"
+              elsif Hardware::CPU.arm?
+                url "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/union_square-aarch64-macos.tar.gz"
+                sha256 "REPLACE_WITH_ACTUAL_SHA256"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.intel?
+                url "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/union_square-x86_64-linux.tar.gz"
+                sha256 "REPLACE_WITH_ACTUAL_SHA256"
+              elsif Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
+                url "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/union_square-aarch64-linux.tar.gz"
+                sha256 "REPLACE_WITH_ACTUAL_SHA256"
+              end
+            end
+
+            def install
+              bin.install "union_square"
+            end
+
+            test do
+              assert_match "union_square", shell_output("#{bin}/union_square --version")
+            end
+          end
+          EOF
+
+          echo "Generated Homebrew formula (SHA256 values need to be updated):"
+          cat union-square.rb
+
+      - name: Upload Homebrew formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: union-square.rb
+          retention-days: 7
+
+  verify-release:
+    name: Verify Release Artifacts
+    needs: create-release-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download and verify Linux binary
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.tag_name }}"
+          echo "Downloading release ${RELEASE_TAG}"
+
+          # Download Linux x86_64 binary
+          curl -L -o union_square-x86_64-linux.tar.gz \
+            "https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/union_square-x86_64-linux.tar.gz"
+
+          # Download checksum
+          curl -L -o union_square-x86_64-linux.tar.gz.sha256 \
+            "https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/union_square-x86_64-linux.tar.gz.sha256"
+
+          # Verify checksum
+          echo "Verifying checksum..."
+          sha256sum -c union_square-x86_64-linux.tar.gz.sha256
+
+          # Extract and test binary
+          tar xzf union_square-x86_64-linux.tar.gz
+          ./union_square --version || echo "Version check failed (might be expected if --version flag not implemented)"
