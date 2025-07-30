@@ -36,3 +36,6 @@ logs/
 # Log4brains build artifacts
 docs/adr/*
 !docs/adr/*.md
+
+# Work coordination files
+WORK.md
