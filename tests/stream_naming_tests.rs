@@ -19,7 +19,7 @@ mod stream_naming_tests {
         // Assert
         assert_eq!(
             stream_id.as_ref(),
-            format!("session:{session_id}"),
+            format!("session:{}", session_id.value()),
             "Session stream ID should follow 'session:{{id}}' format"
         );
     }
@@ -205,7 +205,8 @@ mod stream_naming_tests {
         let id_part = stream_str.strip_prefix("session:").unwrap();
         // We can get the string, but can't convert back to SessionId
         // because SessionId doesn't have a from_string method
-        assert_eq!(id_part, session_id.to_string());
+        // Use value() to get the actual UUID for stream comparison
+        assert_eq!(id_part, session_id.value());
     }
 
     #[test]

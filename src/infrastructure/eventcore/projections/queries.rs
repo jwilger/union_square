@@ -233,10 +233,8 @@ where
                 DomainEvent::SessionStarted { session_id, user_id, started_at, .. } => {
                     model.add_session(session_id, user_id, *started_at);
                 }
-                DomainEvent::SessionEnded { session_id, .. } => {
-                    // Calculate duration if we have start time
-                    // This would need session start time tracking
-                    model.end_session(session_id, std::time::Duration::from_secs(300));
+                DomainEvent::SessionEnded { session_id, ended_at, .. } => {
+                    model.end_session(session_id, *ended_at);
                 }
                 _ => {}
             }

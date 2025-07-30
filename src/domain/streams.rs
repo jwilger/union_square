@@ -20,7 +20,7 @@ use eventcore::StreamId;
 /// - Requests/responses captured
 /// - Errors encountered
 pub fn session_stream(session_id: &SessionId) -> StreamId {
-    StreamId::try_new(format!("session:{session_id}"))
+    StreamId::try_new(format!("session:{}", session_id.value()))
         .expect("Session stream ID should always be valid")
 }
 

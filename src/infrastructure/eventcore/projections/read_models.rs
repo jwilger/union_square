@@ -64,9 +64,15 @@ impl SessionSummary {
 
         // Update average response time
         if let Some(current_avg) = self.average_response_time {
-            let total_time =
-                current_avg * self.successful_requests.saturating_sub(1) as u32 + response_time;
-            self.average_response_time = Some(total_time / self.successful_requests as u32);
+            // When successful_requests is 1, we just have the first response time
+            if self.successful_requests == 1 {
+                self.average_response_time = Some(response_time);
+            } else {
+                // Calculate new average: (old_avg * (n-1) + new_value) / n
+                let prev_count = self.successful_requests - 1;
+                let total_time = current_avg * prev_count as u32 + response_time;
+                self.average_response_time = Some(total_time / self.successful_requests as u32);
+            }
         } else {
             self.average_response_time = Some(response_time);
         }
@@ -249,6 +255,9 @@ pub struct ApplicationMetricsModel {
     pub unique_users: HashSet<UserId>,
     pub model_versions: HashMap<ModelVersion, VersionMetrics>,
     pub session_durations: Vec<Duration>,
+    /// Track session start times for duration calculation
+    #[serde(skip)]
+    session_start_times: HashMap<SessionId, Timestamp>,
 }
 
 /// Metrics for a specific version within an application
@@ -270,25 +279,35 @@ impl ApplicationMetricsModel {
             unique_users: HashSet::new(),
             model_versions: HashMap::new(),
             session_durations: Vec::new(),
+            session_start_times: HashMap::new(),
         }
     }
 
     /// Add a new session
-    pub fn add_session(
-        &mut self,
-        _session_id: &SessionId,
-        user_id: &UserId,
-        _started_at: Timestamp,
-    ) {
+    pub fn add_session(&mut self, session_id: &SessionId, user_id: &UserId, started_at: Timestamp) {
         self.total_sessions += 1;
         self.active_sessions += 1;
         self.unique_users.insert(user_id.clone());
+        self.session_start_times
+            .insert(session_id.clone(), started_at);
     }
 
     /// End a session
-    pub fn end_session(&mut self, _session_id: &SessionId, duration: Duration) {
+    pub fn end_session(&mut self, session_id: &SessionId, ended_at: Timestamp) {
         self.active_sessions = self.active_sessions.saturating_sub(1);
-        self.session_durations.push(duration);
+
+        // Calculate actual duration if we have the start time
+        if let Some(started_at) = self.session_start_times.remove(session_id) {
+            let started_dt = started_at.into_datetime();
+            let ended_dt = ended_at.into_datetime();
+            let duration = ended_dt.signed_duration_since(started_dt);
+            if duration.num_milliseconds() > 0 {
+                self.session_durations
+                    .push(std::time::Duration::from_millis(
+                        duration.num_milliseconds() as u64,
+                    ));
+            }
+        }
     }
 
     /// Calculate average session duration
@@ -349,6 +368,43 @@ mod tests {
 
         assert_eq!(summary.total_requests, 1);
         assert!(summary.models_used.contains(&model_version));
+    }
+
+    #[test]
+    fn test_average_response_time_calculation() {
+        let session_id = SessionId::generate();
+        let user_id = UserId::generate();
+        let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
+        let started_at = Timestamp::now();
+
+        let mut summary = SessionSummary::new(session_id, user_id, app_id, started_at);
+        let request_id = RequestId::generate();
+
+        // First request - should not divide by zero
+        summary.complete_request(&request_id, Duration::from_millis(100));
+        assert_eq!(summary.successful_requests, 1);
+        assert_eq!(
+            summary.average_response_time,
+            Some(Duration::from_millis(100))
+        );
+
+        // Second request - should average correctly
+        let request_id2 = RequestId::generate();
+        summary.complete_request(&request_id2, Duration::from_millis(200));
+        assert_eq!(summary.successful_requests, 2);
+        assert_eq!(
+            summary.average_response_time,
+            Some(Duration::from_millis(150))
+        );
+
+        // Third request - verify averaging continues to work
+        let request_id3 = RequestId::generate();
+        summary.complete_request(&request_id3, Duration::from_millis(300));
+        assert_eq!(summary.successful_requests, 3);
+        assert_eq!(
+            summary.average_response_time,
+            Some(Duration::from_millis(200))
+        );
     }
 
     #[test]
@@ -416,13 +472,16 @@ mod tests {
         assert_eq!(model.total_sessions, 1);
         assert!(model.unique_users.contains(&user_id));
 
-        let duration = Duration::from_secs(300);
-        model.end_session(&session_id, duration);
+        // End session after 5 minutes
+        let ended_dt = started_at.into_datetime() + chrono::Duration::seconds(300);
+        let ended_at = Timestamp::try_new(ended_dt).unwrap();
+        model.end_session(&session_id, ended_at);
         assert_eq!(model.active_sessions, 0);
         assert_eq!(model.session_durations.len(), 1);
+        assert_eq!(model.session_durations[0], Duration::from_secs(300));
 
         let avg_duration = model.average_session_duration();
         assert!(avg_duration.is_some());
-        assert_eq!(avg_duration.unwrap(), duration);
+        assert_eq!(avg_duration.unwrap(), Duration::from_secs(300));
     }
 }
