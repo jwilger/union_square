@@ -3,4 +3,7 @@
 //! This module contains projection implementations for building read models
 //! from the event stream.
 
-// Placeholder - will be implemented after command integration
+pub mod builder;
+pub mod id_extraction;
+pub mod queries;
+pub mod read_models;

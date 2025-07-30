@@ -93,3 +93,7 @@ harness = false
 [[bench]]
 name = "memory_profiling"
 harness = false
+
+[[example]]
+name = "multi_stream_queries"
+path = "examples/multi_stream_queries.rs"
