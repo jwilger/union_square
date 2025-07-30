@@ -17,6 +17,7 @@ pub fn extract_session_ids(event: &DomainEvent) -> HashSet<SessionId> {
     let mut session_ids = HashSet::new();
 
     match event {
+        // Events that contain session_id
         DomainEvent::SessionStarted { session_id, .. }
         | DomainEvent::SessionEnded { session_id, .. }
         | DomainEvent::SessionTagged { session_id, .. }
@@ -31,7 +32,18 @@ pub fn extract_session_ids(event: &DomainEvent) -> HashSet<SessionId> {
         | DomainEvent::ApplicationFScoreCalculated { session_id, .. } => {
             session_ids.insert(session_id.clone());
         }
-        _ => {}
+
+        // Events that do NOT contain session_id - explicitly list all
+        DomainEvent::LlmRequestStarted { .. }
+        | DomainEvent::LlmResponseReceived { .. }
+        | DomainEvent::LlmRequestFailed { .. }
+        | DomainEvent::LlmRequestCancelled { .. }
+        | DomainEvent::VersionDeactivated { .. }
+        | DomainEvent::UserCreated { .. }
+        | DomainEvent::UserActivated { .. }
+        | DomainEvent::UserDeactivated { .. } => {
+            // No session_id in these events
+        }
     }
 
     session_ids
@@ -42,13 +54,33 @@ pub fn extract_user_ids(event: &DomainEvent) -> HashSet<UserId> {
     let mut user_ids = HashSet::new();
 
     match event {
+        // Events that contain user_id
         DomainEvent::SessionStarted { user_id, .. }
         | DomainEvent::UserCreated { user_id, .. }
         | DomainEvent::UserActivated { user_id, .. }
         | DomainEvent::UserDeactivated { user_id, .. } => {
             user_ids.insert(user_id.clone());
         }
-        _ => {}
+
+        // Events that do NOT contain user_id - explicitly list all
+        DomainEvent::SessionEnded { .. }
+        | DomainEvent::SessionTagged { .. }
+        | DomainEvent::LlmRequestReceived { .. }
+        | DomainEvent::LlmRequestStarted { .. }
+        | DomainEvent::LlmResponseReceived { .. }
+        | DomainEvent::LlmRequestFailed { .. }
+        | DomainEvent::LlmRequestCancelled { .. }
+        | DomainEvent::LlmRequestParsingFailed { .. }
+        | DomainEvent::InvalidStateTransition { .. }
+        | DomainEvent::AuditEventProcessingFailed { .. }
+        | DomainEvent::VersionFirstSeen { .. }
+        | DomainEvent::VersionChanged { .. }
+        | DomainEvent::VersionUsageRecorded { .. }
+        | DomainEvent::VersionDeactivated { .. }
+        | DomainEvent::FScoreCalculated { .. }
+        | DomainEvent::ApplicationFScoreCalculated { .. } => {
+            // No user_id in these events
+        }
     }
 
     user_ids
@@ -59,11 +91,33 @@ pub fn extract_application_ids(event: &DomainEvent) -> HashSet<ApplicationId> {
     let mut app_ids = HashSet::new();
 
     match event {
+        // Events that contain application_id
         DomainEvent::SessionStarted { application_id, .. }
         | DomainEvent::ApplicationFScoreCalculated { application_id, .. } => {
             app_ids.insert(application_id.clone());
         }
-        _ => {}
+
+        // Events that do NOT contain application_id - explicitly list all
+        DomainEvent::SessionEnded { .. }
+        | DomainEvent::SessionTagged { .. }
+        | DomainEvent::LlmRequestReceived { .. }
+        | DomainEvent::LlmRequestStarted { .. }
+        | DomainEvent::LlmResponseReceived { .. }
+        | DomainEvent::LlmRequestFailed { .. }
+        | DomainEvent::LlmRequestCancelled { .. }
+        | DomainEvent::LlmRequestParsingFailed { .. }
+        | DomainEvent::InvalidStateTransition { .. }
+        | DomainEvent::AuditEventProcessingFailed { .. }
+        | DomainEvent::VersionFirstSeen { .. }
+        | DomainEvent::VersionChanged { .. }
+        | DomainEvent::VersionUsageRecorded { .. }
+        | DomainEvent::VersionDeactivated { .. }
+        | DomainEvent::FScoreCalculated { .. }
+        | DomainEvent::UserCreated { .. }
+        | DomainEvent::UserActivated { .. }
+        | DomainEvent::UserDeactivated { .. } => {
+            // No application_id in these events
+        }
     }
 
     app_ids
@@ -74,6 +128,7 @@ pub fn extract_model_versions(event: &DomainEvent) -> HashSet<ModelVersion> {
     let mut versions = HashSet::new();
 
     match event {
+        // Events that contain model_version
         DomainEvent::LlmRequestReceived { model_version, .. }
         | DomainEvent::VersionFirstSeen { model_version, .. }
         | DomainEvent::VersionUsageRecorded { model_version, .. }
@@ -82,6 +137,8 @@ pub fn extract_model_versions(event: &DomainEvent) -> HashSet<ModelVersion> {
         | DomainEvent::ApplicationFScoreCalculated { model_version, .. } => {
             versions.insert(model_version.clone());
         }
+
+        // Special case: VersionChanged has two versions
         DomainEvent::VersionChanged {
             from_version,
             to_version,
@@ -90,7 +147,23 @@ pub fn extract_model_versions(event: &DomainEvent) -> HashSet<ModelVersion> {
             versions.insert(from_version.clone());
             versions.insert(to_version.clone());
         }
-        _ => {}
+
+        // Events that do NOT contain model_version - explicitly list all
+        DomainEvent::SessionStarted { .. }
+        | DomainEvent::SessionEnded { .. }
+        | DomainEvent::SessionTagged { .. }
+        | DomainEvent::LlmRequestStarted { .. }
+        | DomainEvent::LlmResponseReceived { .. }
+        | DomainEvent::LlmRequestFailed { .. }
+        | DomainEvent::LlmRequestCancelled { .. }
+        | DomainEvent::LlmRequestParsingFailed { .. }
+        | DomainEvent::InvalidStateTransition { .. }
+        | DomainEvent::AuditEventProcessingFailed { .. }
+        | DomainEvent::UserCreated { .. }
+        | DomainEvent::UserActivated { .. }
+        | DomainEvent::UserDeactivated { .. } => {
+            // No model_version in these events
+        }
     }
 
     versions
@@ -101,6 +174,7 @@ pub fn extract_request_ids(event: &DomainEvent) -> HashSet<RequestId> {
     let mut request_ids = HashSet::new();
 
     match event {
+        // Events that contain request_id
         DomainEvent::LlmRequestReceived { request_id, .. }
         | DomainEvent::LlmRequestStarted { request_id, .. }
         | DomainEvent::LlmResponseReceived { request_id, .. }
@@ -111,7 +185,22 @@ pub fn extract_request_ids(event: &DomainEvent) -> HashSet<RequestId> {
         | DomainEvent::AuditEventProcessingFailed { request_id, .. } => {
             request_ids.insert(request_id.clone());
         }
-        _ => {}
+
+        // Events that do NOT contain request_id - explicitly list all
+        DomainEvent::SessionStarted { .. }
+        | DomainEvent::SessionEnded { .. }
+        | DomainEvent::SessionTagged { .. }
+        | DomainEvent::VersionFirstSeen { .. }
+        | DomainEvent::VersionChanged { .. }
+        | DomainEvent::VersionUsageRecorded { .. }
+        | DomainEvent::VersionDeactivated { .. }
+        | DomainEvent::FScoreCalculated { .. }
+        | DomainEvent::ApplicationFScoreCalculated { .. }
+        | DomainEvent::UserCreated { .. }
+        | DomainEvent::UserActivated { .. }
+        | DomainEvent::UserDeactivated { .. } => {
+            // No request_id in these events
+        }
     }
 
     request_ids
@@ -291,5 +380,41 @@ mod tests {
         assert_eq!(versions.len(), 2);
         assert!(versions.contains(&from_version));
         assert!(versions.contains(&to_version));
+    }
+
+    #[test]
+    fn test_exhaustive_matching_user_created() {
+        // Test that UserCreated event doesn't have session_id
+        let event = DomainEvent::UserCreated {
+            user_id: UserId::generate(),
+            email: crate::domain::user::EmailAddress::try_new("test@example.com".to_string())
+                .unwrap(),
+            display_name: None,
+            created_at: Timestamp::now(),
+        };
+
+        let session_ids = extract_session_ids(&event);
+        assert!(session_ids.is_empty());
+
+        let user_ids = extract_user_ids(&event);
+        assert_eq!(user_ids.len(), 1);
+    }
+
+    #[test]
+    fn test_exhaustive_matching_llm_response() {
+        // Test that LlmResponseReceived doesn't have session_id
+        let event = DomainEvent::LlmResponseReceived {
+            request_id: RequestId::generate(),
+            response_text: crate::domain::types::ResponseText::try_new("response".to_string())
+                .unwrap(),
+            metadata: crate::domain::llm::ResponseMetadata::default(),
+            received_at: Timestamp::now(),
+        };
+
+        let session_ids = extract_session_ids(&event);
+        assert!(session_ids.is_empty());
+
+        let request_ids = extract_request_ids(&event);
+        assert_eq!(request_ids.len(), 1);
     }
 }

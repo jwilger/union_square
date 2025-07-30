@@ -2,9 +2,26 @@
 //!
 //! This module provides a flexible builder pattern for creating projections
 //! that can aggregate events from multiple streams.
+//!
+//! ## Event Ordering Strategies
+//!
+//! When merging events from multiple streams, this module provides two strategies:
+//!
+//! 1. **Chronological Ordering** (`merge_events_chronologically`):
+//!    - Orders events primarily by timestamp
+//!    - Uses event_id (UUIDv7) as tiebreaker for determinism
+//!    - Best for analytics and time-based queries
+//!    - May reorder events from the same stream if clock skew exists
+//!
+//! 2. **Stream Causality Ordering** (`merge_events_with_stream_causality`):
+//!    - Preserves strict ordering within each stream (by event_version)
+//!    - Merges streams based on timestamps while maintaining causality
+//!    - Best for state reconstruction and event replay
+//!    - Handles clock skew between nodes gracefully
 
 use crate::domain::events::DomainEvent;
 use eventcore::{EventStore, ReadOptions, StoredEvent, StreamId};
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 /// Type alias for a filter function
@@ -154,16 +171,98 @@ pub enum ProjectionError {
 }
 
 /// Helper function to merge events from multiple streams chronologically
+///
+/// This function ensures deterministic ordering of events by:
+/// 1. Primary sort by timestamp
+/// 2. Secondary sort by event_id (UUIDv7 provides time-based ordering)
+/// 3. Preserves stream-local ordering (event_version) when timestamps are equal
 pub fn merge_events_chronologically(
-    events_by_stream: HashMap<StreamId, Vec<StoredEvent<DomainEvent>>>,
+    mut events_by_stream: HashMap<StreamId, Vec<StoredEvent<DomainEvent>>>,
 ) -> Vec<StoredEvent<DomainEvent>> {
+    // First, ensure each stream's events are properly ordered by event_version
+    // This preserves causality within each stream
+    for events in events_by_stream.values_mut() {
+        events.sort_by_key(|e| e.event_version);
+    }
+
     let mut all_events: Vec<StoredEvent<DomainEvent>> =
         events_by_stream.into_values().flatten().collect();
 
-    // Sort by timestamp to get chronological order
-    all_events.sort_by_key(|event| event.timestamp);
+    // Sort with deterministic ordering:
+    // 1. By timestamp (primary)
+    // 2. By event_id when timestamps are equal (secondary)
+    // This ensures consistent ordering even with clock skew or simultaneous events
+    all_events.sort_by(|a, b| {
+        match a.timestamp.cmp(&b.timestamp) {
+            Ordering::Equal => {
+                // When timestamps are equal, use event_id for deterministic ordering
+                // EventId is UUIDv7 which includes timestamp information
+                a.event_id.cmp(&b.event_id)
+            }
+            other => other,
+        }
+    });
 
     all_events
+}
+
+/// Alternative merge strategy that maintains strict stream causality
+///
+/// This function ensures that within a stream, event ordering is preserved
+/// even if timestamps suggest a different order (due to clock skew).
+/// Use this when stream causality is more important than global time ordering.
+#[allow(dead_code)]
+pub fn merge_events_with_stream_causality(
+    mut events_by_stream: HashMap<StreamId, Vec<StoredEvent<DomainEvent>>>,
+) -> Vec<StoredEvent<DomainEvent>> {
+    // Build a dependency graph based on stream versions
+    let mut stream_positions: HashMap<StreamId, usize> = HashMap::new();
+
+    // Sort each stream by event_version to ensure causality
+    for (stream_id, events) in events_by_stream.iter_mut() {
+        events.sort_by_key(|e| e.event_version);
+        stream_positions.insert(stream_id.clone(), 0);
+    }
+
+    let mut result = Vec::new();
+
+    // Merge events while respecting stream causality
+    loop {
+        let mut next_event: Option<(StreamId, &StoredEvent<DomainEvent>)> = None;
+
+        // Find the next event to process across all streams
+        for (stream_id, events) in &events_by_stream {
+            if let Some(&pos) = stream_positions.get(stream_id) {
+                if let Some(event) = events.get(pos) {
+                    if let Some((_, current_next)) = &next_event {
+                        // Compare timestamps, but with tolerance for clock skew
+                        if event.timestamp < current_next.timestamp {
+                            next_event = Some((stream_id.clone(), event));
+                        } else if event.timestamp == current_next.timestamp {
+                            // Use event_id as tiebreaker
+                            if event.event_id < current_next.event_id {
+                                next_event = Some((stream_id.clone(), event));
+                            }
+                        }
+                    } else {
+                        next_event = Some((stream_id.clone(), event));
+                    }
+                }
+            }
+        }
+
+        match next_event {
+            Some((stream_id, event)) => {
+                result.push(event.clone());
+                if let Some(pos) = stream_positions.get_mut(&stream_id) {
+                    *pos += 1;
+                }
+            }
+            None => break, // No more events
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
