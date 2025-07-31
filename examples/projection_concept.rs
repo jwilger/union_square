@@ -1,7 +1,17 @@
-//! Example demonstrating the projection concept
+//! Conceptual projection example
 //!
-//! This example shows how projections work conceptually without
-//! the full EventCore integration complexity.
+//! This example demonstrates the core concept of event-sourced projections
+//! in isolation, without EventCore's complexity. It serves as:
+//!
+//! 1. **Educational tool**: Shows the fundamental pattern of projections
+//! 2. **Design validation**: Proves the domain logic works before EventCore integration
+//! 3. **Testing reference**: Simple environment for testing projection logic
+//! 4. **Documentation**: Illustrates the "why" behind materialized views
+//!
+//! This complements (but doesn't replace) the full EventCore implementation
+//! in `src/infrastructure/eventcore/projections/`. While EventCore provides
+//! production features (persistence, error recovery, async processing),
+//! this example focuses purely on the projection pattern itself.
 
 use std::collections::HashMap;
 

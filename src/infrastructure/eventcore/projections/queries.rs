@@ -1,22 +1,29 @@
-//! Common query patterns for multi-stream projections
+//! Query service for EventCore projections
 //!
-//! TODO: This module needs to be refactored to use EventCore's built-in projection system
-//! instead of our custom ProjectionBuilder that was removed.
-//!
-//! The query functions below contain valuable domain logic for aggregating events
-//! across streams, but need to be reimplemented using EventCore's native APIs.
+//! This module provides a type-safe query interface for accessing materialized
+//! projection data. It works with EventCore's event store to maintain and
+//! query projections efficiently.
 
 use crate::domain::{
     events::DomainEvent,
     llm::ModelVersion,
-    session::{ApplicationId, SessionId},
+    session::{ApplicationId, SessionId, SessionStatus},
     user::UserId,
 };
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
+use thiserror::Error;
 
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+use super::session_summary::{ProjectionError, SessionSummary, SessionSummaryProjection};
+
+/// Errors that can occur during query operations
+#[derive(Error, Debug)]
+pub enum QueryError {
+    #[error("Projection error: {0}")]
+    Projection(#[from] ProjectionError),
+    #[error("Session not found: {0}")]
+    SessionNotFound(SessionId),
+    #[error("Invalid query parameter: {0}")]
+    InvalidParameter(String),
+}
 
 /// Summary of user activity across all sessions
 #[derive(Debug, Clone)]
@@ -24,7 +31,6 @@ pub struct UserActivitySummary {
     pub user_id: UserId,
     pub total_sessions: usize,
     pub total_requests: usize,
-    pub total_tokens_used: usize,
     pub active_sessions: Vec<SessionId>,
     pub recent_sessions: Vec<SessionId>,
 }
@@ -35,168 +41,142 @@ pub struct ApplicationMetrics {
     pub application_id: ApplicationId,
     pub total_sessions: usize,
     pub total_requests: usize,
-    pub total_tokens_used: usize,
     pub unique_users: usize,
-    pub average_session_duration: std::time::Duration,
 }
 
-/// Trait for accessing materialized projection data
-/// This allows us to abstract over different query service implementations
-pub trait ProjectionQueryProvider: Send + Sync {
-    /// Get all events for a session
-    fn get_session_events<'a>(
-        &'a self,
-        session_id: &'a SessionId,
-    ) -> BoxFuture<'a, Result<Vec<DomainEvent>, ServiceQueryError>>;
+/// Query service for materialized projections
+///
+/// This service provides type-safe access to projection data,
+/// handling the complexity of managing projection state and queries.
+pub struct ProjectionQueryService {
+    /// Session summary projection
+    session_projection: SessionSummaryProjection,
+}
+
+impl Default for ProjectionQueryService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ProjectionQueryService {
+    /// Create a new query service
+    pub fn new() -> Self {
+        Self {
+            session_projection: SessionSummaryProjection::new(),
+        }
+    }
+
+    /// Apply events to rebuild projections
+    pub fn apply_events(
+        &mut self,
+        events: Vec<eventcore::StoredEvent<DomainEvent>>,
+    ) -> Result<(), QueryError> {
+        self.session_projection.apply_events(events)?;
+        Ok(())
+    }
+
+    /// Get all sessions for a specific user
+    pub fn get_user_sessions(&self, user_id: &UserId) -> Vec<&SessionSummary> {
+        self.session_projection
+            .state()
+            .user_sessions(&user_id.to_string())
+    }
+
+    /// Get all sessions for a specific application
+    pub fn get_app_sessions(&self, app_id: &ApplicationId) -> Vec<&SessionSummary> {
+        self.session_projection
+            .state()
+            .app_sessions(app_id.as_ref())
+    }
+
+    /// Get all active sessions
+    pub fn get_active_sessions(&self) -> Vec<&SessionSummary> {
+        self.session_projection.state().active_sessions()
+    }
+
+    /// Get a specific session by ID
+    pub fn get_session(&self, session_id: &SessionId) -> Result<&SessionSummary, QueryError> {
+        self.session_projection
+            .state()
+            .get_session(session_id)
+            .ok_or_else(|| QueryError::SessionNotFound(session_id.clone()))
+    }
 
     /// Get user activity summary
-    fn get_user_activity<'a>(
-        &'a self,
-        user_id: &'a UserId,
-    ) -> BoxFuture<'a, Result<ServiceUserActivitySummary, ServiceQueryError>>;
+    pub fn get_user_activity(&self, user_id: &UserId) -> UserActivitySummary {
+        let sessions = self.get_user_sessions(user_id);
+
+        let active_sessions: Vec<SessionId> = sessions
+            .iter()
+            .filter(|s| matches!(s.status, SessionStatus::Active))
+            .map(|s| s.session_id.clone())
+            .collect();
+
+        let recent_sessions: Vec<SessionId> =
+            sessions.iter().map(|s| s.session_id.clone()).collect();
+
+        let total_requests: usize = sessions.iter().map(|s| s.request_count).sum();
+
+        UserActivitySummary {
+            user_id: user_id.clone(),
+            total_sessions: sessions.len(),
+            total_requests,
+            active_sessions,
+            recent_sessions,
+        }
+    }
 
     /// Get application metrics
-    fn get_application_metrics<'a>(
-        &'a self,
-        app_id: &'a ApplicationId,
-    ) -> BoxFuture<'a, Result<ServiceApplicationMetrics, ServiceQueryError>>;
-}
+    pub fn get_application_metrics(&self, app_id: &ApplicationId) -> ApplicationMetrics {
+        let sessions = self.get_app_sessions(app_id);
 
-/// Configuration for query functions to use either materialized projections or fallback to event sourcing
-#[allow(dead_code)]
-pub struct QueryConfiguration {
-    provider: Option<Arc<dyn ProjectionQueryProvider>>,
-}
+        let unique_users: std::collections::HashSet<String> =
+            sessions.iter().map(|s| s.user_id.clone()).collect();
 
-impl QueryConfiguration {
-    /// Create a new configuration with a projection provider
-    pub fn with_provider(provider: Arc<dyn ProjectionQueryProvider>) -> Self {
-        Self {
-            provider: Some(provider),
+        let total_requests: usize = sessions.iter().map(|s| s.request_count).sum();
+
+        ApplicationMetrics {
+            application_id: app_id.clone(),
+            total_sessions: sessions.len(),
+            total_requests,
+            unique_users: unique_users.len(),
         }
     }
 
-    /// Create a configuration that will always use event sourcing
-    pub fn event_sourcing_only() -> Self {
-        Self { provider: None }
-    }
-}
+    /// Get overall system statistics
+    pub fn get_system_stats(&self) -> SystemStats {
+        let state = self.session_projection.state();
 
-impl Default for QueryConfiguration {
-    fn default() -> Self {
-        Self::event_sourcing_only()
-    }
-}
+        let total_sessions = state.sessions.len();
+        let active_sessions = state.active_sessions().len();
+        let total_requests: usize = state.sessions.values().map(|s| s.request_count).sum();
 
-// Service-level types for decoupling
-pub type ServiceUserActivitySummary = UserActivitySummary;
-pub type ServiceApplicationMetrics = ApplicationMetrics;
+        let unique_users: std::collections::HashSet<String> =
+            state.sessions.values().map(|s| s.user_id.clone()).collect();
 
-#[derive(Debug, thiserror::Error)]
-pub enum ServiceQueryError {
-    #[error("Event store error: {0}")]
-    EventStore(String),
-    #[error("Projection not found")]
-    ProjectionNotFound,
-}
+        let unique_apps: std::collections::HashSet<String> =
+            state.sessions.values().map(|s| s.app_id.clone()).collect();
 
-// TODO: The functions below need to be reimplemented using EventCore's projection system
-// For now, they are commented out to allow compilation
-
-/*
-/// Get all events for a session as a projection
-pub async fn get_session_events<ES>(
-    event_store: &ES,
-    session_id: &SessionId,
-    config: &QueryConfiguration,
-) -> Result<Vec<DomainEvent>, Box<dyn std::error::Error + Send + Sync>>
-where
-    ES: EventStore<Event = DomainEvent>,
-{
-    // Check if we have a materialized projection available
-    if let Some(provider) = &config.provider {
-        match provider.get_session_events(session_id).await {
-            Ok(events) => return Ok(events),
-            Err(_) => {
-                // Fall back to event sourcing if projection fails
-            }
+        SystemStats {
+            total_sessions,
+            active_sessions,
+            total_requests,
+            unique_users: unique_users.len(),
+            unique_applications: unique_apps.len(),
         }
     }
-
-    // TODO: Reimplement using EventCore's native event reading
-    todo!("Reimplement using EventCore's projection system")
 }
 
-/// Get user activity across all their sessions
-pub async fn get_user_activity<ES>(
-    event_store: &ES,
-    user_id: &UserId,
-    config: &QueryConfiguration,
-) -> Result<UserActivitySummary, Box<dyn std::error::Error + Send + Sync>>
-where
-    ES: EventStore<Event = DomainEvent>,
-{
-    // Check if we have a materialized projection available
-    if let Some(provider) = &config.provider {
-        match provider.get_user_activity(user_id).await {
-            Ok(summary) => return Ok(summary),
-            Err(_) => {
-                // Fall back to event sourcing if projection fails
-            }
-        }
-    }
-
-    // TODO: Reimplement using EventCore's native projection system
-    todo!("Reimplement using EventCore's projection system")
+/// Overall system statistics
+#[derive(Debug, Clone)]
+pub struct SystemStats {
+    pub total_sessions: usize,
+    pub active_sessions: usize,
+    pub total_requests: usize,
+    pub unique_users: usize,
+    pub unique_applications: usize,
 }
-
-/// Get usage statistics for a specific model version
-pub async fn get_version_usage<ES>(
-    event_store: &ES,
-    model_version: &ModelVersion,
-) -> Result<VersionUsageStats, Box<dyn std::error::Error + Send + Sync>>
-where
-    ES: EventStore<Event = DomainEvent>,
-{
-    // TODO: Reimplement using EventCore's projection system
-    todo!("Reimplement using EventCore's projection system")
-}
-
-/// Get application-level metrics
-pub async fn get_application_metrics<ES>(
-    event_store: &ES,
-    application_id: &ApplicationId,
-    config: &QueryConfiguration,
-) -> Result<ApplicationMetrics, Box<dyn std::error::Error + Send + Sync>>
-where
-    ES: EventStore<Event = DomainEvent>,
-{
-    // Check if we have a materialized projection available
-    if let Some(provider) = &config.provider {
-        match provider.get_application_metrics(application_id).await {
-            Ok(metrics) => return Ok(metrics),
-            Err(_) => {
-                // Fall back to event sourcing if projection fails
-            }
-        }
-    }
-
-    // TODO: Reimplement using EventCore's projection system
-    todo!("Reimplement using EventCore's projection system")
-}
-
-/// Get all sessions that have used a specific model version
-pub async fn get_sessions_by_model_version<ES>(
-    event_store: &ES,
-    model_version: &ModelVersion,
-) -> Result<HashSet<SessionId>, Box<dyn std::error::Error + Send + Sync>>
-where
-    ES: EventStore<Event = DomainEvent>,
-{
-    // TODO: Reimplement using EventCore's projection system
-    todo!("Reimplement using EventCore's projection system")
-}
-*/
 
 /// Usage statistics for a model version
 #[derive(Debug, Clone)]
@@ -211,5 +191,38 @@ pub struct VersionUsageStats {
 
 #[cfg(test)]
 mod tests {
-    // TODO: Tests need to be rewritten once we implement EventCore's Projection trait
+    use super::*;
+    use crate::domain::{session::ApplicationId, user::UserId};
+
+    #[test]
+    fn test_query_service_creation() {
+        let service = ProjectionQueryService::new();
+        let stats = service.get_system_stats();
+
+        assert_eq!(stats.total_sessions, 0);
+        assert_eq!(stats.active_sessions, 0);
+        assert_eq!(stats.total_requests, 0);
+    }
+
+    #[test]
+    fn test_user_activity_summary_empty() {
+        let service = ProjectionQueryService::new();
+        let user_id = UserId::generate();
+
+        let activity = service.get_user_activity(&user_id);
+        assert_eq!(activity.user_id, user_id);
+        assert_eq!(activity.total_sessions, 0);
+        assert_eq!(activity.active_sessions.len(), 0);
+    }
+
+    #[test]
+    fn test_application_metrics_empty() {
+        let service = ProjectionQueryService::new();
+        let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
+
+        let metrics = service.get_application_metrics(&app_id);
+        assert_eq!(metrics.application_id, app_id);
+        assert_eq!(metrics.total_sessions, 0);
+        assert_eq!(metrics.unique_users, 0);
+    }
 }
