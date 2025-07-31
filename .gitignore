@@ -39,3 +39,8 @@ docs/adr/*
 
 # Work coordination files
 WORK.md
+
+# Expert review and documentation files (not part of repository)
+EXPERT_REVIEW.md
+EXPERT_REVIEW_REPORT.md
+EVENTCORE_EXAMPLES.md
