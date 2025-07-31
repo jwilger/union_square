@@ -17,6 +17,86 @@ use crate::infrastructure::eventcore::projections::{
 };
 use eventcore::EventStore;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
+/// Type alias for boxed futures to make trait object-safe
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Error type for query service operations
+#[derive(Debug, thiserror::Error)]
+pub enum ServiceQueryError {
+    #[error("Projection error: {0}")]
+    Projection(String),
+}
+
+/// User activity summary from projection service
+#[derive(Debug, Clone)]
+pub struct ServiceUserActivitySummary {
+    pub user_id: UserId,
+    pub total_sessions: usize,
+    pub total_requests: usize,
+    pub total_tokens: usize,
+    pub sessions_by_application: HashMap<ApplicationId, usize>,
+}
+
+/// Application metrics from projection service
+#[derive(Debug, Clone)]
+pub struct ServiceApplicationMetrics {
+    pub application_id: ApplicationId,
+    pub total_sessions: usize,
+    pub total_requests: usize,
+    pub unique_users: usize,
+    pub average_session_duration: std::time::Duration,
+}
+
+/// Trait for accessing materialized projection data
+/// This allows us to abstract over different query service implementations
+pub trait ProjectionQueryProvider: Send + Sync {
+    /// Get all events for a session
+    fn get_session_events<'a>(
+        &'a self,
+        session_id: &'a SessionId,
+    ) -> BoxFuture<'a, Result<Vec<DomainEvent>, ServiceQueryError>>;
+
+    /// Get user activity summary
+    fn get_user_activity<'a>(
+        &'a self,
+        user_id: &'a UserId,
+    ) -> BoxFuture<'a, Result<ServiceUserActivitySummary, ServiceQueryError>>;
+
+    /// Get application metrics
+    fn get_application_metrics<'a>(
+        &'a self,
+        app_id: &'a ApplicationId,
+    ) -> BoxFuture<'a, Result<ServiceApplicationMetrics, ServiceQueryError>>;
+}
+
+/// Configuration for query functions to use either materialized projections or fallback to event sourcing
+pub struct QueryConfiguration {
+    provider: Option<Arc<dyn ProjectionQueryProvider>>,
+}
+
+impl QueryConfiguration {
+    /// Create a new configuration with a projection provider
+    pub fn with_provider(provider: Arc<dyn ProjectionQueryProvider>) -> Self {
+        Self {
+            provider: Some(provider),
+        }
+    }
+
+    /// Create a configuration that will always use event sourcing
+    pub fn event_sourcing_only() -> Self {
+        Self { provider: None }
+    }
+}
+
+impl Default for QueryConfiguration {
+    fn default() -> Self {
+        Self::event_sourcing_only()
+    }
+}
 
 /// Get all events for a session, including related request events
 pub async fn get_session_events<ES: EventStore>(
@@ -27,17 +107,34 @@ where
     ES::Event: TryFrom<DomainEvent> + Clone,
     DomainEvent: for<'a> TryFrom<&'a ES::Event>,
 {
-    // Get the session stream
+    get_session_events_with_config(event_store, session_id, &QueryConfiguration::default()).await
+}
+
+/// Get all events for a session with custom configuration
+pub async fn get_session_events_with_config<ES: EventStore>(
+    event_store: &ES,
+    session_id: &SessionId,
+    config: &QueryConfiguration,
+) -> Result<Vec<DomainEvent>, QueryError>
+where
+    ES::Event: TryFrom<DomainEvent> + Clone,
+    DomainEvent: for<'a> TryFrom<&'a ES::Event>,
+{
+    // Try to use materialized projections first
+    if let Some(provider) = &config.provider {
+        return provider
+            .get_session_events(session_id)
+            .await
+            .map_err(|e| QueryError::Projection(e.to_string()));
+    }
+
+    // Fallback to building projection from events
     let session_stream_id = session_stream(session_id);
 
-    // Build projection to collect all events for this session
     let session_id_clone = session_id.clone();
     let projection = ProjectionBuilder::new(Vec::<DomainEvent>::new())
         .with_stream(session_stream_id)
-        .filter_events(move |event| {
-            // Include all events that belong to this session
-            extract_session_ids(event).contains(&session_id_clone)
-        })
+        .filter_events(move |event| extract_session_ids(event).contains(&session_id_clone))
         .project_with(|mut events, stored_event| {
             events.push(stored_event.payload.clone());
             events
@@ -58,28 +155,51 @@ where
     ES::Event: TryFrom<DomainEvent> + Clone,
     DomainEvent: for<'a> TryFrom<&'a ES::Event>,
 {
-    // First, find all sessions for this user
+    get_user_activity_with_config(event_store, user_id, &QueryConfiguration::default()).await
+}
+
+/// Get all activity for a user with custom configuration
+pub async fn get_user_activity_with_config<ES: EventStore>(
+    event_store: &ES,
+    user_id: &UserId,
+    config: &QueryConfiguration,
+) -> Result<UserActivitySummary, QueryError>
+where
+    ES::Event: TryFrom<DomainEvent> + Clone,
+    DomainEvent: for<'a> TryFrom<&'a ES::Event>,
+{
+    // Try to use materialized projections first
+    if let Some(provider) = &config.provider {
+        let service_summary = provider
+            .get_user_activity(user_id)
+            .await
+            .map_err(|e| QueryError::Projection(e.to_string()))?;
+
+        // Convert from service type to our type
+        return Ok(UserActivitySummary {
+            user_id: service_summary.user_id,
+            total_sessions: service_summary.total_sessions,
+            total_requests: service_summary.total_requests,
+            sessions_by_application: service_summary.sessions_by_application,
+            model_usage: HashMap::new(), // Note: service doesn't track model usage yet
+        });
+    }
+
+    // Fallback to building projection from events
     let session_ids = get_user_sessions(event_store, user_id).await?;
 
-    // Build streams to query
     let mut streams = Vec::new();
     for session_id in &session_ids {
         streams.push(session_stream(session_id));
     }
-
-    // Also include user settings stream
     streams.push(user_settings_stream(user_id));
 
-    // Build projection
     let model = UserActivityModel::new(user_id.clone());
     let user_id_clone = user_id.clone();
 
     let projection = ProjectionBuilder::new(model)
         .with_streams(streams)
-        .filter_events(move |event| {
-            // Include events for this user
-            extract_user_ids(event).contains(&user_id_clone)
-        })
+        .filter_events(move |event| extract_user_ids(event).contains(&user_id_clone))
         .project_with(|mut model, stored_event| {
             match &stored_event.payload {
                 DomainEvent::SessionStarted {
@@ -92,7 +212,6 @@ where
                 }
                 DomainEvent::LlmRequestReceived { .. } => {
                     // Note: We'd need to track which app this request belongs to
-                    // For now, we'll skip this
                 }
                 _ => {}
             }
@@ -104,7 +223,6 @@ where
         .await
         .map_err(|e| QueryError::Projection(e.to_string()))?;
 
-    // Convert to summary
     Ok(UserActivitySummary {
         user_id: activity_model.user_id,
         total_sessions: activity_model.total_sessions,
@@ -214,13 +332,45 @@ where
     ES::Event: TryFrom<DomainEvent> + Clone,
     DomainEvent: for<'a> TryFrom<&'a ES::Event>,
 {
+    get_application_metrics_with_config(event_store, application_id, &QueryConfiguration::default())
+        .await
+}
+
+/// Get aggregated metrics for an application with custom configuration
+pub async fn get_application_metrics_with_config<ES: EventStore>(
+    event_store: &ES,
+    application_id: &ApplicationId,
+    config: &QueryConfiguration,
+) -> Result<ApplicationMetrics, QueryError>
+where
+    ES::Event: TryFrom<DomainEvent> + Clone,
+    DomainEvent: for<'a> TryFrom<&'a ES::Event>,
+{
+    // Try to use materialized projections first
+    if let Some(provider) = &config.provider {
+        let service_metrics = provider
+            .get_application_metrics(application_id)
+            .await
+            .map_err(|e| QueryError::Projection(e.to_string()))?;
+
+        // Convert from service type to our type
+        return Ok(ApplicationMetrics {
+            application_id: service_metrics.application_id,
+            total_sessions: service_metrics.total_sessions,
+            total_requests: service_metrics.total_requests,
+            unique_users: service_metrics.unique_users,
+            model_versions_used: HashSet::new(), // Note: service doesn't track model versions yet
+            average_session_length: service_metrics.average_session_duration,
+        });
+    }
+
+    // Fallback to building projection from events
     let model = ApplicationMetricsModel::new(application_id.clone());
 
     let projection = ProjectionBuilder::new(model)
         .filter_events({
             let application_id_clone = application_id.clone();
             move |event| {
-                // Filter for events related to this application
                 matches!(event,
                     DomainEvent::SessionStarted { application_id: app_id, .. } if app_id == &application_id_clone
                 ) || matches!(event,
@@ -334,6 +484,92 @@ pub struct ApplicationMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Mock implementation for testing - wrap in a type that allows for testing
+    // the global provider without lifetime issues
+    use std::sync::RwLock;
+
+    struct MockProjectionProvider {
+        sessions: RwLock<HashMap<SessionId, Vec<DomainEvent>>>,
+        user_activities: RwLock<HashMap<UserId, ServiceUserActivitySummary>>,
+        app_metrics: RwLock<HashMap<ApplicationId, ServiceApplicationMetrics>>,
+    }
+
+    impl MockProjectionProvider {
+        fn new() -> Self {
+            Self {
+                sessions: RwLock::new(HashMap::new()),
+                user_activities: RwLock::new(HashMap::new()),
+                app_metrics: RwLock::new(HashMap::new()),
+            }
+        }
+
+        fn add_session_events(&self, session_id: SessionId, events: Vec<DomainEvent>) {
+            self.sessions.write().unwrap().insert(session_id, events);
+        }
+
+        fn add_user_activity(&self, user_id: UserId, activity: ServiceUserActivitySummary) {
+            self.user_activities
+                .write()
+                .unwrap()
+                .insert(user_id, activity);
+        }
+
+        #[allow(dead_code)]
+        fn add_app_metrics(&self, app_id: ApplicationId, metrics: ServiceApplicationMetrics) {
+            self.app_metrics.write().unwrap().insert(app_id, metrics);
+        }
+    }
+
+    impl ProjectionQueryProvider for MockProjectionProvider {
+        fn get_session_events<'a>(
+            &'a self,
+            session_id: &'a SessionId,
+        ) -> BoxFuture<'a, Result<Vec<DomainEvent>, ServiceQueryError>> {
+            let session_id = session_id.clone();
+            Box::pin(async move {
+                Ok(self
+                    .sessions
+                    .read()
+                    .unwrap()
+                    .get(&session_id)
+                    .cloned()
+                    .unwrap_or_default())
+            })
+        }
+
+        fn get_user_activity<'a>(
+            &'a self,
+            user_id: &'a UserId,
+        ) -> BoxFuture<'a, Result<ServiceUserActivitySummary, ServiceQueryError>> {
+            let user_id = user_id.clone();
+            Box::pin(async move {
+                self.user_activities
+                    .read()
+                    .unwrap()
+                    .get(&user_id)
+                    .cloned()
+                    .ok_or_else(|| ServiceQueryError::Projection("User not found".to_string()))
+            })
+        }
+
+        fn get_application_metrics<'a>(
+            &'a self,
+            app_id: &'a ApplicationId,
+        ) -> BoxFuture<'a, Result<ServiceApplicationMetrics, ServiceQueryError>> {
+            let app_id = app_id.clone();
+            Box::pin(async move {
+                self.app_metrics
+                    .read()
+                    .unwrap()
+                    .get(&app_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        ServiceQueryError::Projection("Application not found".to_string())
+                    })
+            })
+        }
+    }
     use crate::domain::{llm::LlmProvider, metrics::Timestamp, types::ModelId};
     #[allow(unused_imports)]
     use crate::domain::{
@@ -455,5 +691,69 @@ mod tests {
         // Since we haven't written events to the store, these should be 0
         assert_eq!(summary.total_sessions, 0);
         assert_eq!(summary.sessions_by_application.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_session_events_with_projection_provider() {
+        // Set up a mock projection provider
+        let mock = MockProjectionProvider::new();
+        let session_id = create_test_session_id();
+        let user_id = create_test_user_id();
+        let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
+
+        // Add test data to the mock
+        let events = vec![DomainEvent::SessionStarted {
+            session_id: session_id.clone(),
+            user_id: user_id.clone(),
+            application_id: app_id.clone(),
+            started_at: Timestamp::now(),
+        }];
+        mock.add_session_events(session_id.clone(), events.clone());
+
+        // Create config with the provider
+        let config = QueryConfiguration::with_provider(Arc::new(mock));
+
+        // Now query should use the provider
+        let event_store = InMemoryEventStore::new();
+        let result = get_session_events_with_config(&event_store, &session_id, &config).await;
+
+        assert!(result.is_ok());
+        let returned_events = result.unwrap();
+        assert_eq!(returned_events.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_activity_with_projection_provider() {
+        // Set up a mock projection provider
+        let mock = MockProjectionProvider::new();
+        let user_id = create_test_user_id();
+        let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
+
+        // Add test data to the mock
+        let mut sessions_by_app = HashMap::new();
+        sessions_by_app.insert(app_id.clone(), 2);
+
+        let activity = ServiceUserActivitySummary {
+            user_id: user_id.clone(),
+            total_sessions: 3,
+            total_requests: 10,
+            total_tokens: 5000,
+            sessions_by_application: sessions_by_app,
+        };
+        mock.add_user_activity(user_id.clone(), activity);
+
+        // Create config with the provider
+        let config = QueryConfiguration::with_provider(Arc::new(mock));
+
+        // Now query should use the provider
+        let event_store = InMemoryEventStore::new();
+        let result = get_user_activity_with_config(&event_store, &user_id, &config).await;
+
+        assert!(result.is_ok());
+        let summary = result.unwrap();
+        assert_eq!(summary.user_id, user_id);
+        assert_eq!(summary.total_sessions, 3);
+        assert_eq!(summary.total_requests, 10);
+        assert_eq!(summary.sessions_by_application.get(&app_id), Some(&2));
     }
 }
