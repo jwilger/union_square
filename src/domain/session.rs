@@ -5,13 +5,49 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a session
-#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
+#[nutype(derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef))]
 pub struct SessionId(Uuid);
 
 impl SessionId {
     pub fn generate() -> Self {
         // Uuid::now_v7() always generates a valid UUID
         Self::new(Uuid::now_v7())
+    }
+
+    /// Get a correlation ID for logging (one-way hash)
+    pub fn correlation_id(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(self.as_ref().as_bytes());
+        let result = hasher.finalize();
+        format!("sess_{}", hex::encode(&result[..8]))
+    }
+
+    /// Returns the session identifier value for use in system operations.
+    ///
+    /// This returns the actual UUID string, not the correlation ID shown in logs.
+    ///
+    /// # Security Note
+    /// Never log this value directly. Use Display/Debug for logging, which
+    /// shows only the correlation ID. This method exists for system operations
+    /// that require the actual identifier (stream construction, database keys, etc).
+    #[inline]
+    pub fn value(&self) -> String {
+        self.as_ref().to_string()
+    }
+}
+
+// Implement secure Debug that doesn't expose the full ID
+impl std::fmt::Debug for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SessionId({})", self.correlation_id())
+    }
+}
+
+// Implement secure Display that doesn't expose the full ID
+impl std::fmt::Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.correlation_id())
     }
 }
 
@@ -134,6 +170,25 @@ mod tests {
         let id1 = SessionId::generate();
         let id2 = SessionId::generate();
         assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_session_id_secure_logging() {
+        let id = SessionId::new(Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap());
+
+        // Debug formatting doesn't expose raw ID
+        let debug = format!("{id:?}");
+        assert!(!debug.contains("12345678"));
+        assert!(debug.contains("sess_"));
+        assert!(debug.starts_with("SessionId(sess_"));
+
+        // Display formatting is also safe
+        let display = format!("{id}");
+        assert!(!display.contains("12345678"));
+        assert!(display.starts_with("sess_"));
+
+        // Correlation ID is consistent
+        assert_eq!(id.correlation_id(), display);
     }
 
     #[test]

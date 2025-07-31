@@ -48,6 +48,8 @@ regex = "1.11.1"
 base64 = "0.22.1"
 rust_decimal = "1.37.2"
 currencies = { version = "0.4.1", features = ["serde"] }
+sha2 = "0.10.9"
+hex = "0.4.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -93,3 +95,7 @@ harness = false
 [[bench]]
 name = "memory_profiling"
 harness = false
+
+[[example]]
+name = "multi_stream_queries"
+path = "examples/multi_stream_queries.rs"
