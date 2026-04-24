@@ -3,11 +3,7 @@
 //! These commands map from the audit path events to EventCore commands,
 //! enabling persistence of all proxy operations to the event store.
 
-use async_trait::async_trait;
-use eventcore::{
-    emit, CommandLogic, CommandResult, ReadStreams, StoredEvent, StreamId, StreamResolver,
-    StreamWrite,
-};
+use eventcore::{CommandError, CommandLogic, NewEvents, StreamId};
 use eventcore_macros::Command;
 use serde::{Deserialize, Serialize};
 
@@ -241,6 +237,7 @@ impl RequestLifecycle {
                     request_id,
                     error_message,
                     failed_at,
+                    ..
                 },
             ) => Failed {
                 request_id: request_id.clone(),
@@ -254,6 +251,7 @@ impl RequestLifecycle {
                 DomainEvent::LlmRequestCancelled {
                     request_id,
                     cancelled_at,
+                    ..
                 },
             ) => Failed {
                 request_id: request_id.clone(),
@@ -435,11 +433,12 @@ mod transformers {
 
     /// Transform RequestReceived audit event to domain event
     pub fn request_received_to_domain(
+        session_stream: StreamId,
         request_id: RequestId,
         session_id: SessionId,
         timestamp: Timestamp,
         parsed_request: Option<&ParsedLlmRequest>,
-    ) -> Result<DomainEvent, eventcore::CommandError> {
+    ) -> Result<DomainEvent, CommandError> {
         let (model_version, prompt, parameters) = if let Some(parsed) = parsed_request {
             (
                 parsed.model_version.clone(),
@@ -451,6 +450,7 @@ mod transformers {
         };
 
         Ok(DomainEvent::LlmRequestReceived {
+            stream_id: session_stream,
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id,
             model_version,
@@ -461,8 +461,9 @@ mod transformers {
     }
 
     /// Transform RequestForwarded audit event to domain event
-    pub fn request_forwarded_to_domain(request_id: RequestId, timestamp: Timestamp) -> DomainEvent {
+    pub fn request_forwarded_to_domain(request_stream: StreamId, request_id: RequestId, timestamp: Timestamp) -> DomainEvent {
         DomainEvent::LlmRequestStarted {
+            stream_id: request_stream,
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             started_at: timestamp,
         }
@@ -470,16 +471,17 @@ mod transformers {
 
     /// Transform ResponseReceived audit event to domain event
     pub fn response_received_to_domain(
+        request_stream: StreamId,
         request_id: RequestId,
         timestamp: Timestamp,
-    ) -> Result<DomainEvent, eventcore::CommandError> {
+    ) -> Result<DomainEvent, CommandError> {
         // For now, we don't have the response body here
         // TODO: Implement response body parsing similar to request parsing
         let response_text = crate::domain::types::ResponseText::try_new(
             "Response body parsing not yet implemented".to_string(),
         )
         .map_err(|e| {
-            eventcore::CommandError::Internal(format!(
+            CommandError::ValidationError(format!(
                 "Failed to create response text placeholder: {e}"
             ))
         })?;
@@ -487,6 +489,7 @@ mod transformers {
         let metadata = crate::domain::llm::ResponseMetadata::default();
 
         Ok(DomainEvent::LlmResponseReceived {
+            stream_id: request_stream,
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             response_text,
             metadata,
@@ -510,7 +513,7 @@ mod transformers {
             crate::domain::types::Prompt,
             crate::domain::types::LlmParameters,
         ),
-        eventcore::CommandError,
+        CommandError,
     > {
         tracing::warn!(
             "No parsed LLM data available for request {}. Using defaults.",
@@ -522,14 +525,14 @@ mod transformers {
             "unknown".to_string(),
         )
         .map_err(|e| {
-            eventcore::CommandError::Internal(format!(
+            CommandError::ValidationError(format!(
                 "Failed to create fallback provider name: {e}"
             ))
         })?;
 
         let fallback_model_id = crate::domain::types::ModelId::try_new("unknown-model".to_string())
             .map_err(|e| {
-                eventcore::CommandError::Internal(format!(
+                CommandError::ValidationError(format!(
                     "Failed to create fallback model ID: {e}"
                 ))
             })?;
@@ -537,7 +540,7 @@ mod transformers {
         let fallback_prompt =
             crate::domain::types::Prompt::try_new("Request body not available".to_string())
                 .map_err(|e| {
-                    eventcore::CommandError::Internal(format!(
+                    CommandError::ValidationError(format!(
                         "Failed to create fallback prompt: {e}"
                     ))
                 })?;
@@ -553,21 +556,19 @@ mod transformers {
     }
 }
 
-#[async_trait]
 impl CommandLogic for RecordAuditEvent {
     type State = RequestState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        state.apply(&event.payload);
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        state.apply(event);
+        state
     }
 
-    async fn handle(
+    fn handle(
         &self,
-        _read_streams: ReadStreams<Self::StreamSet>,
         state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    ) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         use AuditEventType::*;
@@ -578,13 +579,14 @@ impl CommandLogic for RecordAuditEvent {
                 if !state.is_request_received() {
                     // Emit the request received event
                     let event = transformers::request_received_to_domain(
+                        self.session_stream.clone(),
                         self.request_id,
                         self.session_id.clone(),
                         self.timestamp,
                         self.parsed_request.as_ref().map(|p| &p.parsed),
                     )?;
 
-                    emit!(events, &_read_streams, self.session_stream.clone(), event);
+        events.push(event);
 
                     // If there was a parsing error, emit an error event
                     if let Some(_parsed_with_error) = &self.parsed_request {
@@ -601,11 +603,8 @@ impl CommandLogic for RecordAuditEvent {
                                     )
                                 });
 
-                            emit!(
-                                events,
-                                &_read_streams,
-                                self.request_stream.clone(),
-                                DomainEvent::LlmRequestParsingFailed {
+        events.push(DomainEvent::LlmRequestParsingFailed {
+                            stream_id: self.request_stream.clone(),
                                     request_id: crate::domain::llm::RequestId::new(
                                         *self.request_id.as_ref()
                                     ),
@@ -613,17 +612,13 @@ impl CommandLogic for RecordAuditEvent {
                                     parsing_error: error_message,
                                     raw_uri: raw_uri.clone(),
                                     occurred_at: self.timestamp,
-                                }
-                            );
+                                });
                         }
                     }
                 } else {
                     // Invalid state transition - request already received
-                    emit!(
-                        events,
-                        &_read_streams,
-                        self.request_stream.clone(),
-                        DomainEvent::InvalidStateTransition {
+        events.push(DomainEvent::InvalidStateTransition {
+                            stream_id: self.request_stream.clone(),
                             request_id: crate::domain::llm::RequestId::new(
                                 *self.request_id.as_ref()
                             ),
@@ -634,8 +629,7 @@ impl CommandLogic for RecordAuditEvent {
                                 error_messages::REQUEST_ALREADY_RECEIVED
                             ),
                             occurred_at: self.timestamp,
-                        }
-                    );
+                        });
                 }
             }
             RequestForwarded { start_time, .. } => {
@@ -643,11 +637,8 @@ impl CommandLogic for RecordAuditEvent {
                     // Check if we're in a valid state to forward
                     if !state.is_request_received() {
                         // Invalid transition - trying to forward before receiving
-                        emit!(
-                            events,
-                            &_read_streams,
-                            self.request_stream.clone(),
-                            DomainEvent::InvalidStateTransition {
+        events.push(DomainEvent::InvalidStateTransition {
+                            stream_id: self.request_stream.clone(),
                                 request_id: crate::domain::llm::RequestId::new(
                                     *self.request_id.as_ref()
                                 ),
@@ -658,27 +649,23 @@ impl CommandLogic for RecordAuditEvent {
                                     error_messages::CANNOT_FORWARD_UNRECEIVED
                                 ),
                                 occurred_at: self.timestamp,
-                            }
-                        );
+                            });
                     } else {
                         let timestamp = Timestamp::try_new(*start_time).map_err(|e| {
-                            eventcore::CommandError::Internal(format!(
+                            CommandError::ValidationError(format!(
                                 "Failed to convert start_time: {e}"
                             ))
                         })?;
 
                         let event =
-                            transformers::request_forwarded_to_domain(self.request_id, timestamp);
+                            transformers::request_forwarded_to_domain(self.request_stream.clone(), self.request_id, timestamp);
 
-                        emit!(events, &_read_streams, self.request_stream.clone(), event);
+        events.push(event);
                     }
                 } else {
                     // Invalid state transition - request already forwarded
-                    emit!(
-                        events,
-                        &_read_streams,
-                        self.request_stream.clone(),
-                        DomainEvent::InvalidStateTransition {
+        events.push(DomainEvent::InvalidStateTransition {
+                            stream_id: self.request_stream.clone(),
                             request_id: crate::domain::llm::RequestId::new(
                                 *self.request_id.as_ref()
                             ),
@@ -689,24 +676,20 @@ impl CommandLogic for RecordAuditEvent {
                                 error_messages::REQUEST_ALREADY_FORWARDED
                             ),
                             occurred_at: self.timestamp,
-                        }
-                    );
+                        });
                 }
             }
             ResponseReceived { .. } => {
                 // Only emit response if request has been forwarded and response not yet received
                 if state.is_request_forwarded() && !state.is_response_received() {
                     let event =
-                        transformers::response_received_to_domain(self.request_id, self.timestamp)?;
+                        transformers::response_received_to_domain(self.request_stream.clone(), self.request_id, self.timestamp)?;
 
-                    emit!(events, &_read_streams, self.request_stream.clone(), event);
+        events.push(event);
                 } else if !state.is_request_forwarded() {
                     // Invalid transition - response received before forwarding
-                    emit!(
-                        events,
-                        &_read_streams,
-                        self.request_stream.clone(),
-                        DomainEvent::InvalidStateTransition {
+        events.push(DomainEvent::InvalidStateTransition {
+                            stream_id: self.request_stream.clone(),
                             request_id: crate::domain::llm::RequestId::new(
                                 *self.request_id.as_ref()
                             ),
@@ -717,15 +700,11 @@ impl CommandLogic for RecordAuditEvent {
                                 error_messages::CANNOT_RECEIVE_RESPONSE_UNFORWARDED
                             ),
                             occurred_at: self.timestamp,
-                        }
-                    );
+                        });
                 } else {
                     // Response already received
-                    emit!(
-                        events,
-                        &_read_streams,
-                        self.request_stream.clone(),
-                        DomainEvent::InvalidStateTransition {
+        events.push(DomainEvent::InvalidStateTransition {
+                            stream_id: self.request_stream.clone(),
                             request_id: crate::domain::llm::RequestId::new(
                                 *self.request_id.as_ref()
                             ),
@@ -736,8 +715,7 @@ impl CommandLogic for RecordAuditEvent {
                                 error_messages::RESPONSE_ALREADY_RECEIVED
                             ),
                             occurred_at: self.timestamp,
-                        }
-                    );
+                        });
                 }
             }
             ResponseReturned { .. } => {
@@ -758,11 +736,8 @@ impl CommandLogic for RecordAuditEvent {
                     _ => "Unknown",
                 };
 
-                emit!(
-                    events,
-                    &_read_streams,
-                    self.request_stream.clone(),
-                    DomainEvent::AuditEventProcessingFailed {
+        events.push(DomainEvent::AuditEventProcessingFailed {
+                            stream_id: self.request_stream.clone(),
                         request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
                         session_id: self.session_id.clone(),
                         event_type: event_type_str.to_string(),
@@ -770,12 +745,11 @@ impl CommandLogic for RecordAuditEvent {
                             error_messages::AUDIT_EVENT_NOT_IMPLEMENTED
                         ),
                         occurred_at: self.timestamp,
-                    }
-                );
+                    });
             }
         }
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -797,26 +771,24 @@ pub struct ProcessRequestBody {
     pub timestamp: Timestamp,
 }
 
-#[async_trait]
 impl CommandLogic for ProcessRequestBody {
     type State = RequestState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        state.apply(&event.payload);
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        state.apply(event);
+        state
     }
 
-    async fn handle(
+    fn handle(
         &self,
-        _read_streams: ReadStreams<Self::StreamSet>,
         state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    ) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         // Check if we've already recorded this request
         if state.is_request_received() {
-            return Ok(events);
+            return Ok(events.into());
         }
 
         // Convert headers for parser
@@ -847,19 +819,15 @@ impl CommandLogic for ProcessRequestBody {
                 )
             });
 
-        emit!(
-            events,
-            &_read_streams,
-            self.session_stream.clone(),
-            DomainEvent::LlmRequestReceived {
+        events.push(DomainEvent::LlmRequestReceived {
+                            stream_id: self.session_stream.clone(),
                 request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
                 session_id: self.session_id.clone(),
                 model_version,
                 prompt,
                 parameters,
                 received_at: self.timestamp,
-            }
-        );
+            });
 
         // If there was a parsing error, emit an error event
         if let Some(error_msg) = parsing_error {
@@ -867,21 +835,17 @@ impl CommandLogic for ProcessRequestBody {
                 error_messages::static_error(error_messages::UNKNOWN_PARSING_ERROR)
             });
 
-            emit!(
-                events,
-                &_read_streams,
-                self.request_stream.clone(),
-                DomainEvent::LlmRequestParsingFailed {
+        events.push(DomainEvent::LlmRequestParsingFailed {
+                            stream_id: self.request_stream.clone(),
                     request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
                     session_id: self.session_id.clone(),
                     parsing_error: error_message,
                     raw_uri: self.uri.as_ref().to_string(),
                     occurred_at: self.timestamp,
-                }
-            );
+                });
         }
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -934,6 +898,7 @@ mod tests {
         BodySize, DurationMillis, HttpStatusCode, SessionId as ProxySessionId, TargetUrl,
     };
     use chrono::Utc;
+    use eventcore_types::EventStore;
 
     #[test]
     fn test_audit_event_to_unified_command() {
@@ -1137,6 +1102,7 @@ mod tests {
 
         // Transition to Received
         let event = DomainEvent::LlmRequestReceived {
+            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             session_id: session_id.clone(),
             model_version: crate::domain::llm::ModelVersion {
@@ -1160,6 +1126,7 @@ mod tests {
 
         // Transition to Forwarded
         let event = DomainEvent::LlmRequestStarted {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             started_at: timestamp,
         };
@@ -1175,6 +1142,7 @@ mod tests {
 
         // Transition to ResponseReceived
         let event = DomainEvent::LlmResponseReceived {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             response_text: crate::domain::types::ResponseText::try_new("response".to_string())
                 .expect("response is valid text in tests"),
@@ -1192,6 +1160,7 @@ mod tests {
 
         // Auto-transition to Completed (matching original behavior)
         state.apply(&DomainEvent::SessionTagged {
+            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
             session_id: session_id.clone(),
             tag: crate::domain::types::Tag::try_new("test".to_string())
                 .expect("test is a valid tag in tests"),
@@ -1214,6 +1183,7 @@ mod tests {
 
         // Set up initial state
         let event = DomainEvent::LlmRequestReceived {
+            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             session_id: session_id.clone(),
             model_version: crate::domain::llm::ModelVersion {
@@ -1233,6 +1203,7 @@ mod tests {
 
         // Transition to Failed from any state
         let event = DomainEvent::LlmRequestFailed {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             error_message: crate::domain::types::ErrorMessage::try_new("test error".to_string())
                 .expect("test error is a valid error message in tests"),
@@ -1245,6 +1216,7 @@ mod tests {
         // Test cancelled transition
         let mut state2 = RequestState::default();
         let event = DomainEvent::LlmRequestCancelled {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             cancelled_at: timestamp,
         };
@@ -1264,6 +1236,7 @@ mod tests {
 
         // Try to forward without receiving first - should stay in NotStarted
         let event = DomainEvent::LlmRequestStarted {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             started_at: timestamp,
         };
@@ -1273,6 +1246,7 @@ mod tests {
 
         // Try to receive response without forwarding - should stay in NotStarted
         let event = DomainEvent::LlmResponseReceived {
+            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
             request_id: request_id.clone(),
             response_text: crate::domain::types::ResponseText::try_new("response".to_string())
                 .expect("response is valid text in tests"),
@@ -1286,11 +1260,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_parsing_error_event_emission() {
-        use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+        use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store.clone());
+        let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -1316,32 +1289,31 @@ mod tests {
         .with_body(b"invalid json {"); // Invalid JSON
 
         // Execute the command
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let stream_data = event_store
-            .read_streams(&[request_stream], &ReadOptions::default())
+        let stream_data = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
-        let events = stream_data.events;
+        let events = stream_data;
 
         // Should have emitted a parsing error event
         let has_parsing_error = events
             .iter()
-            .any(|e| matches!(&e.payload, DomainEvent::LlmRequestParsingFailed { .. }));
+            .any(|e| matches!(e, DomainEvent::LlmRequestParsingFailed { .. }));
 
         assert!(has_parsing_error, "Should emit parsing error event");
     }
 
     #[tokio::test]
     async fn test_invalid_state_transition_events() {
-        use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+        use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store.clone());
+        let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
@@ -1368,19 +1340,19 @@ mod tests {
         };
 
         // Execute the command
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let stream_data = event_store
-            .read_streams(&[request_stream], &ReadOptions::default())
+        let stream_data = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
-        let events = stream_data.events;
+        let events = stream_data;
 
         // Should have emitted an invalid state transition event
         let has_invalid_transition = events.iter().any(|e| matches!(
-            &e.payload,
+            e,
             DomainEvent::InvalidStateTransition { event_type, .. } if event_type == "RequestForwarded"
         ));
 
@@ -1392,11 +1364,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate_request_received_event() {
-        use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+        use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store.clone());
+        let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let session_stream =
@@ -1420,27 +1391,23 @@ mod tests {
         };
 
         // Execute first time
-        let result = executor
-            .execute(command.clone(), ExecutionOptions::default())
-            .await;
+        let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Try to receive again (duplicate)
-        let result = executor
-            .execute(command.clone(), ExecutionOptions::default())
-            .await;
+        let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let stream_data = event_store
-            .read_streams(&[request_stream], &ReadOptions::default())
+        let stream_data = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
-        let events = stream_data.events;
+        let events = stream_data;
 
         // Should have emitted an invalid state transition event for the duplicate
         let has_duplicate_error = events.iter().any(|e| matches!(
-            &e.payload,
+            e,
             DomainEvent::InvalidStateTransition { reason, .. } if reason.as_ref().contains("already received")
         ));
 
@@ -1452,11 +1419,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_unhandled_audit_event_error() {
-        use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+        use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store.clone());
+        let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
@@ -1480,19 +1446,19 @@ mod tests {
         };
 
         // Execute the command
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let stream_data = event_store
-            .read_streams(&[request_stream], &ReadOptions::default())
+        let stream_data = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
-        let events = stream_data.events;
+        let events = stream_data;
 
         // Should have emitted an audit event processing failed event
         let has_processing_error = events.iter().any(|e| matches!(
-            &e.payload,
+            e,
             DomainEvent::AuditEventProcessingFailed { event_type, .. } if event_type == "RequestBody"
         ));
 
@@ -1504,11 +1470,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_request_body_with_parsing_error() {
-        use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+        use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store.clone());
+        let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
@@ -1531,20 +1496,20 @@ mod tests {
         };
 
         // Execute the command
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let stream_data = event_store
-            .read_streams(&[request_stream], &ReadOptions::default())
+        let stream_data = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
-        let events = stream_data.events;
+        let events = stream_data;
 
         // Should have emitted a parsing error event
         let has_parsing_error = events
             .iter()
-            .any(|e| matches!(&e.payload, DomainEvent::LlmRequestParsingFailed { .. }));
+            .any(|e| matches!(e, DomainEvent::LlmRequestParsingFailed { .. }));
 
         assert!(
             has_parsing_error,
