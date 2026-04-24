@@ -1,0 +1,265 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "build",
+  "instructions": [
+    "CLAUDE.md",
+    "docs/architecture/ARCHITECTURE.md",
+    ".opencode/rules/*.md"
+  ],
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "command": {
+    "test": {
+      "template": "Run the full test suite with `cargo nextest run --workspace` (fallback to `cargo test --workspace`). Analyze any failures, identify root causes, and suggest fixes. Do NOT modify code without explicit approval.",
+      "description": "Run tests and analyze failures",
+      "agent": "build"
+    },
+    "commit": {
+      "template": "Stage all changes, draft a Conventional Commit message, and prepare a commit. CRITICAL: DO NOT use `--no-verify` under any circumstances. Explain the 'why' in the message, not just the 'what'.",
+      "description": "Stage and prepare a commit"
+    },
+    "review": {
+      "template": "Review the current changes for type safety, event sourcing correctness, test coverage, and simplicity. Invoke relevant expert subagents as needed.",
+      "description": "Review changes with expert agents",
+      "agent": "plan",
+      "subtask": true
+    },
+    "adr": {
+      "template": "Draft a new Architecture Decision Record using `docs/adr/template.md`. Ensure the filename follows `NNNN-descriptive-name.md` and the title follows `# NNNN. Title`.",
+      "description": "Draft a new ADR"
+    }
+  },
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "description": "Default development agent with full tool access",
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "*": "ask",
+          "cargo fmt": "allow",
+          "cargo clippy*": "allow",
+          "cargo test*": "allow",
+          "cargo nextest*": "allow",
+          "cargo check*": "allow",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git branch*": "allow"
+        },
+        "task": {
+          "*": "allow"
+        }
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "description": "Analysis and planning without making changes",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git branch*": "allow",
+          "cargo check*": "allow"
+        },
+        "task": {
+          "*": "allow"
+        }
+      }
+    },
+    "type-theory-reviewer": {
+      "mode": "subagent",
+      "description": "Review Rust code for maximum type system utilization and making illegal states unrepresentable",
+      "prompt": "{file:./.opencode/agents/type-theory-reviewer.md}",
+      "color": "#9b59b6",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "event-sourcing-architect": {
+      "mode": "subagent",
+      "description": "Validate event sourcing patterns, CQRS, and distributed systems design",
+      "prompt": "{file:./.opencode/agents/event-sourcing-architect.md}",
+      "color": "#e74c3c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "event-modeling-expert": {
+      "mode": "subagent",
+      "description": "Event storming, domain discovery, and bounded context design",
+      "prompt": "{file:./.opencode/agents/event-modeling-expert.md}",
+      "color": "#f39c12",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "type-driven-development-expert": {
+      "mode": "subagent",
+      "description": "Type-driven development, dependent types, and formal verification guidance",
+      "prompt": "{file:./.opencode/agents/type-driven-development-expert.md}",
+      "color": "#1abc9c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "rust-type-system-expert": {
+      "mode": "subagent",
+      "description": "Rust type system, ownership, lifetimes, and trait design",
+      "prompt": "{file:./.opencode/agents/rust-type-system-expert.md}",
+      "color": "#3498db",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "event-sourcing-test-architect": {
+      "mode": "subagent",
+      "description": "Testing event-sourced systems and characterization tests",
+      "prompt": "{file:./.opencode/agents/event-sourcing-test-architect.md}",
+      "color": "#2ecc71",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "tdd-coach": {
+      "mode": "subagent",
+      "description": "Test-driven development, red-green-refactor cycle coaching",
+      "prompt": "{file:./.opencode/agents/tdd-coach.md}",
+      "color": "#e67e22",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "functional-architecture-expert": {
+      "mode": "subagent",
+      "description": "Functional design, simplicity, and immutability",
+      "prompt": "{file:./.opencode/agents/functional-architecture-expert.md}",
+      "color": "#16a085",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "engineering-effectiveness-expert": {
+      "mode": "subagent",
+      "description": "DORA metrics and development workflow optimization",
+      "prompt": "{file:./.opencode/agents/engineering-effectiveness-expert.md}",
+      "color": "#8e44ad",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "product-discovery-coach": {
+      "mode": "subagent",
+      "description": "Continuous discovery and outcome-driven development",
+      "prompt": "{file:./.opencode/agents/product-discovery-coach.md}",
+      "color": "#d35400",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "ux-research-expert": {
+      "mode": "subagent",
+      "description": "User research, API design, and developer experience",
+      "prompt": "{file:./.opencode/agents/ux-research-expert.md}",
+      "color": "#c0392b",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "continuous-delivery-architect": {
+      "mode": "subagent",
+      "description": "CI/CD, deployment strategies, and zero-downtime deployments",
+      "prompt": "{file:./.opencode/agents/continuous-delivery-architect.md}",
+      "color": "#2980b9",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "async-rust-expert": {
+      "mode": "subagent",
+      "description": "Async Rust, concurrent systems, and performance optimization",
+      "prompt": "{file:./.opencode/agents/async-rust-expert.md}",
+      "color": "#27ae60",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "refactoring-patterns-architect": {
+      "mode": "subagent",
+      "description": "Refactoring, design patterns, and evolutionary architecture",
+      "prompt": "{file:./.opencode/agents/refactoring-patterns-architect.md}",
+      "color": "#2c3e50",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "git-workflow-architect": {
+      "mode": "subagent",
+      "description": "Git workflows, GitHub automation, and version control strategies",
+      "prompt": "{file:./.opencode/agents/git-workflow-architect.md}",
+      "color": "#7f8c8d",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "security-reviewer": {
+      "mode": "subagent",
+      "description": "Security audits and vulnerability identification",
+      "prompt": "{file:./.opencode/agents/security-reviewer.md}",
+      "color": "#e74c3c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "design-reviewer": {
+      "mode": "subagent",
+      "description": "Code design, maintainability, coupling and cohesion review",
+      "prompt": "{file:./.opencode/agents/design-reviewer.md}",
+      "color": "#34495e",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "pr-feedback-processor": {
+      "mode": "subagent",
+      "description": "Process and respond to PR review comments",
+      "prompt": "{file:./.opencode/agents/pr-feedback-processor.md}",
+      "color": "#95a5a6",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    }
+  },
+  "plugin": [
+    "@franlol/opencode-md-table-formatter@latest"
+  ],
+  "permission": {
+    "edit": {
+      "*.env*": "deny",
+      "*credentials*": "deny",
+      "*secrets*": "deny"
+    }
+  }
+}

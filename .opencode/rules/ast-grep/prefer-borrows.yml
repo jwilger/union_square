@@ -1,0 +1,16 @@
+id: prefer-borrows
+language: rust
+severity: warning
+message: "Prefer borrowing (&T or &mut T) over taking ownership (T) for function parameters."
+rule:
+  pattern: |
+    fn $NAME($PARAM: $TYPE) $RET {
+      $BODY
+    }
+constraints:
+  PARAM:
+    not:
+      regex: "^&"
+  TYPE:
+    not:
+      regex: "^impl\\s|^dyn\\s|^Box<|^Arc<|^Rc<|^Vec<|^String$"

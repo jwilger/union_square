@@ -4,6 +4,11 @@
 //! designed for Union Square's dual-path architecture. It maintains strict safety invariants
 //! through atomic state coordination while providing <1μs write latency.
 
+// SAFETY: This module uses unsafe code for a performance-critical lock-free data structure.
+// All unsafe operations are bounded by documented safety invariants enforced through atomic
+// state coordination. This is the only module in the codebase where unsafe is permitted.
+#![allow(unsafe_code)]
+
 use crate::proxy::types::*;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
