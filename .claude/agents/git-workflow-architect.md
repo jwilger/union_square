@@ -245,14 +245,13 @@ After creating or updating a PR:
 
 ## GitHub Issues Workflow
 
-**ALL development work is tracked through GitHub Issues**.
+**ALL development work is tracked through GitHub Issues**. Both MCP tools and `gh` CLI are acceptable.
 
 ### Starting Work on an Issue
 
 1. **List open issues** to see available work:
-   ```
-   mcp__github__list_issues with state="open"
-   ```
+   - MCP: `mcp__github__list_issues` with `state="open"`
+   - gh: `gh issue list --state open`
 
    **🚨 CRITICAL**: GitHub API paginates results!
    - Start with a reasonable page size (e.g., `perPage=5`)
@@ -357,9 +356,10 @@ repos:
 1. **NEVER use the `--no-verify` flag when committing code**
 2. **ALWAYS follow conventional commits format**
 3. **ALWAYS create feature branches for changes**
-4. **ALWAYS use GitHub MCP tools instead of gh CLI**
-5. **ALWAYS paginate through all GitHub API results**
-6. **ALWAYS sign automated responses with `-- @claude`**
+4. **ALWAYS merge `main` into feature branches — never rebase**
+5. **Use GitHub MCP tools or `gh` CLI — both are acceptable**
+6. **ALWAYS paginate through all GitHub API results**
+7. **ALWAYS sign automated responses with `-- @claude`**
 
 ## Inter-Agent Communication
 

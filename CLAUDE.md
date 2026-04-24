@@ -32,14 +32,14 @@ Union Square is a proxy/wire-tap service for making LLM calls and recording ever
 
 ### Workflow Steps
 
-1. **Review GitHub Issues** - Use `mcp__github__list_issues` to find available work
+1. **Review GitHub Issues** - Use GitHub MCP tools (`mcp__github__list_issues`) or `gh issue list`
 2. **Get assigned to an issue** - User selects which issue to work on
-3. **Create feature branch** - Use `mcp__github__create_branch` with pattern: `issue-{number}-descriptive-name`
+3. **Create feature branch** - Use GitHub MCP tools (`mcp__github__create_branch`) or `gh`, with pattern: `issue-{number}-descriptive-name`
 4. **IMMEDIATELY create todo list** with this exact structure:
    - START with writing tests BEFORE implementation (ensure tests fail as expected)
    - Implementation/fix tasks (the actual work)
    - "Make a commit" (pre-commit hooks run all checks automatically)
-   - "Push changes and update PR with GitHub MCP tools"
+   - "Push changes and update PR"
 
 ### Todo List Structure (CRITICAL)
 
@@ -185,22 +185,24 @@ Hooks run automatically on commit via lefthook:
 
 ## GitHub Issues Workflow
 
-**ALL work is tracked through GitHub Issues using MCP tools (NOT gh CLI).**
+**ALL work is tracked through GitHub Issues.** Both MCP tools and `gh` CLI are acceptable.
 
 ### Starting Work
 
-1. **List issues**: `mcp__github__list_issues` with `state="open"`
+1. **List issues**: Use MCP (`mcp__github__list_issues`) or `gh issue list --state open`
    - **🚨 CRITICAL**: API paginates! Check ALL pages with `perPage=5` until empty results.
 2. **Priority order**: Assigned to you > CRITICAL > HIGH > MEDIUM > LOW
-3. **Get assigned**: User selects issue, use `mcp__github__update_issue` to assign
-4. **Create branch**: `mcp__github__create_branch` with pattern: `issue-{number}-descriptive-name`
+3. **Get assigned**: User selects issue; use MCP (`mcp__github__update_issue`) or `gh issue edit {number} --add-assignee @me`
+4. **Create branch**: Use MCP (`mcp__github__create_branch`) or `gh issue develop {number} --checkout`, with pattern: `issue-{number}-descriptive-name`
 5. **Local checkout**: `git fetch origin && git checkout issue-{number}-descriptive-name`
 
-### Key MCP Tools
+### GitHub Tooling
 
-**Issues**: `list_issues`, `update_issue`, `add_issue_comment`
-**Branches/PRs**: `create_branch`, `create_pull_request`, `update_pull_request`
-**Workflows**: `list_workflow_runs`, `get_job_logs`, `rerun_failed_jobs`
+Both MCP tools and `gh` CLI are acceptable. Use whichever is more convenient.
+
+**MCP**: `list_issues`, `update_issue`, `add_issue_comment`, `create_branch`, `create_pull_request`, `update_pull_request`, `list_workflow_runs`, `get_job_logs`, `rerun_failed_jobs`
+
+**gh CLI**: `gh issue`, `gh pr`, `gh run`, `gh release`, etc.
 
 ## Pull Request Workflow
 
@@ -209,12 +211,12 @@ Hooks run automatically on commit via lefthook:
 ### Creating PRs
 
 1. **Push branch**: `git push -u origin branch-name`
-2. **Create PR**: Use `mcp__github__create_pull_request`
+2. **Create PR**: Use MCP (`mcp__github__create_pull_request`) or `gh pr create`
    - **Title**: Follow Conventional Commits format (`feat: add feature`)
    - **Description**: Clear explanation of changes and motivation
    - **Labels**: `bug`, `enhancement`, `documentation`, `breaking-change`, etc.
    - Mention "Closes #{issue-number}" to auto-close issues
-3. **CI runs automatically** - Monitor with MCP tools
+3. **CI runs automatically** - Monitor with MCP tools or `gh pr checks` / `gh run view`
 
 ### Responding to Reviews
 
