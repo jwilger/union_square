@@ -1,5 +1,5 @@
 {
-  description = "EventModelRenderer development environment";
+  description = "Union Square development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

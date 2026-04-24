@@ -130,6 +130,7 @@ impl Default for MaxConnections {
 
 /// Log level configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Trace,
     Debug,
@@ -174,6 +175,7 @@ impl std::str::FromStr for LogLevel {
 
 /// Log format configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     #[default]
     Json,
