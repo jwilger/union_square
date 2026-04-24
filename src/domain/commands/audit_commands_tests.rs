@@ -138,7 +138,9 @@ mod concurrent_processing {
             .into_iter()
             .map(|cmd| {
                 let store = Arc::clone(&store);
-                tokio::spawn(async move { eventcore::execute(&*store, cmd, RetryPolicy::default()).await })
+                tokio::spawn(async move {
+                    eventcore::execute(&*store, cmd, RetryPolicy::default()).await
+                })
             })
             .collect();
 
@@ -154,7 +156,8 @@ mod concurrent_processing {
         // Verify events are in correct order
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -249,7 +252,8 @@ mod malformed_events {
         // Verify event was created with fallback values
         let session_stream =
             StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -348,7 +352,8 @@ mod event_ordering {
         assert_eq!(session_events.len(), 1); // Only RequestReceived goes to session stream
 
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let request_events = store.read_stream::<DomainEvent>(request_stream)
+        let request_events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
@@ -383,7 +388,8 @@ mod event_ordering {
         // Read each stream individually and verify events
         let mut total_events = 0;
         for stream_id in &stream_ids {
-            let events = store.read_stream::<DomainEvent>(stream_id.clone())
+            let events = store
+                .read_stream::<DomainEvent>(stream_id.clone())
                 .await
                 .unwrap();
             total_events += events.len();
@@ -405,15 +411,18 @@ mod idempotency {
 
         // Execute same command twice
         let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-        eventcore::execute(&store, command.clone(), RetryPolicy::default()).await
+        eventcore::execute(&store, command.clone(), RetryPolicy::default())
+            .await
             .unwrap();
-        eventcore::execute(&store, command, RetryPolicy::default()).await
+        eventcore::execute(&store, command, RetryPolicy::default())
+            .await
             .unwrap();
 
         // Should only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -452,7 +461,8 @@ mod idempotency {
 
         // Should only have one forwarded event
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let events = store.read_stream::<DomainEvent>(request_stream)
+        let events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
@@ -488,7 +498,8 @@ mod idempotency {
         // Should still only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -697,7 +708,8 @@ mod recovery_scenarios {
 
         // Verify no response event was recorded
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let events = store.read_stream::<DomainEvent>(request_stream)
+        let events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
@@ -745,7 +757,8 @@ mod recovery_scenarios {
         // Only the last one (request received) should have been recorded
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let session_events = store.read_stream::<DomainEvent>(session_stream)
+        let session_events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -790,7 +803,8 @@ mod process_request_body_tests {
         // Verify parsed content
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -838,7 +852,8 @@ mod process_request_body_tests {
         // Verify parsed content
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -881,15 +896,18 @@ mod process_request_body_tests {
         };
 
         // Execute twice
-        eventcore::execute(&store, command.clone(), RetryPolicy::default()).await
+        eventcore::execute(&store, command.clone(), RetryPolicy::default())
+            .await
             .unwrap();
-        eventcore::execute(&store, command, RetryPolicy::default()).await
+        eventcore::execute(&store, command, RetryPolicy::default())
+            .await
             .unwrap();
 
         // Should only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
@@ -1036,7 +1054,8 @@ mod headers_tests {
         // Verify event was created (headers should be processed, not stored directly)
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = store.read_stream::<DomainEvent>(session_stream)
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
         assert_eq!(events.len(), 1);

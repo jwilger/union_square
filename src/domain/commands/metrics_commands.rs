@@ -243,10 +243,7 @@ impl CommandLogic for RecordModelFScore {
         state
     }
 
-    fn handle(
-        &self,
-        _state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         let f_score = self.calculate_f_score();
@@ -323,10 +320,7 @@ impl CommandLogic for RecordApplicationFScore {
         state
     }
 
-    fn handle(
-        &self,
-        _state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         let f_score = self.calculate_f_score();

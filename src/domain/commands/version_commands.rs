@@ -84,10 +84,7 @@ impl CommandLogic for RecordVersionUsage {
         state
     }
 
-    fn handle(
-        &self,
-        state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         // Check if this is the first time we've seen this version
@@ -161,10 +158,7 @@ impl CommandLogic for RecordVersionChange {
         state
     }
 
-    fn handle(
-        &self,
-        _state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
         let change_type = self.from_version.compare(&self.to_version);
         let change_id = VersionChangeId::generate();
@@ -228,10 +222,7 @@ impl CommandLogic for DeactivateVersion {
         state
     }
 
-    fn handle(
-        &self,
-        state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         // Check if version exists and is active
         let version_exists = state
             .tracked_versions
@@ -240,12 +231,12 @@ impl CommandLogic for DeactivateVersion {
             .unwrap_or(false);
 
         if !version_exists {
-            return Err(CommandError::BusinessRuleViolation(
-                Box::new(std::io::Error::new(
+            return Err(CommandError::BusinessRuleViolation(Box::new(
+                std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Version not found or already deactivated",
-                )),
-            ));
+                ),
+            )));
         }
 
         let events = vec![DomainEvent::VersionDeactivated {
@@ -405,7 +396,8 @@ mod tests {
             model_version.clone(),
             Some(ChangeReason::try_new("Model deprecated".to_string()).unwrap()),
         );
-        let result = eventcore::execute(&store, deactivate_command.clone(), RetryPolicy::default()).await;
+        let result =
+            eventcore::execute(&store, deactivate_command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         let events = store

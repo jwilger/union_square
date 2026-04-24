@@ -461,7 +461,11 @@ mod transformers {
     }
 
     /// Transform RequestForwarded audit event to domain event
-    pub fn request_forwarded_to_domain(request_stream: StreamId, request_id: RequestId, timestamp: Timestamp) -> DomainEvent {
+    pub fn request_forwarded_to_domain(
+        request_stream: StreamId,
+        request_id: RequestId,
+        timestamp: Timestamp,
+    ) -> DomainEvent {
         DomainEvent::LlmRequestStarted {
             stream_id: request_stream,
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
@@ -525,24 +529,18 @@ mod transformers {
             "unknown".to_string(),
         )
         .map_err(|e| {
-            CommandError::ValidationError(format!(
-                "Failed to create fallback provider name: {e}"
-            ))
+            CommandError::ValidationError(format!("Failed to create fallback provider name: {e}"))
         })?;
 
         let fallback_model_id = crate::domain::types::ModelId::try_new("unknown-model".to_string())
             .map_err(|e| {
-                CommandError::ValidationError(format!(
-                    "Failed to create fallback model ID: {e}"
-                ))
+                CommandError::ValidationError(format!("Failed to create fallback model ID: {e}"))
             })?;
 
         let fallback_prompt =
             crate::domain::types::Prompt::try_new("Request body not available".to_string())
                 .map_err(|e| {
-                    CommandError::ValidationError(format!(
-                        "Failed to create fallback prompt: {e}"
-                    ))
+                    CommandError::ValidationError(format!("Failed to create fallback prompt: {e}"))
                 })?;
 
         Ok((
@@ -565,10 +563,7 @@ impl CommandLogic for RecordAuditEvent {
         state
     }
 
-    fn handle(
-        &self,
-        state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         use AuditEventType::*;
@@ -586,7 +581,7 @@ impl CommandLogic for RecordAuditEvent {
                         self.parsed_request.as_ref().map(|p| &p.parsed),
                     )?;
 
-        events.push(event);
+                    events.push(event);
 
                     // If there was a parsing error, emit an error event
                     if let Some(_parsed_with_error) = &self.parsed_request {
@@ -603,33 +598,31 @@ impl CommandLogic for RecordAuditEvent {
                                     )
                                 });
 
-        events.push(DomainEvent::LlmRequestParsingFailed {
-                            stream_id: self.request_stream.clone(),
-                                    request_id: crate::domain::llm::RequestId::new(
-                                        *self.request_id.as_ref()
-                                    ),
-                                    session_id: self.session_id.clone(),
-                                    parsing_error: error_message,
-                                    raw_uri: raw_uri.clone(),
-                                    occurred_at: self.timestamp,
-                                });
+                            events.push(DomainEvent::LlmRequestParsingFailed {
+                                stream_id: self.request_stream.clone(),
+                                request_id: crate::domain::llm::RequestId::new(
+                                    *self.request_id.as_ref(),
+                                ),
+                                session_id: self.session_id.clone(),
+                                parsing_error: error_message,
+                                raw_uri: raw_uri.clone(),
+                                occurred_at: self.timestamp,
+                            });
                         }
                     }
                 } else {
                     // Invalid state transition - request already received
-        events.push(DomainEvent::InvalidStateTransition {
-                            stream_id: self.request_stream.clone(),
-                            request_id: crate::domain::llm::RequestId::new(
-                                *self.request_id.as_ref()
-                            ),
-                            session_id: self.session_id.clone(),
-                            from_state: state.to_string(),
-                            event_type: "RequestReceived".to_string(),
-                            reason: error_messages::static_error(
-                                error_messages::REQUEST_ALREADY_RECEIVED
-                            ),
-                            occurred_at: self.timestamp,
-                        });
+                    events.push(DomainEvent::InvalidStateTransition {
+                        stream_id: self.request_stream.clone(),
+                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        session_id: self.session_id.clone(),
+                        from_state: state.to_string(),
+                        event_type: "RequestReceived".to_string(),
+                        reason: error_messages::static_error(
+                            error_messages::REQUEST_ALREADY_RECEIVED,
+                        ),
+                        occurred_at: self.timestamp,
+                    });
                 }
             }
             RequestForwarded { start_time, .. } => {
@@ -637,19 +630,19 @@ impl CommandLogic for RecordAuditEvent {
                     // Check if we're in a valid state to forward
                     if !state.is_request_received() {
                         // Invalid transition - trying to forward before receiving
-        events.push(DomainEvent::InvalidStateTransition {
+                        events.push(DomainEvent::InvalidStateTransition {
                             stream_id: self.request_stream.clone(),
-                                request_id: crate::domain::llm::RequestId::new(
-                                    *self.request_id.as_ref()
-                                ),
-                                session_id: self.session_id.clone(),
-                                from_state: state.to_string(),
-                                event_type: "RequestForwarded".to_string(),
-                                reason: error_messages::static_error(
-                                    error_messages::CANNOT_FORWARD_UNRECEIVED
-                                ),
-                                occurred_at: self.timestamp,
-                            });
+                            request_id: crate::domain::llm::RequestId::new(
+                                *self.request_id.as_ref(),
+                            ),
+                            session_id: self.session_id.clone(),
+                            from_state: state.to_string(),
+                            event_type: "RequestForwarded".to_string(),
+                            reason: error_messages::static_error(
+                                error_messages::CANNOT_FORWARD_UNRECEIVED,
+                            ),
+                            occurred_at: self.timestamp,
+                        });
                     } else {
                         let timestamp = Timestamp::try_new(*start_time).map_err(|e| {
                             CommandError::ValidationError(format!(
@@ -657,65 +650,65 @@ impl CommandLogic for RecordAuditEvent {
                             ))
                         })?;
 
-                        let event =
-                            transformers::request_forwarded_to_domain(self.request_stream.clone(), self.request_id, timestamp);
+                        let event = transformers::request_forwarded_to_domain(
+                            self.request_stream.clone(),
+                            self.request_id,
+                            timestamp,
+                        );
 
-        events.push(event);
+                        events.push(event);
                     }
                 } else {
                     // Invalid state transition - request already forwarded
-        events.push(DomainEvent::InvalidStateTransition {
-                            stream_id: self.request_stream.clone(),
-                            request_id: crate::domain::llm::RequestId::new(
-                                *self.request_id.as_ref()
-                            ),
-                            session_id: self.session_id.clone(),
-                            from_state: state.to_string(),
-                            event_type: "RequestForwarded".to_string(),
-                            reason: error_messages::static_error(
-                                error_messages::REQUEST_ALREADY_FORWARDED
-                            ),
-                            occurred_at: self.timestamp,
-                        });
+                    events.push(DomainEvent::InvalidStateTransition {
+                        stream_id: self.request_stream.clone(),
+                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        session_id: self.session_id.clone(),
+                        from_state: state.to_string(),
+                        event_type: "RequestForwarded".to_string(),
+                        reason: error_messages::static_error(
+                            error_messages::REQUEST_ALREADY_FORWARDED,
+                        ),
+                        occurred_at: self.timestamp,
+                    });
                 }
             }
             ResponseReceived { .. } => {
                 // Only emit response if request has been forwarded and response not yet received
                 if state.is_request_forwarded() && !state.is_response_received() {
-                    let event =
-                        transformers::response_received_to_domain(self.request_stream.clone(), self.request_id, self.timestamp)?;
+                    let event = transformers::response_received_to_domain(
+                        self.request_stream.clone(),
+                        self.request_id,
+                        self.timestamp,
+                    )?;
 
-        events.push(event);
+                    events.push(event);
                 } else if !state.is_request_forwarded() {
                     // Invalid transition - response received before forwarding
-        events.push(DomainEvent::InvalidStateTransition {
-                            stream_id: self.request_stream.clone(),
-                            request_id: crate::domain::llm::RequestId::new(
-                                *self.request_id.as_ref()
-                            ),
-                            session_id: self.session_id.clone(),
-                            from_state: state.to_string(),
-                            event_type: "ResponseReceived".to_string(),
-                            reason: error_messages::static_error(
-                                error_messages::CANNOT_RECEIVE_RESPONSE_UNFORWARDED
-                            ),
-                            occurred_at: self.timestamp,
-                        });
+                    events.push(DomainEvent::InvalidStateTransition {
+                        stream_id: self.request_stream.clone(),
+                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        session_id: self.session_id.clone(),
+                        from_state: state.to_string(),
+                        event_type: "ResponseReceived".to_string(),
+                        reason: error_messages::static_error(
+                            error_messages::CANNOT_RECEIVE_RESPONSE_UNFORWARDED,
+                        ),
+                        occurred_at: self.timestamp,
+                    });
                 } else {
                     // Response already received
-        events.push(DomainEvent::InvalidStateTransition {
-                            stream_id: self.request_stream.clone(),
-                            request_id: crate::domain::llm::RequestId::new(
-                                *self.request_id.as_ref()
-                            ),
-                            session_id: self.session_id.clone(),
-                            from_state: state.to_string(),
-                            event_type: "ResponseReceived".to_string(),
-                            reason: error_messages::static_error(
-                                error_messages::RESPONSE_ALREADY_RECEIVED
-                            ),
-                            occurred_at: self.timestamp,
-                        });
+                    events.push(DomainEvent::InvalidStateTransition {
+                        stream_id: self.request_stream.clone(),
+                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        session_id: self.session_id.clone(),
+                        from_state: state.to_string(),
+                        event_type: "ResponseReceived".to_string(),
+                        reason: error_messages::static_error(
+                            error_messages::RESPONSE_ALREADY_RECEIVED,
+                        ),
+                        occurred_at: self.timestamp,
+                    });
                 }
             }
             ResponseReturned { .. } => {
@@ -736,16 +729,16 @@ impl CommandLogic for RecordAuditEvent {
                     _ => "Unknown",
                 };
 
-        events.push(DomainEvent::AuditEventProcessingFailed {
-                            stream_id: self.request_stream.clone(),
-                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
-                        session_id: self.session_id.clone(),
-                        event_type: event_type_str.to_string(),
-                        error_message: error_messages::static_error(
-                            error_messages::AUDIT_EVENT_NOT_IMPLEMENTED
-                        ),
-                        occurred_at: self.timestamp,
-                    });
+                events.push(DomainEvent::AuditEventProcessingFailed {
+                    stream_id: self.request_stream.clone(),
+                    request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                    session_id: self.session_id.clone(),
+                    event_type: event_type_str.to_string(),
+                    error_message: error_messages::static_error(
+                        error_messages::AUDIT_EVENT_NOT_IMPLEMENTED,
+                    ),
+                    occurred_at: self.timestamp,
+                });
             }
         }
 
@@ -780,10 +773,7 @@ impl CommandLogic for ProcessRequestBody {
         state
     }
 
-    fn handle(
-        &self,
-        state: Self::State,
-    ) -> Result<NewEvents<Self::Event>, CommandError> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         // Check if we've already recorded this request
@@ -820,14 +810,14 @@ impl CommandLogic for ProcessRequestBody {
             });
 
         events.push(DomainEvent::LlmRequestReceived {
-                            stream_id: self.session_stream.clone(),
-                request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
-                session_id: self.session_id.clone(),
-                model_version,
-                prompt,
-                parameters,
-                received_at: self.timestamp,
-            });
+            stream_id: self.session_stream.clone(),
+            request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+            session_id: self.session_id.clone(),
+            model_version,
+            prompt,
+            parameters,
+            received_at: self.timestamp,
+        });
 
         // If there was a parsing error, emit an error event
         if let Some(error_msg) = parsing_error {
@@ -835,14 +825,14 @@ impl CommandLogic for ProcessRequestBody {
                 error_messages::static_error(error_messages::UNKNOWN_PARSING_ERROR)
             });
 
-        events.push(DomainEvent::LlmRequestParsingFailed {
-                            stream_id: self.request_stream.clone(),
-                    request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
-                    session_id: self.session_id.clone(),
-                    parsing_error: error_message,
-                    raw_uri: self.uri.as_ref().to_string(),
-                    occurred_at: self.timestamp,
-                });
+            events.push(DomainEvent::LlmRequestParsingFailed {
+                stream_id: self.request_stream.clone(),
+                request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                session_id: self.session_id.clone(),
+                parsing_error: error_message,
+                raw_uri: self.uri.as_ref().to_string(),
+                occurred_at: self.timestamp,
+            });
         }
 
         Ok(events.into())
