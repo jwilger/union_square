@@ -1,10 +1,10 @@
 //! EventCore service wrapper
 //!
 //! This module provides a service wrapper around EventCore's PostgresEventStore
-//! and CommandExecutor for easier integration with the application.
+//! for easier integration with the application.
 
 #[cfg(test)]
-use eventcore::{CommandExecutor, CommandLogic, ExecutionOptions};
+use eventcore::{CommandLogic, RetryPolicy};
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -13,16 +13,14 @@ use eventcore_memory::InMemoryEventStore;
 
 use super::EventCoreConfig;
 #[cfg(test)]
-use crate::domain::events::DomainEvent;
-#[cfg(test)]
 use crate::domain::types::ErrorMessage;
 use crate::error::Result;
 
 /// Service wrapper for EventCore functionality
 pub struct EventCoreService {
-    // TODO: Add postgres_executor when implementing PostgreSQL backend
+    // TODO: Add postgres store when implementing PostgreSQL backend
     #[cfg(test)]
-    memory_executor: Option<Arc<CommandExecutor<InMemoryEventStore<DomainEvent>>>>,
+    memory_store: Option<Arc<InMemoryEventStore>>,
 }
 
 impl EventCoreService {
@@ -30,18 +28,17 @@ impl EventCoreService {
     pub async fn new(_config: EventCoreConfig) -> Result<Self> {
         Ok(Self {
             #[cfg(test)]
-            memory_executor: None,
+            memory_store: None,
         })
     }
 
     /// Create a new EventCore service with in-memory backend (for testing)
     #[cfg(test)]
     pub fn with_memory_store() -> Self {
-        let event_store = InMemoryEventStore::new();
-        let command_executor = Arc::new(CommandExecutor::new(event_store));
+        let store = InMemoryEventStore::new();
 
         Self {
-            memory_executor: Some(command_executor),
+            memory_store: Some(Arc::new(store)),
         }
     }
 
@@ -51,9 +48,8 @@ impl EventCoreService {
     where
         C: CommandLogic<Event = crate::domain::events::DomainEvent> + Send + Sync,
     {
-        if let Some(executor) = &self.memory_executor {
-            executor
-                .execute(command, ExecutionOptions::default())
+        if let Some(store) = &self.memory_store {
+            eventcore::execute(store.as_ref(), command, RetryPolicy::default())
                 .await
                 .map_err(|e| {
                     crate::error::Error::EventCore(ErrorMessage::try_new(e.to_string()).unwrap())
@@ -61,7 +57,7 @@ impl EventCoreService {
             Ok(())
         } else {
             Err(crate::error::Error::EventCore(
-                ErrorMessage::try_new("No memory executor available".to_string()).unwrap(),
+                ErrorMessage::try_new("No memory store available".to_string()).unwrap(),
             ))
         }
     }

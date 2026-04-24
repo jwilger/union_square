@@ -9,9 +9,9 @@ repository = "https://github.com/jwilger/union_square"
 readme = "README.md"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 async-trait = "0.1"
-uuid = { version = "1.0", features = ["v7", "serde"] }
+uuid = { version = "1.23", features = ["v7", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
@@ -19,47 +19,48 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # EventCore will be used for event sourcing and CQRS patterns
-eventcore = "0.1.8"
-eventcore-postgres = "0.1.8"
-eventcore-macros = "0.1.8"
+eventcore = "0.7.1"
+eventcore-types = "0.7.1"
+eventcore-postgres = "0.7.1"
+eventcore-macros = "0.7.1"
 nutype = { version = "0.6", features = ["serde", "regex"] }
-derive_more = { version = "2.0", features = ["debug", "display", "from", "into"] }
+derive_more = { version = "2.1", features = ["debug", "display", "from", "into"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
-config = "0.14"
-axum = "0.8.4"
-tower = "0.5.2"
-tower-http = { version = "0.6.6", features = ["trace", "request-id", "propagate-header", "timeout", "limit", "normalize-path"] }
-hyper = "1.6.0"
-hyper-util = { version = "0.1.16", features = ["client", "client-legacy"] }
-http = "1.3.1"
+config = "0.15"
+axum = "0.8.9"
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["trace", "request-id", "propagate-header", "timeout", "limit", "normalize-path"] }
+hyper = "1.9.0"
+hyper-util = { version = "0.1.20", features = ["client", "client-legacy"] }
+http = "1.4.0"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
-bytes = "1.10.1"
-futures-core = "0.3.31"
-futures-util = "0.3.31"
-pin-project-lite = "0.2.16"
+bytes = "1.11"
+futures-core = "0.3.32"
+futures-util = "0.3.32"
+pin-project-lite = "0.2.17"
 crossbeam = "0.8.4"
-parking_lot = "0.12.4"
+parking_lot = "0.12.5"
 urlencoding = "2.1.3"
-aws-config = "1.8.3"
-aws-sdk-bedrockruntime = "1.99.0"
-regex = "1.11.1"
-base64 = "0.22.1"
-rust_decimal = "1.37.2"
+aws-config = "1.8.16"
+aws-sdk-bedrockruntime = "1.130.0"
+regex = "1.12"
+base64 = "0.22"
+rust_decimal = "1.41"
 currencies = { version = "0.4.1", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
-tempfile = "3.0"
-rstest = "0.25"
-proptest = "1.4"
-eventcore-memory = "0.1.8"
-criterion = { version = "0.6", features = ["async_tokio"] }
-mockito = "1.6"
-dhat = "0.3.3"
-quickcheck = "1.0.3"
-quickcheck_macros = "1.1.0"
+tempfile = "3.27"
+rstest = "0.26"
+proptest = "1.11"
+eventcore-memory = "0.7.1"
+criterion = { version = "0.8", features = ["async_tokio"] }
+mockito = "1.7"
+dhat = "0.3"
+quickcheck = "1.1"
+quickcheck_macros = "1.2"
 
 
 [[bin]]

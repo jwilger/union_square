@@ -2,4 +2,14 @@
 # Ignore RUSTSEC-2023-0071 (rsa vulnerability in sqlx-mysql)
 # We don't use MySQL features, so this doesn't affect us
 # The dependency is included in the lock file but not in our active dependency tree
-ignore = ["RUSTSEC-2023-0071"]
+#
+# Ignore RUSTSEC-2026-0098, RUSTSEC-2026-0099, RUSTSEC-2026-0104 (rustls-webpki vulnerabilities)
+# These are transitive dependencies through aws-smithy-http-client -> hyper-rustls 0.24 -> rustls 0.21.
+# aws-config and aws-sdk-bedrockruntime are already at their latest published versions (1.8.16 and 1.130.0).
+# The AWS SDK team needs to update their hyper-rustls dependency to resolve these.
+ignore = [
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+]
