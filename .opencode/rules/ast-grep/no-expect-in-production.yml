@@ -1,0 +1,14 @@
+id: no-expect-in-production
+language: rust
+severity: error
+message: "expect() is forbidden in production code. Use ? or match instead."
+rule:
+  pattern: $X.expect($MSG)
+constraints:
+  X:
+    not:
+      inside:
+        kind: function_item
+        has:
+          kind: attribute
+          regex: "^#\\[cfg\\(test\\)\\]$"

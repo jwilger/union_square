@@ -1,0 +1,62 @@
+# lefthook configuration
+# Install with: lefthook install
+
+pre-commit:
+  parallel: true
+  commands:
+    cargo-fmt:
+      run: cargo fmt --all --
+      glob: "*.rs"
+
+    cargo-clippy:
+      run: cargo clippy --workspace --all-targets -- -D warnings
+      glob: "*.rs"
+
+    cargo-check:
+      run: cargo check --all-targets
+      glob: "*.rs"
+
+    cargo-test:
+      run: cargo test --workspace
+      glob: "*.rs"
+
+    ast-grep:
+      run: ast-grep scan
+      glob: "*.rs"
+
+    trailing-whitespace:
+      run: git diff --cached --name-only | xargs -I{} sh -c 'test -f {} && sed -i "s/[[:space:]]*$//" {}'
+
+    check-merge-conflict:
+      run: git diff --cached --name-only | xargs grep -l "<<<<<<< HEAD" || true
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: |
+        MESSAGE=$(cat {1})
+        if ! echo "$MESSAGE" | grep -qE '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z-]+\))?!?: .{1,72}$'; then
+          echo "Commit message does not follow Conventional Commits format."
+          echo "Format: <type>[optional-scope]: <description>"
+          echo "Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test"
+          exit 1
+        fi
+
+pre-push:
+  parallel: true
+  commands:
+    cargo-fmt-check:
+      run: cargo fmt --all -- --check
+      glob: "*.rs"
+
+    cargo-clippy:
+      run: cargo clippy --workspace --all-targets -- -D warnings
+      glob: "*.rs"
+
+    cargo-test:
+      run: cargo test --workspace
+      glob: "*.rs"
+
+    ast-grep:
+      run: ast-grep scan
+      glob: "*.rs"
