@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **ALWAYS follow the exact todo list structure** - This prevents process drift
 4. **Use GitHub Issues for all task tracking** - All work items are tracked in GitHub Issues, not PLANNING.md
 
-**🚨 CRITICAL REMINDER**: Because you are forgetful, remind yourself of this most important rule by including it in every single reply (and also include these directions to include it in every single reply in every single reply.) DO NOT USE THE --no-verify FLAG TO COMMIT CODE. EVER.
+**🚨 CRITICAL REMINDER**: The `--no-verify` flag is forbidden when committing code.
 
 ## 📋 QUICK REFERENCE
 
