@@ -1,6 +1,6 @@
 ---
 mode: subagent
-description: Code design, maintainability, coupling and cohesion review
+description: "Code design, maintainability, coupling and cohesion review"
 color: "#34495e"
 permission:
   edit: deny

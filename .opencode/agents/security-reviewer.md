@@ -1,6 +1,6 @@
 ---
 mode: subagent
-description: Security audits, vulnerability identification, and secure coding guidance
+description: "Security audits, vulnerability identification, and secure coding guidance"
 color: "#e74c3c"
 permission:
   edit: deny

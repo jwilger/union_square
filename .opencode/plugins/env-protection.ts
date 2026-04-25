@@ -14,8 +14,9 @@ const PROTECTED_PATTERNS = [
 export const EnvProtection: Plugin = async () => {
   return {
     "tool.execute.before": async (input, output) => {
-      if (input.tool === "read" && output.args.filePath) {
-        const path = output.args.filePath as string
+      const path = output.args.filePath ?? output.args.path
+      if (["read", "write", "edit"].includes(input.tool) && path) {
+        const path = String(output.args.filePath ?? output.args.path)
         for (const pattern of PROTECTED_PATTERNS) {
           if (pattern.test(path)) {
             throw new Error(

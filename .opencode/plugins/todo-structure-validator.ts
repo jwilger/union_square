@@ -2,16 +2,21 @@ import type { Plugin } from "@opencode-ai/plugin"
 
 export const TodoStructureValidator: Plugin = async () => {
   return {
-    "todo.updated": async ({ todos }) => {
+    event: async ({ event }) => {
+      if (event.type !== "todo.updated") return
+
+      const todos = event.properties.todos
       const items = todos.map((t: { content: string }) => t.content.toLowerCase())
 
       // Check for the standard workflow pattern
       const hasTests = items.some((c: string) => c.includes("test"))
-      const hasImpl = items.some((c: string) => c.includes("implement") || c.includes("fix") || c.includes("refactor"))
+      const hasImpl = items.some(
+        (c: string) => c.includes("implement") || c.includes("fix") || c.includes("refactor")
+      )
       const hasCommit = items.some((c: string) => c.includes("commit"))
       const hasPush = items.some((c: string) => c.includes("push") || c.includes("pr"))
 
-      if (items.length >= 3 && (!hasTests || !hasImpl || !hasCommit)) {
+      if (items.length >= 3 && (!hasTests || !hasImpl || !hasCommit || !hasPush)) {
         console.warn(
           "[guardrail] Todo list may be missing standard workflow steps.\n" +
           "Expected structure:\n" +

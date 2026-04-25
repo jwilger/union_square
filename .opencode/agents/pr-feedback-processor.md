@@ -1,6 +1,6 @@
 ---
 mode: subagent
-description: Process and respond to PR review comments with structured reflection
+description: "Process and respond to PR review comments with structured reflection"
 color: "#95a5a6"
 permission:
   edit: deny
