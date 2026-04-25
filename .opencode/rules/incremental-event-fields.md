@@ -1,23 +1,25 @@
 # Rule: Incremental Event Fields
 
-Event schemas must only evolve by adding new fields or new event variants. Never remove, rename, or change the type of existing fields.
+Event schemas must only evolve by adding new fields or new event variants after the architecture alignment initiative accepts a schema for ongoing use. Never remove, rename, or change the type of accepted historical event fields.
+
+During the architecture alignment initiative, existing event schemas may be replaced when that is the cleanest path. No backward compatibility is required for current persisted events until the aligned event model is accepted.
 
 ## Why
 
-Events are immutable facts. Once an event is persisted, it exists forever in the event store. Changing an existing field's type or name breaks deserialization of historical events.
+Events are immutable facts. Once an aligned schema is accepted and used as historical data, changing an existing field's type or name breaks deserialization of historical events.
 
-## Allowed Changes
+## Allowed Changes After Alignment
 
 1. **Add new optional fields** to existing event variants (with `#[serde(default)]`)
 2. **Add new event variants** to the event enum
 3. **Add new event types** entirely
 
-## Forbidden Changes
+## Forbidden Changes After Alignment
 
-1. Removing a field from an existing event variant
-2. Renaming a field in an existing event variant
-3. Changing the type of an existing field
-4. Removing an event variant that has been emitted in production
+1. Removing a field from an accepted event variant
+2. Renaming a field in an accepted event variant
+3. Changing the type of an accepted field
+4. Removing an event variant that has been emitted after alignment
 
 ## Migration Strategy
 

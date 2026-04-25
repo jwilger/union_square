@@ -2,12 +2,14 @@
 
 Before implementing any event-sourced feature, the event model must be reviewed and approved.
 
+During the architecture alignment initiative, current persisted event schemas may be replaced when that is the cleanest path. After a schema is accepted as part of the aligned architecture, future event evolution must be additive or use new event variants so historical replay remains safe.
+
 ## Readiness Checklist
 
 - [ ] Events are named in **past tense** (`SessionRecorded`, not `RecordSession`)
 - [ ] Each event contains **all data needed** for future projections
 - [ ] Events are **immutable** — never modify an event's schema after it's in use
-- [ ] **Incremental fields only** — new events can add fields, but old fields are never removed or retyped
+- [ ] **Incremental fields after alignment** — new events can add fields after schema acceptance, but accepted historical fields are never removed or retyped
 - [ ] Events have **clear stream boundaries** — every event belongs to a logical aggregate stream
 - [ ] **No event references external mutable state** — events are self-contained facts
 
@@ -33,7 +35,7 @@ enum DomainEvent {
 
 ## Schema Evolution
 
-When you need to change event structure:
+After alignment, when you need to change event structure:
 
 1. **Add new fields**: Add a new event variant with the additional data
 2. **Deprecate old variants**: Stop emitting the old variant, but keep it in the enum for deserialization
