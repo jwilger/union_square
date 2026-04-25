@@ -2,7 +2,9 @@
 
 Before implementing any event-sourced feature, the event model must be reviewed and approved.
 
-During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing event variants and fields MAY be replaced, removed, renamed, or retyped when that is the cleanest route to the target event model. Alignment-era changes MUST NOT require migration code, compatibility variants, or backward-compatible deserializers unless an issue or PR explicitly declares that a specific schema has been accepted for ongoing historical replay.
+During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing event variants and fields MAY be replaced, removed, renamed, or retyped when that is the cleanest route to the target event model. Alignment-era changes MUST NOT require migration code, compatibility variants, or backward-compatible deserializers unless a specific schema has an acceptance record in `.opencode/accepted-replay/<schema-id>.yaml` marking it as accepted for ongoing historical replay.
+
+An acceptance record MUST identify the schema, the accepted semantic version or commit hash, the acceptance timestamp, the approving human, the approver signature, and the PR link. The canonical format is documented in `.opencode/accepted-replay/README.md`; reviewers and CI MUST use that record to determine when compatibility obligations apply.
 
 After an event schema is accepted as part of the aligned architecture, emitted events are historical facts. Future evolution MUST preserve replay by adding optional fields with defaults or by adding new event variants. Accepted historical fields and variants MUST NOT be removed, renamed, or retyped.
 
@@ -40,7 +42,7 @@ enum DomainEvent {
 
 Schema evolution rules apply after alignment acceptance.
 
-Before alignment acceptance, prefer the clean target event model over transitional compatibility. Do not add V1/V2 variants solely to preserve current alignment-era persisted data unless the issue or PR explicitly requires preserving that data.
+Before alignment acceptance, prefer the clean target event model over transitional compatibility. Do not add V1/V2 variants solely to preserve current alignment-era persisted data unless an acceptance record requires preserving that schema.
 
 After alignment acceptance, when you need to change event structure:
 

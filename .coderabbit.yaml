@@ -30,8 +30,6 @@ reviews:
     - "!**/dist/**"
     - "!**/node_modules/**"
     - "!**/*.lock"
-    - "!Cargo.lock"
-    - "!flake.lock"
 
   path_instructions:
     - path: "src/**/*.rs"

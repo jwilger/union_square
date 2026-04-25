@@ -2,7 +2,9 @@
 
 Event schema compatibility has two phases.
 
-During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing schemas MAY be replaced when that is the cleanest path. No migration code, compatibility variants, or backward-compatible deserializers are required for current persisted events unless an issue or PR explicitly declares that a specific schema has been accepted for ongoing historical replay.
+During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing schemas MAY be replaced when that is the cleanest path. No migration code, compatibility variants, or backward-compatible deserializers are required for current persisted events unless a specific schema has an acceptance record in `.opencode/accepted-replay/<schema-id>.yaml` marking it as accepted for ongoing historical replay.
+
+An acceptance record MUST identify the schema, the accepted semantic version or commit hash, the acceptance timestamp, the approving human, the approver signature, and the PR link. The canonical format is documented in `.opencode/accepted-replay/README.md`; reviewers and CI MUST use that record to determine when compatibility obligations and backward compatibility tests apply.
 
 After the aligned event model is accepted, event schemas MUST evolve only by adding optional fields with defaults or by adding new event variants. Accepted historical event fields MUST NOT be removed, renamed, or retyped.
 
