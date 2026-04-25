@@ -2,7 +2,9 @@
 
 Before implementing any event-sourced feature, the event model must be reviewed and approved.
 
-During the architecture alignment initiative, current persisted event schemas may be replaced when that is the cleanest path. After a schema is accepted as part of the aligned architecture, future event evolution must be additive or use new event variants so historical replay remains safe.
+During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing event variants and fields MAY be replaced, removed, renamed, or retyped when that is the cleanest route to the target event model. Alignment-era changes MUST NOT require migration code, compatibility variants, or backward-compatible deserializers unless an issue or PR explicitly declares that a specific schema has been accepted for ongoing historical replay.
+
+After an event schema is accepted as part of the aligned architecture, emitted events are historical facts. Future evolution MUST preserve replay by adding optional fields with defaults or by adding new event variants. Accepted historical fields and variants MUST NOT be removed, renamed, or retyped.
 
 ## Readiness Checklist
 
@@ -10,6 +12,7 @@ During the architecture alignment initiative, current persisted event schemas ma
 - [ ] Each event contains **all data needed** for future projections
 - [ ] Events are **immutable after alignment acceptance** — once an aligned schema is accepted for historical use, never modify its existing fields or variants in place
 - [ ] **Incremental fields after alignment acceptance** — new events can add fields after schema acceptance, but accepted historical fields are never removed or retyped
+- [ ] **Alignment scope is explicit** — compatibility variants and migrations are only required after a schema is accepted for ongoing historical replay
 - [ ] Events have **clear stream boundaries** — every event belongs to a logical aggregate stream
 - [ ] **No event references external mutable state** — events are self-contained facts
 
@@ -35,7 +38,11 @@ enum DomainEvent {
 
 ## Schema Evolution
 
-After alignment, when you need to change event structure:
+Schema evolution rules apply after alignment acceptance.
+
+Before alignment acceptance, prefer the clean target event model over transitional compatibility. Do not add V1/V2 variants solely to preserve current alignment-era persisted data unless the issue or PR explicitly requires preserving that data.
+
+After alignment acceptance, when you need to change event structure:
 
 1. **Add new fields**: Add a new event variant with the additional data
 2. **Deprecate old variants**: Stop emitting the old variant, but keep it in the enum for deserialization

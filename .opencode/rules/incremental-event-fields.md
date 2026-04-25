@@ -1,34 +1,42 @@
 # Rule: Incremental Event Fields
 
-Event schemas must only evolve by adding new fields or new event variants after the architecture alignment initiative accepts a schema for ongoing use. Never remove, rename, or change the type of accepted historical event fields.
+Event schema compatibility has two phases.
 
-During the architecture alignment initiative, existing event schemas may be replaced when that is the cleanest path. No backward compatibility is required for current persisted events until the aligned event model is accepted.
+During the architecture alignment initiative, current persisted events, event schemas, and deployed behavior are not compatibility contracts. Existing schemas MAY be replaced when that is the cleanest path. No migration code, compatibility variants, or backward-compatible deserializers are required for current persisted events unless an issue or PR explicitly declares that a specific schema has been accepted for ongoing historical replay.
+
+After the aligned event model is accepted, event schemas MUST evolve only by adding optional fields with defaults or by adding new event variants. Accepted historical event fields MUST NOT be removed, renamed, or retyped.
 
 ## Why
 
-Events are immutable facts. Once an aligned schema is accepted and used as historical data, changing an existing field's type or name breaks deserialization of historical events.
+Events are immutable facts. Once a schema is accepted for ongoing historical replay, changing an existing field's type or name breaks deserialization of historical events.
 
 ## Allowed Changes After Alignment
 
-1. **Add new optional fields** to existing event variants (with `#[serde(default)]`)
+1. **Add new optional fields** to accepted event variants (with `#[serde(default)]`)
 2. **Add new event variants** to the event enum
 3. **Add new event types** entirely
 
 ## Forbidden Changes After Alignment
 
-1. Removing a field from an accepted event variant
-2. Renaming a field in an accepted event variant
-3. Changing the type of an accepted field
-4. Removing an event variant that has been emitted after alignment
+An accepted event variant is one explicitly accepted for ongoing historical replay after alignment. Acceptance does not require prior production emission, but once accepted and emitted, it must remain replayable.
 
-## Migration Strategy
+1. Removing a field from an event variant accepted after alignment
+2. Renaming a field in an event variant accepted after alignment
+3. Changing the type of a field in an event variant accepted after alignment
+4. Removing an event variant accepted after alignment once it has been emitted
 
-When you need data that an old event doesn't have:
+## Post-Alignment Migration Strategy
+
+These steps apply only after a schema has been accepted for ongoing historical replay.
+
+When you need data that an accepted historical event does not have:
 
 1. Create a new event variant with the additional data
 2. Update command handlers to emit the new variant
 3. Keep the old variant in the enum for historical replay
 4. In projections, handle both old and new variants
+
+Do not use this pattern solely for alignment-era schemas that have not been accepted as durable historical contracts.
 
 ## Example
 
