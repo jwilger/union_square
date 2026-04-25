@@ -8,8 +8,8 @@ During the architecture alignment initiative, current persisted event schemas ma
 
 - [ ] Events are named in **past tense** (`SessionRecorded`, not `RecordSession`)
 - [ ] Each event contains **all data needed** for future projections
-- [ ] Events are **immutable** — never modify an event's schema after it's in use
-- [ ] **Incremental fields after alignment** — new events can add fields after schema acceptance, but accepted historical fields are never removed or retyped
+- [ ] Events are **immutable after alignment acceptance** — once an aligned schema is accepted for historical use, never modify its existing fields or variants in place
+- [ ] **Incremental fields after alignment acceptance** — new events can add fields after schema acceptance, but accepted historical fields are never removed or retyped
 - [ ] Events have **clear stream boundaries** — every event belongs to a logical aggregate stream
 - [ ] **No event references external mutable state** — events are self-contained facts
 

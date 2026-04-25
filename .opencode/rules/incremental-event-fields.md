@@ -52,4 +52,4 @@ enum DomainEvent {
 
 - ADR required for any event schema change
 - Code review by `event-sourcing-architect`
-- Backward compatibility tests in CI
+- Backward compatibility tests in CI for schemas accepted as part of the aligned architecture
