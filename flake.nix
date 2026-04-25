@@ -29,7 +29,7 @@
           buildInputs = with pkgs; [
             rustToolchain
             git
-            pre-commit
+            lefthook
             nodejs_22
             glow
             jq

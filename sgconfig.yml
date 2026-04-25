@@ -1,0 +1,4 @@
+ruleDirs:
+  - .opencode/rules/ast-grep
+testConfigs:
+  - testDir: .opencode/rules/ast-grep/rule-tests

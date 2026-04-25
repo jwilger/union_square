@@ -1,0 +1,69 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "build",
+  "instructions": [
+    "CLAUDE.md",
+    "docs/architecture/ARCHITECTURE.md",
+    ".opencode/rules/*.md"
+  ],
+  "plugin": [
+    "@franlol/opencode-md-table-formatter@latest"
+  ],
+  "permission": {
+    "edit": "ask",
+    "bash": "ask",
+    "skill": {
+      "*": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "description": "Default development agent with full tool access",
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "*": "ask",
+          "cargo fmt": "allow",
+          "cargo clippy*": "allow",
+          "cargo test*": "allow",
+          "cargo nextest*": "allow",
+          "cargo check*": "allow",
+          "gh *": "allow",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git branch*": "allow"
+        },
+        "task": {
+          "*": "allow"
+        },
+        "skill": {
+          "*": "allow"
+        }
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "description": "Analysis and planning without making changes",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "ask",
+          "cargo check*": "allow",
+          "gh *": "allow",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git branch*": "allow"
+        },
+        "task": {
+          "*": "allow"
+        },
+        "skill": {
+          "*": "allow"
+        }
+      }
+    }
+  }
+}

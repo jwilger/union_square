@@ -1,0 +1,13 @@
+id: no-panic-macro-production
+language: rust
+severity: error
+message: "panic! is forbidden in production code. Use Result or Option instead."
+rule:
+  pattern: panic!($...ARGS)
+constraints:
+    not:
+      inside:
+        kind: function_item
+        has:
+          kind: attribute
+          regex: "^#\\[cfg\\(test\\)\\]$"

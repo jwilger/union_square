@@ -7,6 +7,29 @@ description = "A proxy/wire-tap service for making LLM calls and recording every
 license = "MIT"
 repository = "https://github.com/jwilger/union_square"
 readme = "README.md"
+keywords = ["llm", "proxy", "event-sourcing", "cqrs"]
+categories = ["network-programming", "development-tools"]
+
+[lints.rust]
+unsafe_code = "deny"
+warnings = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+style = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+# We explicitly enable all cargo lints EXCEPT multiple_crate_versions.
+# eventcore 0.7 → rand → getrandom pulls both wasip2 → wit-bindgen 0.57
+# and wasip3 → wit-bindgen 0.51 on their respective WASI preview targets.
+# Neither actually links on x86_64-linux, but cargo still counts them for
+# the lint. Union Square binaries are native, not WASM.
+cargo_common_metadata = { level = "deny", priority = 0 }
+multiple_crate_versions = { level = "allow", priority = 0 }
+negative_feature_names = { level = "deny", priority = 0 }
+redundant_feature_names = { level = "deny", priority = 0 }
 
 [dependencies]
 tokio = { version = "1.52", features = ["full"] }
