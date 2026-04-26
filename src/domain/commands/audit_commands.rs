@@ -11,7 +11,6 @@ use crate::domain::{events::DomainEvent, metrics::Timestamp, session::SessionId}
 use crate::proxy::types::{AuditEvent, AuditEventType, Headers, HttpMethod, RequestId, RequestUri};
 
 use super::llm_request_parser::{create_fallback_request, parse_llm_request, ParsedLlmRequest};
-use crate::domain::types::ErrorMessage;
 
 use std::fmt;
 
@@ -422,6 +421,12 @@ mod error_messages {
             CommandError::ValidationError(format!("Invalid static error message: {e}"))
         })
     }
+
+    /// Try to create an ErrorMessage from raw text; fall back to a static error if validation fails
+    #[inline]
+    pub fn parse_error(raw: String) -> Result<ErrorMessage, CommandError> {
+        ErrorMessage::try_new(raw).or_else(|_| static_error(UNKNOWN_PARSING_ERROR))
+    }
 }
 
 /// Pure functions to transform audit events into domain events
@@ -574,12 +579,7 @@ impl CommandLogic for RecordAuditEvent {
                             ..
                         }) = &self.parsed_request
                         {
-                            let error_message =
-                                ErrorMessage::try_new(error_msg.clone()).or_else(|_| {
-                                    error_messages::static_error(
-                                        error_messages::UNKNOWN_PARSING_ERROR,
-                                    )
-                                })?;
+                            let error_message = error_messages::parse_error(error_msg.clone())?;
 
                             events.push(DomainEvent::LlmRequestParsingFailed {
                                 stream_id: self.request_stream.clone(),
@@ -799,8 +799,7 @@ impl CommandLogic for ProcessRequestBody {
 
         // If there was a parsing error, emit an error event
         if let Some(error_msg) = parsing_error {
-            let error_message = ErrorMessage::try_new(error_msg)
-                .or_else(|_| error_messages::static_error(error_messages::UNKNOWN_PARSING_ERROR))?;
+            let error_message = error_messages::parse_error(error_msg)?;
 
             events.push(DomainEvent::LlmRequestParsingFailed {
                 stream_id: self.request_stream.clone(),
@@ -1082,7 +1081,7 @@ mod tests {
 
         // Transition to Forwarded
         let event = DomainEvent::LlmRequestStarted {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             started_at: timestamp,
         };
@@ -1098,7 +1097,7 @@ mod tests {
 
         // Transition to ResponseReceived
         let event = DomainEvent::LlmResponseReceived {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             response_text: crate::domain::types::ResponseText::try_new("response".to_string())
                 .expect("response is valid text in tests"),
@@ -1159,7 +1158,7 @@ mod tests {
 
         // Transition to Failed from any state
         let event = DomainEvent::LlmRequestFailed {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             error_message: crate::domain::types::ErrorMessage::try_new("test error".to_string())
                 .expect("test error is a valid error message in tests"),
@@ -1172,7 +1171,7 @@ mod tests {
         // Test cancelled transition
         let mut state2 = RequestState::default();
         let event = DomainEvent::LlmRequestCancelled {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             cancelled_at: timestamp,
         };
@@ -1192,7 +1191,7 @@ mod tests {
 
         // Try to forward without receiving first - should stay in NotStarted
         let event = DomainEvent::LlmRequestStarted {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             started_at: timestamp,
         };
@@ -1202,7 +1201,7 @@ mod tests {
 
         // Try to receive response without forwarding - should stay in NotStarted
         let event = DomainEvent::LlmResponseReceived {
-            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
+            stream_id: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             response_text: crate::domain::types::ResponseText::try_new("response".to_string())
                 .expect("response is valid text in tests"),
