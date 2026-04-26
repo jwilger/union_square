@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a user
-#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef))]
 pub struct UserId(Uuid);
 
 impl UserId {

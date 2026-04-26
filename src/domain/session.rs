@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a session
-#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
+#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef))]
 pub struct SessionId(Uuid);
 
 impl SessionId {
