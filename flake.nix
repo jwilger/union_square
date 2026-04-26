@@ -23,6 +23,8 @@
         };
 
         rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+
+        dependenciesDir = "./.dependencies";
       in
       {
         devShells.default = pkgs.mkShell {
@@ -31,6 +33,7 @@
             git
             lefthook
             nodejs_22
+            bun
             glow
             jq
             sqlx-cli
@@ -38,6 +41,19 @@
           ];
 
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+
+          CARGO_HOME = "${dependenciesDir}/cargo";
+          CARGO_INSTALL_ROOT = "${dependenciesDir}/cargo";
+          npm_config_prefix = "${dependenciesDir}/npm";
+          BUN_INSTALL = "${dependenciesDir}/bun";
+
+          shellHook = ''
+            mkdir -p ${dependenciesDir}/cargo/bin
+            mkdir -p ${dependenciesDir}/npm/bin
+            mkdir -p ${dependenciesDir}/bun/bin
+
+            export PATH="${dependenciesDir}/cargo/bin:${dependenciesDir}/npm/bin:${dependenciesDir}/bun/bin:$PATH"
+          '';
         };
       }
     );
