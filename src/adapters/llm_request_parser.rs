@@ -317,6 +317,25 @@ mod tests {
     #[test]
     fn test_parse_returns_error_on_invalid_json() {
         let result = parse_llm_request(b"{ invalid json }", "/v1/chat/completions", &[]);
-        assert!(result.is_err());
+        assert!(matches!(result, Err(ParseError::InvalidJson(_))));
+    }
+
+    #[test]
+    fn test_parse_returns_unknown_format_for_unrecognized_payload() {
+        let body = json!({ "foo": "bar" });
+        let result = parse_llm_request(body.to_string().as_bytes(), "/v1/unknown", &[]);
+        assert!(matches!(result, Err(ParseError::UnknownFormat)));
+    }
+
+    #[test]
+    fn test_parse_returns_invalid_field_value_for_invalid_model() {
+        let body = json!({
+            "model": "",
+            "prompt": "Hello"
+        });
+        let result = parse_llm_request(body.to_string().as_bytes(), "/v1/completions", &[]);
+        assert!(
+            matches!(result, Err(ParseError::InvalidFieldValue { field, .. }) if field == "model")
+        );
     }
 }
