@@ -9,7 +9,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for an LLM request
-#[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize))]
+#[nutype(derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Display,
+    AsRef
+))]
 pub struct RequestId(Uuid);
 
 impl RequestId {

@@ -10,6 +10,7 @@ npm-debug.log*
 # Rust
 target/
 **/*.rs.bk
+dhat-heap.json
 
 # IDE
 .vscode/
