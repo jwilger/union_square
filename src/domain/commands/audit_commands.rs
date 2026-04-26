@@ -424,8 +424,9 @@ mod error_messages {
     /// Create an ErrorMessage from a static string - all static strings are controlled and non-empty
     #[inline]
     pub fn static_error(msg: &'static str) -> Result<ErrorMessage, CommandError> {
-        ErrorMessage::try_new(msg.to_string())
-            .map_err(|e| CommandError::ValidationError(format!("Invalid static error message: {e}")))
+        ErrorMessage::try_new(msg.to_string()).map_err(|e| {
+            CommandError::ValidationError(format!("Invalid static error message: {e}"))
+        })
     }
 }
 
@@ -586,8 +587,8 @@ impl CommandLogic for RecordAuditEvent {
                             ..
                         }) = &self.parsed_request
                         {
-                            let error_message = ErrorMessage::try_new(error_msg.clone())
-                                .or_else(|_| {
+                            let error_message =
+                                ErrorMessage::try_new(error_msg.clone()).or_else(|_| {
                                     error_messages::static_error(
                                         error_messages::UNKNOWN_PARSING_ERROR,
                                     )
