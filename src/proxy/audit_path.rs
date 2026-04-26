@@ -1,7 +1,7 @@
 //! Audit path implementation for processing events from the ring buffer
 
 #[cfg(test)]
-use crate::domain::commands::RecordAuditEvent;
+use crate::adapters::proxy_audit::convert_audit_event;
 use crate::infrastructure::eventcore::service::EventCoreService;
 use crate::proxy::{ring_buffer::RingBuffer, types::*};
 use std::sync::Arc;
@@ -154,7 +154,7 @@ impl AuditPathProcessor {
                 | AuditEventType::RequestForwarded { .. }
                 | AuditEventType::ResponseReceived { .. }
                 | AuditEventType::ResponseReturned { .. } => {
-                    let command = RecordAuditEvent::from_audit_event(event).map_err(|e| {
+                    let command = convert_audit_event(event).map_err(|e| {
                         ProxyError::Internal(format!("Failed to create command: {e}"))
                     })?;
 

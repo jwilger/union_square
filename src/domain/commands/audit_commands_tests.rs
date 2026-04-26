@@ -4,6 +4,7 @@
 //! Tests cover edge cases, error scenarios, concurrency, and invariants.
 
 use super::*;
+use crate::adapters::proxy_audit::convert_audit_event;
 use crate::domain::events::DomainEvent;
 use crate::proxy::types::{
     AuditEvent, AuditEventType, BodySize, DurationMillis, Headers, HttpMethod, HttpStatusCode,
@@ -122,21 +123,21 @@ mod concurrent_processing {
 
         // Create commands for different stages of request lifecycle
         let commands = vec![
-            RecordAuditEvent::from_audit_event(&AuditEvent {
+            convert_audit_event(&AuditEvent {
                 request_id,
                 session_id: ProxySessionId::try_new(session_id.clone().into_inner()).unwrap(),
                 timestamp: Utc::now(),
                 event_type: request_received_event(),
             })
             .unwrap(),
-            RecordAuditEvent::from_audit_event(&AuditEvent {
+            convert_audit_event(&AuditEvent {
                 request_id,
                 session_id: ProxySessionId::try_new(session_id.clone().into_inner()).unwrap(),
                 timestamp: Utc::now() + chrono::Duration::milliseconds(10),
                 event_type: request_forwarded_event(),
             })
             .unwrap(),
-            RecordAuditEvent::from_audit_event(&AuditEvent {
+            convert_audit_event(&AuditEvent {
                 request_id,
                 session_id: ProxySessionId::try_new(session_id.clone().into_inner()).unwrap(),
                 timestamp: Utc::now() + chrono::Duration::milliseconds(100),
@@ -195,7 +196,7 @@ mod concurrent_processing {
                 let store = Arc::clone(&store);
                 tokio::spawn(async move {
                     let audit_event = create_test_audit_event(request_received_event());
-                    let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+                    let command = convert_audit_event(&audit_event).unwrap();
                     eventcore::execute(&*store, command, RetryPolicy::default()).await
                 })
             })
@@ -221,7 +222,7 @@ mod event_store_failures {
         let store = create_test_store();
 
         let audit_event = create_test_audit_event(request_received_event());
-        let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+        let command = convert_audit_event(&audit_event).unwrap();
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
 
@@ -235,7 +236,7 @@ mod event_store_failures {
         let service = EventCoreService::with_memory_store();
 
         let audit_event = create_test_audit_event(request_received_event());
-        let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+        let command = convert_audit_event(&audit_event).unwrap();
 
         let result = service.execute_command_memory(command).await;
         assert!(result.is_ok());
@@ -253,7 +254,7 @@ mod malformed_events {
         // Create command with malformed JSON body
         let malformed_body = b"{ invalid json }";
         let audit_event = create_test_audit_event(request_received_event());
-        let command = RecordAuditEvent::from_audit_event(&audit_event)
+        let command = convert_audit_event(&audit_event)
             .unwrap()
             .with_body(malformed_body);
 
@@ -287,9 +288,7 @@ mod malformed_events {
         let store = create_test_store();
 
         let audit_event = create_test_audit_event(request_received_event());
-        let command = RecordAuditEvent::from_audit_event(&audit_event)
-            .unwrap()
-            .with_body(&[]);
+        let command = convert_audit_event(&audit_event).unwrap().with_body(&[]);
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
@@ -302,7 +301,7 @@ mod malformed_events {
         // Invalid UTF-8 sequence
         let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
         let audit_event = create_test_audit_event(request_received_event());
-        let command = RecordAuditEvent::from_audit_event(&audit_event)
+        let command = convert_audit_event(&audit_event)
             .unwrap()
             .with_body(&invalid_utf8);
 
@@ -344,7 +343,7 @@ mod event_ordering {
                 timestamp: timestamps[i],
                 event_type,
             };
-            let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let command = convert_audit_event(&audit_event).unwrap();
             eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
@@ -387,7 +386,7 @@ mod event_ordering {
             let session_stream = proxy_session_stream_for(&audit_event.session_id);
             stream_ids.push(session_stream);
 
-            let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let command = convert_audit_event(&audit_event).unwrap();
             eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
@@ -418,7 +417,7 @@ mod idempotency {
         let audit_event = create_test_audit_event(request_received_event());
 
         // Execute same command twice
-        let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+        let command = convert_audit_event(&audit_event).unwrap();
         eventcore::execute(&store, command.clone(), RetryPolicy::default())
             .await
             .unwrap();
@@ -449,7 +448,7 @@ mod idempotency {
             timestamp: Utc::now(),
             event_type: request_received_event(),
         };
-        let cmd = RecordAuditEvent::from_audit_event(&received_event).unwrap();
+        let cmd = convert_audit_event(&received_event).unwrap();
         eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
@@ -461,7 +460,7 @@ mod idempotency {
             timestamp: Utc::now() + chrono::Duration::milliseconds(10),
             event_type: request_forwarded_event(),
         };
-        let cmd = RecordAuditEvent::from_audit_event(&forwarded_event).unwrap();
+        let cmd = convert_audit_event(&forwarded_event).unwrap();
         eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
@@ -496,7 +495,7 @@ mod idempotency {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 event_type: request_received_event(),
             };
-            let cmd = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let cmd = convert_audit_event(&audit_event).unwrap();
             eventcore::execute(&store, cmd, RetryPolicy::default())
                 .await
                 .unwrap();
@@ -563,7 +562,7 @@ mod property_tests {
                 event_type,
             };
 
-            let result = RecordAuditEvent::from_audit_event(&audit_event);
+            let result = convert_audit_event(&audit_event);
             prop_assert!(result.is_ok());
         }
 
@@ -583,8 +582,8 @@ mod property_tests {
                 event_type: request_received_event(),
             };
 
-            let command1 = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            let command2 = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let command1 = convert_audit_event(&audit_event).unwrap();
+            let command2 = convert_audit_event(&audit_event).unwrap();
 
             prop_assert_eq!(command1.session_stream, command2.session_stream);
             prop_assert_eq!(command1.request_stream, command2.request_stream);
@@ -693,7 +692,7 @@ mod recovery_scenarios {
             timestamp: Utc::now(),
             event_type: request_received_event(),
         };
-        let cmd = RecordAuditEvent::from_audit_event(&received_event).unwrap();
+        let cmd = convert_audit_event(&received_event).unwrap();
         eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
@@ -706,7 +705,7 @@ mod recovery_scenarios {
             timestamp: Utc::now() + chrono::Duration::milliseconds(200),
             event_type: response_received_event(),
         };
-        let cmd = RecordAuditEvent::from_audit_event(&response_event).unwrap();
+        let cmd = convert_audit_event(&response_event).unwrap();
         let result = eventcore::execute(&store, cmd, RetryPolicy::default()).await;
 
         // Should succeed but not emit event due to invalid state transition
@@ -754,7 +753,7 @@ mod recovery_scenarios {
                 timestamp,
                 event_type,
             };
-            let cmd = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let cmd = convert_audit_event(&audit_event).unwrap();
             eventcore::execute(&store, cmd, RetryPolicy::default())
                 .await
                 .unwrap();
@@ -788,12 +787,18 @@ mod process_request_body_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: session_stream_for(&session_id),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
-            request_id,
+            request_stream: crate::domain::streams::request_stream(
+                crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            )
+            .unwrap(),
+            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-            headers: Headers::new(),
+            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+            uri: crate::domain::audit_types::RequestUri::try_new(
+                "/v1/chat/completions".to_string(),
+            )
+            .unwrap(),
+            headers: crate::domain::audit_types::HttpHeaders::new(),
             body,
             timestamp: Timestamp::now(),
         };
@@ -832,12 +837,16 @@ mod process_request_body_tests {
         let body = create_anthropic_request_body();
         let command = ProcessRequestBody {
             session_stream: session_stream_for(&session_id),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
-            request_id,
+            request_stream: crate::domain::streams::request_stream(
+                crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            )
+            .unwrap(),
+            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/messages".to_string()).unwrap(),
-            headers: Headers::new(),
+            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+            uri: crate::domain::audit_types::RequestUri::try_new("/v1/messages".to_string())
+                .unwrap(),
+            headers: crate::domain::audit_types::HttpHeaders::new(),
             body,
             timestamp: Timestamp::now(),
         };
@@ -876,12 +885,18 @@ mod process_request_body_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: session_stream_for(&session_id),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
-            request_id,
+            request_stream: crate::domain::streams::request_stream(
+                crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            )
+            .unwrap(),
+            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-            headers: Headers::new(),
+            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+            uri: crate::domain::audit_types::RequestUri::try_new(
+                "/v1/chat/completions".to_string(),
+            )
+            .unwrap(),
+            headers: crate::domain::audit_types::HttpHeaders::new(),
             body,
             timestamp: Timestamp::now(),
         };
@@ -930,12 +945,18 @@ mod edge_cases {
 
         let command = ProcessRequestBody {
             session_stream: session_stream_for(&session_id),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
-            request_id,
+            request_stream: crate::domain::streams::request_stream(
+                crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            )
+            .unwrap(),
+            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-            headers: Headers::new(),
+            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+            uri: crate::domain::audit_types::RequestUri::try_new(
+                "/v1/chat/completions".to_string(),
+            )
+            .unwrap(),
+            headers: crate::domain::audit_types::HttpHeaders::new(),
             body,
             timestamp: Timestamp::now(),
         };
@@ -970,7 +991,7 @@ mod edge_cases {
                 },
             };
 
-            let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let command = convert_audit_event(&audit_event).unwrap();
             let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
             assert!(result.is_ok());
         }
@@ -992,7 +1013,7 @@ mod edge_cases {
             },
         };
 
-        let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+        let command = convert_audit_event(&audit_event).unwrap();
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
     }
@@ -1020,12 +1041,25 @@ mod headers_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: session_stream_for(&session_id),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
-            request_id,
+            request_stream: crate::domain::streams::request_stream(
+                crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            )
+            .unwrap(),
+            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-            headers,
+            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+            uri: crate::domain::audit_types::RequestUri::try_new(
+                "/v1/chat/completions".to_string(),
+            )
+            .unwrap(),
+            headers: crate::domain::audit_types::HttpHeaders::try_from_pairs(
+                headers
+                    .as_vec()
+                    .iter()
+                    .map(|(n, v)| (n.as_ref().to_string(), v.as_ref().to_string()))
+                    .collect(),
+            )
+            .unwrap(),
             body,
             timestamp: Timestamp::now(),
         };
@@ -1057,7 +1091,7 @@ mod benchmarks {
         let start = Instant::now();
         for _ in 0..iterations {
             let audit_event = create_test_audit_event(request_received_event());
-            let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+            let command = convert_audit_event(&audit_event).unwrap();
             eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
@@ -1082,7 +1116,7 @@ mod benchmarks {
                 let store = Arc::clone(&store);
                 tokio::spawn(async move {
                     let audit_event = create_test_audit_event(request_received_event());
-                    let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
+                    let command = convert_audit_event(&audit_event).unwrap();
                     eventcore::execute(&*store, command, RetryPolicy::default()).await
                 })
             })
