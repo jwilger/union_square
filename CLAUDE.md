@@ -53,9 +53,11 @@ Union Square is a proxy/wire-tap service for making LLM calls and recording ever
 
 **PR Feedback:**
 1. Address each piece of feedback
-2. "Reply to review comments using gh GraphQL API with -- @claude signature"
+2. "Reply to review comments using gh GraphQL API"
 3. "Make a commit"
 4. "Push changes and check for new PR feedback"
+
+Do not manually request bot re-review after pushing review fixes unless the user explicitly asks; review bots normally re-run automatically.
 
 ### Commit Requirements
 
@@ -223,9 +225,11 @@ Both MCP tools and `gh` CLI are acceptable. Use whichever is more convenient.
 **Address ALL formal review comments (including bot reviews):**
 
 1. **Get review details** using GraphQL API
-2. **Reply to threads** using GraphQL mutation with `-- @claude` signature
-3. **Format**: "I've addressed this by [action]. -- @claude"
+2. **Reply to threads** using GraphQL mutation
+3. **Format**: "I've addressed this by [action]."
 4. **Check for responses** and continue conversation until resolved
+
+Do not manually request bot re-review after pushing fixes unless the user explicitly asks; rely on automatic bot re-review.
 
 ## 🔴 FINAL REMINDERS
 
