@@ -1060,7 +1060,7 @@ mod tests {
 
         // Transition to Received
         let event = DomainEvent::LlmRequestReceived {
-            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
+            stream_id: session_stream(&session_id).unwrap(),
             request_id: request_id.clone(),
             session_id: session_id.clone(),
             model_version: crate::domain::llm::ModelVersion {
@@ -1118,7 +1118,7 @@ mod tests {
 
         // Auto-transition to Completed (matching original behavior)
         state.apply(&DomainEvent::SessionTagged {
-            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
+            stream_id: session_stream(&session_id).unwrap(),
             session_id: session_id.clone(),
             tag: crate::domain::types::Tag::try_new("test".to_string())
                 .expect("test is a valid tag in tests"),
@@ -1141,7 +1141,7 @@ mod tests {
 
         // Set up initial state
         let event = DomainEvent::LlmRequestReceived {
-            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
+            stream_id: session_stream(&session_id).unwrap(),
             request_id: request_id.clone(),
             session_id: session_id.clone(),
             model_version: crate::domain::llm::ModelVersion {
