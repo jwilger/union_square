@@ -118,8 +118,10 @@ pub fn session_with_analyses_streams(
     analysis_ids: &[AnalysisId],
 ) -> Result<SessionWithAnalysesStreams, StreamNameError> {
     let session_stream = session_stream(session_id)?;
+    let mut seen = std::collections::HashSet::new();
     let analysis_streams = analysis_ids
         .iter()
+        .filter(|analysis_id| seen.insert((*analysis_id).clone()))
         .map(analysis_stream)
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -208,6 +210,28 @@ mod tests {
                 plan.session_stream.as_ref(),
                 plan.analysis_streams[0].as_ref(),
                 plan.analysis_streams[1].as_ref(),
+            ]
+        );
+    }
+
+    #[test]
+    fn session_with_analyses_query_plan_deduplicates_analysis_streams() {
+        let session_id = SessionId::generate();
+        let first = AnalysisId::generate();
+        let second = AnalysisId::generate();
+        let analysis_ids = [first.clone(), second.clone(), first];
+
+        let plan = session_with_analyses_streams(&session_id, &analysis_ids).unwrap();
+
+        assert_eq!(plan.analysis_streams.len(), 2);
+        assert_eq!(
+            plan.analysis_streams
+                .iter()
+                .map(|stream| stream.as_ref())
+                .collect::<Vec<_>>(),
+            vec![
+                analysis_stream(&analysis_ids[0]).unwrap().as_ref(),
+                analysis_stream(&analysis_ids[1]).unwrap().as_ref(),
             ]
         );
     }
