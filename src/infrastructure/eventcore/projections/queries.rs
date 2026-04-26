@@ -68,10 +68,7 @@ impl ProjectionQueryService {
     }
 
     /// Apply events to rebuild projections
-    pub fn apply_events(
-        &mut self,
-        events: Vec<eventcore::StoredEvent<DomainEvent>>,
-    ) -> Result<(), QueryError> {
+    pub fn apply_events(&mut self, events: Vec<DomainEvent>) -> Result<(), QueryError> {
         self.session_projection.apply_events(events)?;
         Ok(())
     }

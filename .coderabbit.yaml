@@ -1,0 +1,236 @@
+# CodeRabbit configuration for Union Square.
+#
+# This file defines the AI review surface for this repository. Current
+# architectural guidance lives in docs/architecture/ARCHITECTURE.md and
+# .opencode/rules/*.md. ADRs are historical rationale only and MUST NOT be
+# used as the source of ongoing architecture guidance.
+
+language: "en-US"
+
+tone_instructions: "Direct, technical, terse. Reference rules by filename. No fluff."
+
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+
+  path_filters:
+    - "!**/target/**"
+    - "!**/dist/**"
+    - "!**/node_modules/**"
+    - "!**/*.lock"
+
+  path_instructions:
+    - path: "src/**/*.rs"
+      instructions: |
+        Architecture and Rust review. Authoritative sources:
+          - docs/architecture/ARCHITECTURE.md
+          - .opencode/rules/*.md
+          - Cargo.toml and deny.toml
+
+        ADRs under docs/adr/*.md are historical rationale only. Do NOT
+        evaluate current implementation correctness against ADR text; evaluate
+        against ARCHITECTURE.md and .opencode/rules/. ADRs may explain why a
+        rule exists, but the active rule is what the diff must satisfy.
+
+        Focus areas:
+          1. Functional core boundaries: domain code MUST NOT import HTTP,
+             proxy/provider DTOs, database clients, Tokio runtime APIs,
+             clocks, randomness, tracing, metrics, environment access, raw
+             JSON, raw bytes, URI strings, or header tuples. See
+             .opencode/rules/functional-core-boundaries.md.
+          2. IO boundary DTOs: raw strings, bytes, headers, URIs, JSON, and
+             database rows belong in adapters or infrastructure. Domain-facing
+             APIs MUST use semantic facts. See
+             .opencode/rules/io-boundary-dtos.md.
+          3. Type-driven design: domain concepts use semantic types, nutype,
+             enums, or smart constructors. Parse at boundaries; do not pass raw
+             primitives into domain behavior. See
+             .opencode/rules/type-driven-development.md.
+          4. EventCore/CQRS: durable state changes use EventCore command
+             patterns; command logic and read models stay separate. See
+             .opencode/rules/eventcore-command-pattern.md and
+             .opencode/rules/cqrs-model-separation.md.
+          5. Event schema phase policy: alignment-era schemas are not durable
+             compatibility contracts unless explicitly accepted for ongoing
+             historical replay. After acceptance, schema evolution is additive
+             or new-variant based. See .opencode/rules/incremental-event-fields.md
+             and .opencode/rules/event-model-readiness.md.
+          6. Effects/trampoline: non-hot-path orchestration SHOULD use explicit
+             effects/steps when it improves sequencing, retries, or testability;
+             do not put this pattern in hot-path forwarding without benchmark
+             evidence. See .opencode/rules/effect-step-trampoline.md.
+          7. Performance islands: ring-buffer internals, hot-path forwarding,
+             streaming body handling, and audit handoff may be imperative only
+             when isolated, documented, and measured. See
+             .opencode/rules/performance-islands.md.
+          8. Error handling: use thiserror for typed errors. Production code
+             MUST NOT use unwrap(), expect(), panic!(), todo!(),
+             unimplemented!(), or unreachable! for recoverable cases. See
+             .opencode/rules/thiserror-for-errors.md and
+             .opencode/rules/no-panics-in-production.md.
+          9. Borrow discipline: prefer borrowing over ownership unless the
+             function genuinely consumes the value. See
+             .opencode/rules/prefer-borrows.md.
+
+        Blocking policy: violations introduced by the PR are blocking.
+        Pre-existing violations in untouched code are advisory unless the PR's
+        semantics require that code to change.
+
+    - path: "Cargo.toml"
+      instructions: |
+        Cargo dependency review. Apply .opencode/rules/cargo-dependencies.md.
+        New dependencies should be added with cargo add, justified by the diff,
+        and consistent with EventCore version alignment. If the project becomes
+        a workspace, apply .opencode/rules/workspace-deps-consistency.md.
+
+    - path: ".github/workflows/**/*.{yml,yaml}"
+      instructions: |
+        GitHub Actions and CI review. Apply:
+          - .opencode/rules/github-actions-security.md
+          - .opencode/rules/ci-flake-defined-invocations.md
+
+        Third-party actions SHOULD be pinned to immutable SHAs. CI commands
+        SHOULD call version-controlled task-runner or flake entry points rather
+        than duplicating raw command sequences inline.
+
+    - path: "{lefthook.yml,sgconfig.yml,.opencode/rules/ast-grep/**/*.yml}"
+      instructions: |
+        Guardrail configuration review. Verify that local hooks and ast-grep
+        rules match the architecture and rule files they enforce. Local hooks
+        are developer convenience; CI is the authoritative gate. Do not claim a
+        local hook enforces a rule unless it fails reliably in all documented
+        cases.
+
+    - path: "docs/architecture/**"
+      instructions: |
+        ARCHITECTURE.md is the self-sufficient implementation source of truth.
+        Review for internal consistency, alignment with .opencode/rules/, and
+        clear current-state guidance. Do not require readers to inspect ADRs to
+        understand current architecture.
+
+    - path: "docs/adr/**/*.md"
+      instructions: |
+        ADR review. Apply .opencode/rules/adrs.md. ADRs record historical
+        context, options, rationale, and consequences; they are not active
+        implementation guidance. If an ADR changes current architecture, the
+        PR must also update docs/architecture/ARCHITECTURE.md.
+
+        Accepted ADR bodies are immutable. Changing an accepted ADR beyond
+        supersession metadata is blocking. Adding a new sequential ADR is OK.
+
+    - path: "{CLAUDE.md,.opencode/**/*.md,.claude/**/*.md}"
+      instructions: |
+        Agent, skill, and rule review. Verify consistency with
+        docs/architecture/ARCHITECTURE.md and .opencode/rules/. Apply
+        .opencode/rules/enforcement-claim-language.md to any prose claiming how
+        a check enforces behavior.
+
+        PR review replies must not add automation signatures. Do not manually
+        request bot re-review after pushing fixes unless the user explicitly
+        asks; review bots normally re-run automatically.
+
+    - path: ".coderabbit.yaml"
+      instructions: |
+        CodeRabbit configuration review. This file must reflect the current
+        review surface without making ADRs the source of current guidance.
+        Path instructions, filters, tool configuration, and custom checks must
+        remain consistent with docs/architecture/ARCHITECTURE.md and
+        .opencode/rules/.
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "warning"
+    description:
+      mode: "off"
+
+    custom_checks:
+      - name: "architecture-source-of-truth"
+        mode: "error"
+        instructions: |
+          Current architectural guidance MUST live in
+          docs/architecture/ARCHITECTURE.md and .opencode/rules/. ADRs MUST be
+          historical rationale only.
+
+          FAIL the PR if it adds active architecture guidance only to an ADR, or
+          if it makes ARCHITECTURE.md depend on readers inspecting ADRs to know
+          current practice.
+
+      - name: "no-panics-in-production"
+        mode: "error"
+        instructions: |
+          Production Rust code MUST NOT introduce unwrap(), expect(), panic!(),
+          todo!(), unimplemented!(), or unreachable! for recoverable cases. See
+          .opencode/rules/no-panics-in-production.md.
+
+          Acceptable uses include tests, benches, build.rs, and explicitly
+          documented early experiments.
+
+      - name: "no-hardcoded-user-paths"
+        mode: "error"
+        instructions: |
+          Committed files MUST NOT contain user-specific or machine-specific
+          absolute paths. See .opencode/rules/no-hardcoded-paths.md.
+
+          Examples include /home/<username>/..., /Users/<username>/..., and
+          Windows-style user profile paths.
+
+      - name: "review-reply-hygiene"
+        mode: "warning"
+        instructions: |
+          Review-thread replies should state what changed or why a suggestion
+          was not taken. They MUST NOT include automation signatures. The PR
+          should not manually request bot re-review unless the user explicitly
+          asks for it.
+
+  labeling_instructions: []
+
+  tools:
+    clippy:
+      enabled: true
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    ast-grep:
+      essential_rules: true
+      rule_dirs:
+        - ".opencode/rules/ast-grep"
+
+knowledge_base:
+  opt_out: true
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - ".opencode/skills/**/SKILL.md"
+      - ".opencode/rules/*.md"
+      - "CLAUDE.md"
+      - "docs/architecture/ARCHITECTURE.md"
+  learnings:
+    scope: "local"
+
+chat:
+  auto_reply: true

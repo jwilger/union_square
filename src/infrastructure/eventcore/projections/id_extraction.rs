@@ -232,11 +232,17 @@ mod tests {
         types::{LlmParameters, ModelId, Prompt},
         version::VersionChangeId,
     };
+    use eventcore::StreamId;
+
+    fn stream_id(name: &str) -> StreamId {
+        StreamId::try_new(name.to_string()).unwrap()
+    }
 
     #[test]
     fn test_extract_session_ids_from_session_started() {
         let session_id = SessionId::generate();
         let event = DomainEvent::SessionStarted {
+            stream_id: stream_id("session:test"),
             session_id: session_id.clone(),
             user_id: UserId::generate(),
             application_id: ApplicationId::try_new("test-app".to_string()).unwrap(),
@@ -252,6 +258,7 @@ mod tests {
     fn test_extract_session_ids_from_llm_request() {
         let session_id = SessionId::generate();
         let event = DomainEvent::LlmRequestReceived {
+            stream_id: stream_id("session:test"),
             request_id: RequestId::generate(),
             session_id: session_id.clone(),
             model_version: ModelVersion {
@@ -272,6 +279,7 @@ mod tests {
     fn test_extract_user_ids_from_session_started() {
         let user_id = UserId::generate();
         let event = DomainEvent::SessionStarted {
+            stream_id: stream_id("session:test"),
             session_id: SessionId::generate(),
             user_id: user_id.clone(),
             application_id: ApplicationId::try_new("test-app".to_string()).unwrap(),
@@ -287,6 +295,7 @@ mod tests {
     fn test_extract_application_ids() {
         let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
         let event = DomainEvent::SessionStarted {
+            stream_id: stream_id("session:test"),
             session_id: SessionId::generate(),
             user_id: UserId::generate(),
             application_id: app_id.clone(),
@@ -305,6 +314,7 @@ mod tests {
             model_id: ModelId::try_new("claude-3".to_string()).unwrap(),
         };
         let event = DomainEvent::LlmRequestReceived {
+            stream_id: stream_id("session:test"),
             request_id: RequestId::generate(),
             session_id: SessionId::generate(),
             model_version: model_version.clone(),
@@ -322,6 +332,7 @@ mod tests {
     fn test_extract_request_ids() {
         let request_id = RequestId::generate();
         let event = DomainEvent::LlmRequestStarted {
+            stream_id: stream_id("request:test"),
             request_id: request_id.clone(),
             started_at: Timestamp::now(),
         };
@@ -338,6 +349,7 @@ mod tests {
         let app_id = ApplicationId::try_new("test-app".to_string()).unwrap();
 
         let event = DomainEvent::SessionStarted {
+            stream_id: stream_id("session:test"),
             session_id: session_id.clone(),
             user_id: user_id.clone(),
             application_id: app_id.clone(),
@@ -362,6 +374,7 @@ mod tests {
         };
 
         let event = DomainEvent::VersionChanged {
+            stream_id: stream_id("version:test"),
             change_id: VersionChangeId::generate(),
             session_id: SessionId::generate(),
             from_version: from_version.clone(),
@@ -386,6 +399,7 @@ mod tests {
     fn test_exhaustive_matching_user_created() {
         // Test that UserCreated event doesn't have session_id
         let event = DomainEvent::UserCreated {
+            stream_id: stream_id("user:test"),
             user_id: UserId::generate(),
             email: crate::domain::user::EmailAddress::try_new("test@example.com".to_string())
                 .unwrap(),
@@ -404,6 +418,7 @@ mod tests {
     fn test_exhaustive_matching_llm_response() {
         // Test that LlmResponseReceived doesn't have session_id
         let event = DomainEvent::LlmResponseReceived {
+            stream_id: stream_id("request:test"),
             request_id: RequestId::generate(),
             response_text: crate::domain::types::ResponseText::try_new("response".to_string())
                 .unwrap(),

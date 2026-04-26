@@ -3,11 +3,7 @@
 //! These commands implement the EventCore CommandLogic trait to provide
 //! multi-stream event sourcing for F-score tracking and analytics operations.
 
-use async_trait::async_trait;
-use eventcore::{
-    emit, CommandLogic, CommandResult, ReadStreams, StoredEvent, StreamId, StreamResolver,
-    StreamWrite,
-};
+use eventcore::{CommandError, CommandLogic, NewEvents, StreamId};
 use eventcore_macros::Command;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -151,6 +147,7 @@ mod event_builders {
     use super::*;
 
     pub fn build_f_score_calculated_event(
+        stream_id: StreamId,
         session_id: SessionId,
         model_version: ModelVersion,
         f_score: FScore,
@@ -159,6 +156,7 @@ mod event_builders {
         sample_count: SampleCount,
     ) -> DomainEvent {
         DomainEvent::FScoreCalculated {
+            stream_id,
             session_id,
             model_version,
             f_score,
@@ -169,7 +167,9 @@ mod event_builders {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_application_f_score_calculated_event(
+        stream_id: StreamId,
         session_id: SessionId,
         application_id: ApplicationId,
         model_version: ModelVersion,
@@ -179,6 +179,7 @@ mod event_builders {
         sample_count: SampleCount,
     ) -> DomainEvent {
         DomainEvent::ApplicationFScoreCalculated {
+            stream_id,
             session_id,
             application_id,
             model_version,
@@ -233,40 +234,31 @@ impl FScoreCommand for RecordModelFScore {
     }
 }
 
-#[async_trait]
 impl CommandLogic for RecordModelFScore {
     type State = MetricsState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        state.apply(&event.payload);
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        state.apply(event);
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        _state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         let f_score = self.calculate_f_score();
 
-        emit!(
-            events,
-            &read_streams,
+        events.push(event_builders::build_f_score_calculated_event(
             self.model_stream.clone(),
-            event_builders::build_f_score_calculated_event(
-                self.session_id.clone(),
-                self.model_version.clone(),
-                f_score,
-                self.precision,
-                self.recall,
-                self.sample_count,
-            )
-        );
+            self.session_id.clone(),
+            self.model_version.clone(),
+            f_score,
+            self.precision,
+            self.recall,
+            self.sample_count,
+        ));
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -319,57 +311,44 @@ impl FScoreCommand for RecordApplicationFScore {
     }
 }
 
-#[async_trait]
 impl CommandLogic for RecordApplicationFScore {
     type State = MetricsState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        state.apply(&event.payload);
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        state.apply(event);
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        _state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         let f_score = self.calculate_f_score();
 
         // Emit to application stream
-        emit!(
-            events,
-            &read_streams,
+        events.push(event_builders::build_application_f_score_calculated_event(
             self.application_stream.clone(),
-            event_builders::build_application_f_score_calculated_event(
-                self.session_id.clone(),
-                self.application_id.clone(),
-                self.model_version.clone(),
-                f_score,
-                self.precision,
-                self.recall,
-                self.sample_count,
-            )
-        );
+            self.session_id.clone(),
+            self.application_id.clone(),
+            self.model_version.clone(),
+            f_score,
+            self.precision,
+            self.recall,
+            self.sample_count,
+        ));
 
         // Also emit to model stream for cross-application analysis
-        emit!(
-            events,
-            &read_streams,
+        events.push(event_builders::build_f_score_calculated_event(
             self.model_stream.clone(),
-            event_builders::build_f_score_calculated_event(
-                self.session_id.clone(),
-                self.model_version.clone(),
-                f_score,
-                self.precision,
-                self.recall,
-                self.sample_count,
-            )
-        );
+            self.session_id.clone(),
+            self.model_version.clone(),
+            f_score,
+            self.precision,
+            self.recall,
+            self.sample_count,
+        ));
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -381,8 +360,9 @@ mod tests {
         test_data::{self, f_scores, numeric},
         types::ModelId,
     };
-    use eventcore::{CommandExecutor, EventStore, ExecutionOptions, ReadOptions};
+    use eventcore::RetryPolicy;
     use eventcore_memory::InMemoryEventStore;
+    use eventcore_types::EventStore;
 
     #[tokio::test]
     async fn test_record_model_f_score() {
@@ -401,24 +381,19 @@ mod tests {
             recall,
             SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap(),
         );
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store);
+        let store = InMemoryEventStore::new();
 
-        let result = executor
-            .execute(command.clone(), ExecutionOptions::default())
-            .await;
+        let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
 
-        // Read events from the model stream
-        let stream_data = executor
-            .event_store()
-            .read_streams(&[command.model_stream], &ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(command.model_stream.clone())
             .await
             .unwrap();
-        let events = stream_data.events;
 
         assert_eq!(events.len(), 1);
-        match &events[0].payload {
+        let event = events.iter().next().unwrap();
+        match event {
             DomainEvent::FScoreCalculated {
                 model_version: event_model,
                 f_score,
@@ -435,7 +410,6 @@ mod tests {
                     &SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap()
                 );
 
-                // Verify F-score calculation
                 let expected_f_score = 2.0 * (f_scores::MEDIUM_PRECISION * f_scores::MEDIUM_RECALL)
                     / (f_scores::MEDIUM_PRECISION + f_scores::MEDIUM_RECALL);
                 assert!((f_score.into_inner() - expected_f_score).abs() < 1e-10);
@@ -464,24 +438,18 @@ mod tests {
             recall,
             SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
         );
-        let event_store = InMemoryEventStore::new();
-        let executor = CommandExecutor::new(event_store);
+        let store = InMemoryEventStore::new();
 
-        let result = executor
-            .execute(command.clone(), ExecutionOptions::default())
-            .await;
+        let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
 
-        // Read events from application stream
-        let app_stream_data = executor
-            .event_store()
-            .read_streams(&[command.application_stream], &ReadOptions::default())
+        let app_events = store
+            .read_stream::<DomainEvent>(command.application_stream.clone())
             .await
             .unwrap();
-        let app_events = app_stream_data.events;
 
         assert_eq!(app_events.len(), 1);
-        match &app_events[0].payload {
+        match app_events.iter().next().unwrap() {
             DomainEvent::ApplicationFScoreCalculated {
                 application_id: event_app_id,
                 model_version: event_model,
@@ -489,14 +457,13 @@ mod tests {
                 sample_count,
                 ..
             } => {
-                assert_eq!(event_app_id, &application_id);
-                assert_eq!(event_model, &model_version);
+                assert_eq!(*event_app_id, application_id);
+                assert_eq!(*event_model, model_version);
                 assert_eq!(
-                    sample_count,
-                    &SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap()
+                    *sample_count,
+                    SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap()
                 );
 
-                // Verify F-score calculation
                 let expected_f_score = 2.0 * (f_scores::HIGH_PRECISION * f_scores::GOOD_F_SCORE)
                     / (f_scores::HIGH_PRECISION + f_scores::GOOD_F_SCORE);
                 assert!((f_score.into_inner() - expected_f_score).abs() < 1e-10);
@@ -504,17 +471,14 @@ mod tests {
             _ => panic!("Expected ApplicationFScoreCalculated event"),
         }
 
-        // Read events from model stream (should also have an event)
-        let model_stream_data = executor
-            .event_store()
-            .read_streams(&[command.model_stream], &ReadOptions::default())
+        let model_events = store
+            .read_stream::<DomainEvent>(command.model_stream.clone())
             .await
             .unwrap();
-        let model_events = model_stream_data.events;
 
         assert_eq!(model_events.len(), 1);
         assert!(matches!(
-            model_events[0].payload,
+            model_events.iter().next().unwrap(),
             DomainEvent::FScoreCalculated { .. }
         ));
     }
@@ -528,10 +492,10 @@ mod tests {
         };
         let precision = Precision::try_new(f_scores::HIGH_PRECISION).unwrap();
         let recall = Recall::try_new(f_scores::MEDIUM_PRECISION).unwrap();
-        // Calculate F-score from precision and recall
         let f_score = FScore::from_precision_recall(precision, recall).unwrap();
 
         let event = DomainEvent::FScoreCalculated {
+            stream_id: StreamId::try_new("metrics:test".to_string()).unwrap(),
             session_id: SessionId::generate(),
             model_version: model_version.clone(),
             f_score,
@@ -543,11 +507,9 @@ mod tests {
 
         state.apply(&event);
 
-        // Verify state was updated
         let latest = state.latest_f_score(&model_version);
         assert!(latest.is_some());
         let latest = latest.unwrap();
-        // The F-score should match what was calculated from precision/recall
         assert_eq!(latest.f_score(), f_score);
         assert_eq!(latest.precision(), Some(precision));
         assert_eq!(latest.recall(), Some(recall));
@@ -556,7 +518,6 @@ mod tests {
             SampleCount::try_new(numeric::TOKENS_150 as u64).unwrap()
         );
 
-        // Verify history tracking
         let history = state.f_score_history(&model_version);
         assert!(history.is_some());
         assert_eq!(history.unwrap().len(), 1);

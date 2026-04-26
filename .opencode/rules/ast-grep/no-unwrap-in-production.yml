@@ -1,0 +1,14 @@
+id: no-unwrap-in-production
+language: rust
+severity: error
+message: "unwrap() is forbidden in production code. Use ? or match instead."
+rule:
+  pattern: $X.unwrap()
+constraints:
+  X:
+    not:
+      inside:
+        kind: function_item
+        has:
+          kind: attribute
+          regex: "^#\\[cfg\\(test\\)\\]$"

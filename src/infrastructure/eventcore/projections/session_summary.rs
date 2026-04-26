@@ -4,8 +4,8 @@
 //! across multiple event streams, providing efficient queries for session data.
 
 use crate::domain::events::DomainEvent;
+use crate::domain::metrics::Timestamp;
 use crate::domain::session::{SessionId, SessionStatus};
-use eventcore::{StoredEvent, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -64,8 +64,10 @@ impl SessionSummaryProjection {
 
     /// Apply a single event to the projection state
     /// This is the core projection logic that maintains materialized views
-    pub fn apply_event(&mut self, event: &StoredEvent<DomainEvent>) -> Result<(), ProjectionError> {
-        match &event.payload {
+    pub fn apply_event(&mut self, event: &DomainEvent) -> Result<(), ProjectionError> {
+        let occurred_at = event.occurred_at();
+
+        match event {
             DomainEvent::SessionStarted {
                 session_id,
                 user_id,
@@ -81,8 +83,8 @@ impl SessionSummaryProjection {
                         status: SessionStatus::Active,
                         request_count: 0,
                         total_tokens: 0,
-                        started_at: event.timestamp,
-                        last_activity: event.timestamp,
+                        started_at: occurred_at,
+                        last_activity: occurred_at,
                         ended_at: None,
                     },
                 );
@@ -91,7 +93,7 @@ impl SessionSummaryProjection {
             DomainEvent::LlmRequestReceived { session_id, .. } => {
                 if let Some(summary) = self.state.sessions.get_mut(session_id) {
                     summary.request_count += 1;
-                    summary.last_activity = event.timestamp;
+                    summary.last_activity = occurred_at;
                 }
             }
 
@@ -109,8 +111,8 @@ impl SessionSummaryProjection {
             DomainEvent::SessionEnded { session_id, .. } => {
                 if let Some(summary) = self.state.sessions.get_mut(session_id) {
                     summary.status = SessionStatus::Completed;
-                    summary.ended_at = Some(event.timestamp);
-                    summary.last_activity = event.timestamp;
+                    summary.ended_at = Some(occurred_at);
+                    summary.last_activity = occurred_at;
                 }
             }
 
@@ -121,10 +123,7 @@ impl SessionSummaryProjection {
 
     /// Apply a batch of events to the projection
     /// This is used for rebuilding or updating projections
-    pub fn apply_events(
-        &mut self,
-        events: Vec<StoredEvent<DomainEvent>>,
-    ) -> Result<(), ProjectionError> {
+    pub fn apply_events(&mut self, events: Vec<DomainEvent>) -> Result<(), ProjectionError> {
         for event in events {
             self.apply_event(&event)?;
         }

@@ -13,8 +13,40 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      deps: ${{ steps.filter.outputs.deps }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+      id: filter
+      with:
+        filters: |
+          rust:
+            - 'src/**'
+            - 'tests/**'
+            - 'benches/**'
+            - 'Cargo.toml'
+            - 'Cargo.lock'
+            - 'rust-toolchain.toml'
+            - '.cargo/**'
+            - 'scripts/**'
+            - 'Dockerfile'
+            - '.github/workflows/ci.yml'
+          deps:
+            - 'Cargo.toml'
+            - 'Cargo.lock'
+            - '.github/workflows/ci.yml'
+
   test:
     name: Test Suite
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     services:
@@ -71,6 +103,8 @@ jobs:
 
   security:
     name: Security Audit
+    needs: changes
+    if: needs.changes.outputs.deps == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -91,6 +125,8 @@ jobs:
 
   coverage:
     name: Code Coverage
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     services:
@@ -136,6 +172,8 @@ jobs:
 
   build:
     name: Build
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -156,6 +194,8 @@ jobs:
 
   cross-platform:
     name: Cross-platform Build
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -174,9 +214,10 @@ jobs:
     - name: Build
       run: cargo build --workspace
 
-  # Run quick performance validation on every PR
   performance-check:
     name: Performance Validation
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -194,3 +235,180 @@ jobs:
 
     - name: Run quick benchmarks
       run: cargo bench --bench proxy_performance -- --quick --noplot
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    needs: changes
+    if: |
+      needs.changes.outputs.rust == 'true' && (
+        github.event_name == 'push' ||
+        (github.event_name == 'pull_request' &&
+         (startsWith(github.head_ref, 'release-plz-') ||
+          github.event.pull_request.user.login == 'github-actions[bot]'))
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      MAX_LATENCY_MS: 5
+      MAX_REGRESSION_PERCENT: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+      with:
+        key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-criterion
+      run: |
+        cargo install cargo-criterion --locked || true
+        cargo install critcmp --locked || true
+
+    - name: Run benchmark validation tests
+      run: cargo test --test benchmark_validation
+
+    - name: Get baseline benchmark results
+      if: github.event_name == 'pull_request'
+      run: |
+        git fetch origin ${{ github.base_ref }}
+        git checkout origin/${{ github.base_ref }}
+        cargo bench --bench proxy_performance -- --save-baseline base --sample-size 50
+        git checkout -
+
+    - name: Run performance benchmarks
+      run: |
+        cargo bench --bench proxy_performance -- --save-baseline current --sample-size 50
+
+    - name: Compare benchmark results
+      if: github.event_name == 'pull_request'
+      id: benchmark_comparison
+      run: |
+        critcmp base current > comparison.txt || true
+
+        REGRESSION_FOUND=false
+
+        while IFS= read -r line; do
+          if echo "$line" | grep -E '\+[0-9]+\.[0-9]+%' > /dev/null; then
+            PERCENT=$(echo "$line" | grep -oE '\+[0-9]+\.[0-9]+' | tr -d '+')
+            if awk -v p="$PERCENT" -v t="$MAX_REGRESSION_PERCENT" 'BEGIN { exit !(p >= t) }'; then
+              echo "Regression found: +${PERCENT}% exceeds threshold of ${MAX_REGRESSION_PERCENT}%"
+              REGRESSION_FOUND=true
+            fi
+          fi
+        done < comparison.txt
+
+        if [ "$REGRESSION_FOUND" = true ]; then
+          echo "Performance regression detected!"
+          echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+        else
+          echo "No significant regression detected"
+          echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+        fi
+
+        echo '```' > benchmark_report.md
+        cat comparison.txt >> benchmark_report.md
+        echo '```' >> benchmark_report.md
+
+    - name: Run memory profiling
+      run: |
+        cargo bench --bench memory_profiling > memory_profile.txt 2>&1 || true
+
+    - name: Post benchmark results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+
+          let comment = '## 📊 Performance Benchmark Results\n\n';
+
+          try {
+            const comparison = fs.readFileSync('benchmark_report.md', 'utf8');
+            comment += '### Benchmark Comparison (base vs current)\n';
+            comment += comparison + '\n\n';
+          } catch (e) {
+            comment += '### Benchmark Results\n';
+            comment += 'No baseline comparison available.\n\n';
+          }
+
+          try {
+            const memProfile = fs.readFileSync('memory_profile.txt', 'utf8');
+            const lines = memProfile.split('\n').slice(-20).join('\n');
+            comment += '### Memory Profile Summary\n';
+            comment += '```\n' + lines + '\n```\n\n';
+          } catch (e) {
+            console.log('No memory profile available');
+          }
+
+          const regressionDetected = '${{ steps.benchmark_comparison.outputs.REGRESSION_DETECTED }}' === 'true';
+          if (regressionDetected) {
+            comment += '⚠️ **Performance regression detected!** Please review the benchmark comparison above.\n';
+            comment += 'Regressions exceeding ' + process.env.MAX_REGRESSION_PERCENT + '% require justification.\n';
+          } else {
+            comment += '✅ **No significant performance regressions detected.**\n';
+          }
+
+          comment += '\n<sub>All latency requirements (<' + process.env.MAX_LATENCY_MS + 'ms) are enforced by the test suite.</sub>';
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Performance Benchmark Results')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment,
+            });
+          }
+
+    - name: Fail if regression detected
+      if: steps.benchmark_comparison.outputs.REGRESSION_DETECTED == 'true'
+      run: |
+        echo "Performance regression detected! See PR comment for details."
+        exit 1
+
+  ci-success:
+    name: CI Success
+    needs: [changes, test, security, coverage, build, cross-platform, performance-check, performance-benchmarks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Verify no required job failed
+      run: |
+        for result in ${{ join(needs.*.result, ' ') }}; do
+          if [ "$result" = "failure" ]; then
+            echo "Job failed with result: $result"
+            exit 1
+          fi
+        done
+        echo "All required jobs passed or were skipped."

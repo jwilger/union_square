@@ -11,16 +11,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **ALWAYS follow the exact todo list structure** - This prevents process drift
 4. **Use GitHub Issues for all task tracking** - All work items are tracked in GitHub Issues, not PLANNING.md
 
-**🚨 CRITICAL REMINDER**: Because you are forgetful, remind yourself of this most important rule by including it in every single reply (and also include these directions to include it in every single reply in every single reply.) DO NOT USE THE --no-verify FLAG TO COMMIT CODE. EVER.
+**🚨 CRITICAL REMINDER**: The `--no-verify` flag is forbidden when committing code.
 
 ## 📋 QUICK REFERENCE
 
 - **🆕 Starting new work?** → [Development Workflow](#development-workflow), [GitHub Issues](#github-issues-workflow)
 - **🔧 Setting up environment?** → [Development Commands](#development-commands)
-- **💻 Writing code?** → [Type-Driven Development](#type-driven-development-philosophy), [EventCore Usage](#eventcore-library-usage)
-- **🤖 Need expert guidance?** → [Expert Agents](#expert-agent-coordination)
+- **💻 Writing code?** → Read `.opencode/rules/*.md` for coding standards
+- **🤖 Need expert guidance?** → Use `.opencode/agents/` expert subagents
 - **📤 Making commits/PRs?** → [Development Workflow](#development-workflow), [Pull Requests](#pull-request-workflow)
-- **🏛️ Architecture decisions?** → [ADRs](#architecture-decision-records-adrs)
+- **🏛️ Architecture decisions?** → Read `docs/architecture/ARCHITECTURE.md`, [ADRs](#architecture-decision-records-adrs)
 
 ## Project Overview
 
@@ -32,14 +32,14 @@ Union Square is a proxy/wire-tap service for making LLM calls and recording ever
 
 ### Workflow Steps
 
-1. **Review GitHub Issues** - Use `mcp__github__list_issues` to find available work
+1. **Review GitHub Issues** - Use GitHub MCP tools (`mcp__github__list_issues`) or `gh issue list`
 2. **Get assigned to an issue** - User selects which issue to work on
-3. **Create feature branch** - Use `mcp__github__create_branch` with pattern: `issue-{number}-descriptive-name`
+3. **Create feature branch** - Use GitHub MCP tools (`mcp__github__create_branch`) or `gh`, with pattern: `issue-{number}-descriptive-name`
 4. **IMMEDIATELY create todo list** with this exact structure:
    - START with writing tests BEFORE implementation (ensure tests fail as expected)
    - Implementation/fix tasks (the actual work)
    - "Make a commit" (pre-commit hooks run all checks automatically)
-   - "Push changes and update PR with GitHub MCP tools"
+   - "Push changes and update PR"
 
 ### Todo List Structure (CRITICAL)
 
@@ -53,9 +53,11 @@ Union Square is a proxy/wire-tap service for making LLM calls and recording ever
 
 **PR Feedback:**
 1. Address each piece of feedback
-2. "Reply to review comments using gh GraphQL API with -- @claude signature"
+2. "Reply to review comments using gh GraphQL API"
 3. "Make a commit"
 4. "Push changes and check for new PR feedback"
+
+Do not manually request bot re-review after pushing review fixes unless the user explicitly asks; review bots normally re-run automatically.
 
 ### Commit Requirements
 
@@ -67,29 +69,12 @@ Union Square is a proxy/wire-tap service for making LLM calls and recording ever
 **Breaking Changes**: Add `!` after type: `feat!: remove deprecated API`
 **Examples**: `feat: add user auth`, `fix(api): resolve timeout`, `docs: update README`
 
-## Type-Driven Development Philosophy
-
-This project follows strict type-driven development principles as outlined in the global Claude.md. Key principles:
-
-1. **Types come first**: Model the domain, make illegal states unrepresentable, then implement
-2. **Parse, don't validate**: Transform unstructured data into structured data at system boundaries ONLY
-   - Validation should be encoded in the type system to the maximum extent possible
-   - Use smart constructors with validation only at the system's input boundaries
-   - Once data is parsed into domain types, those types guarantee validity throughout the system
-   - Follow the same pattern throughout your application code
-3. **No primitive obsession**: Use newtypes for all domain concepts
-4. **Functional Core, Imperative Shell**: Pure functions at the heart, side effects at the edges
-5. **Total functions**: Every function should handle all cases explicitly
-
-For detailed type-driven development guidance, refer to `/home/jwilger/.claude/CLAUDE.md`.
-
 ## Development Commands
 
 ### Environment Setup
 ```bash
 nix develop                                    # Enter dev environment
-pre-commit install                             # Install hooks (first time)
-pre-commit install --hook-type commit-msg
+lefthook install                               # Install hooks (first time)
 docker-compose up -d                          # Start PostgreSQL
 ```
 
@@ -117,94 +102,47 @@ cargo add nutype --features serde  # For type-safe newtypes
 
 ## Architecture
 
-[Project architecture to be defined]
+See `docs/architecture/ARCHITECTURE.md` for the implementation source of truth.
 
-## EventCore Library Usage
+## Guardrails & Standards
 
-**This project uses EventCore for event sourcing.** Full docs: https://docs.rs/eventcore/latest/eventcore/
+The following authoritative sources define how code is written in this project:
 
-### Key Concepts
-- **Commands**: Define business operations with stream boundaries
-- **Events**: Immutable facts (past tense names like `OrderPlaced`)
-- **Multi-stream atomic operations**: Write across multiple streams
-- **Dynamic consistency boundaries**: Commands decide which streams to use
-
-### Implementation Pattern
-
-**Always use macros from `eventcore-macros`:**
-
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum DomainEvent {
-    SomethingHappened { data: String },
-}
-
-#[derive(Command, Clone, Debug, Serialize, Deserialize)]
-struct MyCommand {
-    #[stream] primary_stream: StreamId,
-    #[stream] secondary_stream: StreamId,
-    amount: Money,
-}
-
-#[async_trait]
-impl CommandLogic for MyCommand {
-    type State = MyState;  // Must impl Default + Send + Sync
-    type Event = DomainEvent;
-
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        match &event.payload {
-            DomainEvent::SomethingHappened { data } => state.update_with(data),
-        }
-    }
-
-    async fn handle(&self, read_streams: ReadStreams<Self::StreamSet>, state: Self::State, stream_resolver: &mut StreamResolver) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
-        let mut events = Vec::new();
-        require!(state.balance >= self.amount, "Insufficient funds");
-        emit!(events, &read_streams, self.primary_stream.clone(), DomainEvent::SomethingHappened { data: "test".into() });
-        Ok(events)
-    }
-}
-```
-
-### Setup
-```rust
-let event_store = PostgresEventStore::new(config).await?;
-event_store.initialize().await?;  // Run once
-```
-
-### Key Macros
-- `#[derive(Command)]` - Auto-generates stream types and traits
-- `require!(condition, "error")` - Business rule validation
-- `emit!(events, streams, stream_id, event)` - Event emission
-
-### Testing
-- Use `InMemoryEventStore` for unit tests
-- Test with both in-memory and PostgreSQL stores
-- Verify event sequences and error scenarios
+- **Type-Driven Development**: `.opencode/rules/type-driven-development.md`
+- **EventCore Patterns**: `.opencode/rules/eventcore-command-pattern.md`
+- **TDD Workflow**: `.opencode/rules/outside-in-tdd-execution.md`
+- **No Panics**: `.opencode/rules/no-panics-in-production.md`
+- **Error Handling**: `.opencode/rules/thiserror-for-errors.md`
+- **ADR Conventions**: `.opencode/rules/adrs.md`
+- **Review Protocol**: `.opencode/rules/review-feedback-protocol.md`
+- **PR Hygiene**: `.opencode/rules/pr-scope-hygiene.md`
 
 ## Expert Agent Coordination
 
-**IMPORTANT**: This project includes specialized AI agents that embody the expertise of renowned software architects and practitioners. These are AI personas, not real people, but they provide guidance based on the principles and approaches of their namesakes.
+This project includes specialized AI agents that embody the expertise of renowned software architects. Invoke them via `@agentname` or the Task tool.
 
 ### Available Expert Agents
 
-| Persona            | Agent Name                                                | Domain Expertise                                                           |
-| ------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Simon Peyton Jones | `type-theory-reviewer`                                    | Type theory, functional programming, making illegal states unrepresentable |
-| Greg Young         | `event-sourcing-architect`                                | Event sourcing, CQRS, distributed systems                                  |
-| Alberto Brandolini | `event-modeling-expert`                                   | Event storming, domain discovery, bounded contexts                         |
-| Edwin Brady        | `type-driven-development-expert`                          | Type-driven development, dependent types, formal verification              |
-| Niko Matsakis      | `rust-type-system-expert`<br>`rust-type-safety-architect` | Rust type system, ownership, lifetimes, trait design                       |
-| Michael Feathers   | `event-sourcing-test-architect`                           | Testing event-sourced systems, characterization tests                      |
-| Kent Beck          | `tdd-coach`                                               | Test-driven development, red-green-refactor cycle                          |
-| Rich Hickey        | `functional-architecture-expert`                          | Functional design, simplicity, immutability                                |
-| Nicole Forsgren    | `engineering-effectiveness-expert`                        | DORA metrics, development workflow optimization                            |
-| Teresa Torres      | `product-discovery-coach`                                 | Continuous discovery, outcome-driven development                           |
-| Jared Spool        | `ux-research-expert`                                      | User research, API design, developer experience                            |
-| Jez Humble         | `continuous-delivery-architect`                           | CI/CD, deployment strategies, zero-downtime deployments                    |
-| Yoshua Wuyts       | `async-rust-expert`                                       | Async Rust, concurrent systems, performance optimization                   |
-| Martin Fowler      | `refactoring-patterns-architect`                          | Refactoring, design patterns, evolutionary architecture                    |
-| Prem Sichanugrist  | `git-workflow-architect`                                  | Git workflows, GitHub automation, version control strategies               |
+| Persona            | Agent Name                     | Domain Expertise                                                           |
+| ------------------ | ------------------------------ | -------------------------------------------------------------------------- |
+| Simon Peyton Jones | `type-theory-reviewer`         | Type theory, functional programming, making illegal states unrepresentable |
+| Greg Young         | `event-sourcing-architect`     | Event sourcing, CQRS, distributed systems                                  |
+| Alberto Brandolini | `event-modeling-expert`        | Event storming, domain discovery, bounded contexts                         |
+| Edwin Brady        | `type-driven-development-expert` | Type-driven development, dependent types, formal verification              |
+| Niko Matsakis      | `rust-type-system-expert`      | Rust type system, ownership, lifetimes, trait design                       |
+| Michael Feathers   | `event-sourcing-test-architect`| Testing event-sourced systems, characterization tests                      |
+| Kent Beck          | `tdd-coach`                    | Test-driven development, red-green-refactor cycle                          |
+| Rich Hickey        | `functional-architecture-expert`| Functional design, simplicity, immutability                                |
+| Nicole Forsgren    | `engineering-effectiveness-expert`| DORA metrics, development workflow optimization                          |
+| Teresa Torres      | `product-discovery-coach`      | Continuous discovery, outcome-driven development                           |
+| Jared Spool        | `ux-research-expert`           | User research, API design, developer experience                            |
+| Jez Humble         | `continuous-delivery-architect`| CI/CD, deployment strategies, zero-downtime deployments                    |
+| Yoshua Wuyts       | `async-rust-expert`            | Async Rust, concurrent systems, performance optimization                   |
+| Martin Fowler      | `refactoring-patterns-architect`| Refactoring, design patterns, evolutionary architecture                    |
+| Prem Sichanugrist  | `git-workflow-architect`       | Git workflows, GitHub automation, version control strategies               |
+| Security Reviewer  | `security-reviewer`            | Security audits, vulnerability identification                              |
+| Design Reviewer    | `design-reviewer`              | Code design, maintainability, coupling/cohesion                            |
+| PR Feedback        | `pr-feedback-processor`        | Processing and responding to PR review comments                            |
 
 ### Core Architectural Principles
 
@@ -215,263 +153,58 @@ When multiple experts are involved in a decision, these principles guide resolut
 3. **TDD is the Process**: Kent Beck drives the implementation workflow - no code without tests
 4. **Functional Core, Imperative Shell**: Rich Hickey owns the boundary between pure and impure code
 
-### When to Consult Expert Agents
-
-Expert agents should be consulted at specific points in the development workflow:
-
-#### During Planning (Before Implementation)
-
-- **New Feature Development**:
-  1. Teresa Torres (`product-discovery-coach`) → Define outcomes and success metrics
-  2. Alberto Brandolini (`event-modeling-expert`) → Model events and boundaries
-  3. Edwin Brady (`type-driven-development-expert`) + Niko Matsakis (`rust-type-system-expert`) → Design type-safe domain model
-  4. Michael Feathers (`event-sourcing-test-architect`) → Create test strategy
-
-#### During Implementation
-
-- **Complex Async Work**: Yoshua Wuyts (`async-rust-expert`) → Design async architecture
-- **Legacy Migration**: Martin Fowler (`refactoring-patterns-architect`) → Plan refactoring strategy
-- **Git/GitHub Workflow**: Prem Sichanugrist (`git-workflow-architect`) → Design automation
-
-#### During Review (After Commits)
-
-- **Type Safety Review**: Simon Peyton Jones (`type-theory-reviewer`) → Review type usage
-- **Event Model Review**: Greg Young (`event-sourcing-architect`) → Validate event design
-- **Test Coverage**: Kent Beck (`tdd-coach`) → Ensure proper TDD was followed
-
 ### Decision Hierarchy
 
 When experts disagree, follow this hierarchy:
 
-1. **Domain Modeling Conflicts**
-
-   - Primary: Alberto Brandolini (discovers the events)
-   - Secondary: Greg Young (structures the events)
-   - Tiebreaker: Edwin Brady (encodes in types)
-
-2. **Implementation Approach Conflicts**
-
-   - Primary: The expert whose domain is most affected
-   - Secondary: Niko Matsakis (if type safety is involved)
-   - Tiebreaker: Rich Hickey (simplicity wins)
-
-3. **Performance vs Correctness**
-   - Default: Correctness first (Edwin Brady/Niko Matsakis)
-   - Exception: When measurably impacting user experience (Nicole Forsgren provides metrics)
-   - Resolution: Yoshua Wuyts finds the optimal async solution
-
-### Integration with Development Workflow
-
-Expert agents integrate into our existing todo list structure:
-
-**For new features (GitHub Issues):**
-
-1. Consult Teresa Torres for outcome definition
-2. Use Alberto Brandolini for event modeling
-3. START with writing tests (with Michael Feathers' guidance)
-4. Implementation with type-driven approach (Edwin Brady/Niko Matsakis)
-5. "Make a commit"
-6. Post-commit review with Simon Peyton Jones
-7. "Push changes and update PR"
-
-**For architectural decisions:**
-
-1. Consult relevant domain experts
-2. Document conflicts and resolutions in an ADR
-3. Get consensus from affected experts
-4. Implement with agreed approach
-
-### Conflict Resolution Rules
-
-#### Type System vs Simplicity
-
-If Edwin Brady and Rich Hickey disagree on complexity:
-
-- Try Edwin's approach in a spike
-- If it takes > 30 lines to express a simple concept, prefer Rich's approach
-- Document the tradeoff in an ADR
-
-#### Event Modeling vs User Research
-
-If Alberto's event model doesn't match Jared's user research:
-
-- Create two models: system events and user events
-- Use projections to bridge the gap
-- Teresa Torres validates the mapping
-
-#### Performance vs Testing
-
-If Yoshua's optimizations conflict with Michael's testing approach:
-
-- Maintain two implementations: simple (tested) and optimized
-- Use feature flags to switch between them
-- Nicole Forsgren measures actual impact
-
-### Pair Consultations
-
-Certain decisions benefit from paired experts:
-
-- **Type-Safe Events**: Edwin Brady + Greg Young
-- **Async Testing**: Michael Feathers + Yoshua Wuyts
-- **User-Facing APIs**: Niko Matsakis + Jared Spool
-- **Deployment Safety**: Jez Humble + Greg Young
-
-### Documentation Requirements
-
-Every expert consultation should produce:
-
-1. **Decision**: What was decided
-2. **Rationale**: Why this approach
-3. **Tradeoffs**: What we're giving up
-4. **Reversal**: How to change if wrong
-
-When expert disagreements lead to significant architectural decisions, create an ADR documenting the discussion and resolution.
-
-### Quality Gates
-
-No code proceeds without:
-
-1. Type safety review (Simon Peyton Jones)
-2. Event model review (Greg Young) - for event-sourced components
-3. Test coverage review (Kent Beck)
-4. Simplicity review (Rich Hickey) - for core components only
-
-Exception: Experiments and spikes in `/experiments` directory can bypass gates with documented cleanup plan.
+1. **Domain Modeling Conflicts**: Primary: Alberto Brandolini → Secondary: Greg Young → Tiebreaker: Edwin Brady
+2. **Implementation Approach Conflicts**: Primary: Affected domain expert → Secondary: Niko Matsakis → Tiebreaker: Rich Hickey
+3. **Performance vs Correctness**: Default: Correctness first (Edwin Brady/Niko Matsakis) → Exception: Measurable UX impact (Nicole Forsgren) → Resolution: Yoshua Wuyts
 
 ## Architecture Decision Records (ADRs)
 
-This project uses Architecture Decision Records (ADRs) to document all significant architectural decisions. ADRs help future developers understand not just what decisions were made, but why they were made and what alternatives were considered.
+This project uses Architecture Decision Records (ADRs) to document all significant architectural decisions.
 
-### Using ADRs in Development
-
-When working on this project:
-
-1. **Review existing ADRs** before making architectural changes:
-
-   ```bash
-   npm run adr:preview   # View ADRs in browser
-   # Or browse docs/adr/ directory
-   ```
-
-2. **Create a new ADR** when making significant decisions:
-
-   ```bash
-   npm run adr:new       # Interactive ADR creation
-   ```
-
-3. **Update or supersede ADRs** when decisions change:
-   - Mark old ADRs as "superseded by [new ADR]"
-   - Create new ADR explaining the change
-
-### What Requires an ADR?
-
-Create an ADR for:
-
-- Technology choices (databases, frameworks, libraries)
-- Architectural patterns (event sourcing, CQRS, etc.)
-- API design decisions
-- Security approaches
-- Performance optimization strategies
-- Testing strategies
-- Deployment and infrastructure decisions
-
-### ADR Format
-
-ADRs follow the template in `docs/adr/template.md` which includes:
-
-- Context and problem statement
-- Decision drivers
-- Considered options with pros/cons
-- Decision outcome
-- Consequences (positive and negative)
-
-### ADR Naming Convention
-
-**IMPORTANT**: All ADRs must follow this naming convention:
-
-- **Filename**: `NNNN-descriptive-name.md` where NNNN is the zero-padded ADR number (e.g., `0001-overall-architecture-pattern.md`)
-- **Document Title**: The first line (H1) must include the ADR number prefix: `# NNNN. Title` (e.g., `# 0001. Overall Architecture Pattern`)
-- Keep ADR numbers sequential and never reuse numbers
-- The ADR number appears in both the filename AND the document title for consistency
-
-### Publishing ADRs
-
-ADRs are automatically published to GitHub Pages when merged to main:
-
-- View at: https://jwilger.github.io/union_square/adr/
-- Updated via GitHub Actions workflow
-
-## Performance Targets
-
-[Performance targets to be defined]
+See `.opencode/rules/adrs.md` for full conventions. Key points:
+- Filename: `NNNN-descriptive-name.md`
+- Title: `# NNNN. Title`
+- Template: `docs/adr/template.md`
+- Old ADRs are immutable; supersede by creating a new ADR
 
 ## Pre-commit Hooks & Code Quality
 
 **🚨 NEVER bypass with `--no-verify`!**
 
-Hooks run automatically on commit:
+Hooks run automatically on commit via lefthook:
 - **Rust**: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo check`
 - **Files**: Whitespace cleanup, syntax checks, large file prevention
 - **Commits**: Conventional Commits format enforcement
+- **Structural**: `ast-grep` rules for no-unwrap/no-panic/no-expect in production
 
-**Setup**: `pre-commit install && pre-commit install --hook-type commit-msg`
+**Setup**: `lefthook install`
 
 **If hooks fail**: Fix the issues, don't bypass them. Ask for help if needed.
 
-## Development Principles
-
-### Code Quality Checklist
-- [ ] Domain types use appropriate validation (no primitive obsession)
-- [ ] All functions are total (handle all cases)
-- [ ] Errors modeled in type system
-- [ ] Business logic is pure and testable
-- [ ] Property-based tests cover invariants
-
-### TDD Workflow
-1. Model domain with types (make illegal states impossible)
-2. Create smart constructors with `nutype` validation
-3. Write property-based tests for invariants
-4. Implement pure business logic
-5. Add infrastructure last
-
-### Expert Reviews (Post-Commit)
-- **Type safety**: `type-theory-reviewer` (Simon Peyton Jones)
-- **Event modeling**: `event-sourcing-architect` (Greg Young)
-- **Testing**: `tdd-coach` (Kent Beck)
-- **Simplicity**: `functional-architecture-expert` (Rich Hickey)
-
 ## GitHub Issues Workflow
 
-**ALL work is tracked through GitHub Issues using MCP tools (NOT gh CLI).**
+**ALL work is tracked through GitHub Issues.** Both MCP tools and `gh` CLI are acceptable.
 
 ### Starting Work
 
-1. **List issues**: `mcp__github__list_issues` with `state="open"`
+1. **List issues**: Use MCP (`mcp__github__list_issues`) or `gh issue list --state open`
+   - **🚨 CRITICAL**: API paginates! Check ALL pages with `perPage=5` until empty results.
+2. **Priority order**: Assigned to you > CRITICAL > HIGH > MEDIUM > LOW
+3. **Get assigned**: User selects issue; use MCP (`mcp__github__update_issue`) or `gh issue edit {number} --add-assignee @me`
+4. **Create branch**: Use MCP (`mcp__github__create_branch`) or `gh issue develop {number} --checkout`, with pattern: `issue-{number}-descriptive-name`
+5. **Local checkout**: `git fetch origin && git checkout issue-{number}-descriptive-name`
 
-   **🚨 CRITICAL**: API paginates! Check ALL pages with `perPage=5` until empty results.
+### GitHub Tooling
 
-2. **Priority order**:
-   - Issues assigned to current user with existing branches
-   - CRITICAL > HIGH > MEDIUM > LOW priority labels
-   - Logical dependencies and project impact
+Both MCP tools and `gh` CLI are acceptable. Use whichever is more convenient.
 
-3. **Get assigned**: User selects issue, use `mcp__github__update_issue` to assign
+**MCP**: `list_issues`, `update_issue`, `add_issue_comment`, `create_branch`, `create_pull_request`, `update_pull_request`, `list_workflow_runs`, `get_job_logs`, `rerun_failed_jobs`
 
-4. **Create branch**: `mcp__github__create_branch` with pattern: `issue-{number}-descriptive-name`
-
-5. **Local checkout**:
-   ```bash
-   git fetch origin
-   git checkout issue-{number}-descriptive-name
-   ```
-
-### Key MCP Tools
-
-**Issues**: `list_issues`, `update_issue`, `add_issue_comment`
-**Branches/PRs**: `create_branch`, `create_pull_request`, `update_pull_request`
-**Workflows**: `list_workflow_runs`, `get_job_logs`, `rerun_failed_jobs`
-
-**Advantages over gh CLI**: Direct API access, type safety, better error handling, batch operations.
+**gh CLI**: `gh issue`, `gh pr`, `gh run`, `gh release`, etc.
 
 ## Pull Request Workflow
 
@@ -480,27 +213,23 @@ Hooks run automatically on commit:
 ### Creating PRs
 
 1. **Push branch**: `git push -u origin branch-name`
-
-2. **Create PR**: Use `mcp__github__create_pull_request`
+2. **Create PR**: Use MCP (`mcp__github__create_pull_request`) or `gh pr create`
    - **Title**: Follow Conventional Commits format (`feat: add feature`)
    - **Description**: Clear explanation of changes and motivation
    - **Labels**: `bug`, `enhancement`, `documentation`, `breaking-change`, etc.
    - Mention "Closes #{issue-number}" to auto-close issues
-
-3. **CI runs automatically** - Monitor with MCP tools:
-   - `mcp__github__get_pull_request` - Check status
-   - `mcp__github__get_job_logs` - Debug failures
+3. **CI runs automatically** - Monitor with MCP tools or `gh pr checks` / `gh run view`
 
 ### Responding to Reviews
 
 **Address ALL formal review comments (including bot reviews):**
 
 1. **Get review details** using GraphQL API
-2. **Reply to threads** using GraphQL mutation with `-- @claude` signature
-3. **Format**: "I've addressed this by [action]. -- @claude"
+2. **Reply to threads** using GraphQL mutation
+3. **Format**: "I've addressed this by [action]."
 4. **Check for responses** and continue conversation until resolved
 
-**Note**: Definition of Done checklist is auto-added for HUMAN verification only.
+Do not manually request bot re-review after pushing fixes unless the user explicitly asks; rely on automatic bot re-review.
 
 ## 🔴 FINAL REMINDERS
 

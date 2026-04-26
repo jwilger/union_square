@@ -1,0 +1,12 @@
+id: no-raw-primitive-domain-state
+language: rust
+severity: warning
+message: "Avoid using raw primitives for domain state. Consider newtypes with nutype."
+rule:
+  pattern: |
+    struct $NAME {
+      $FIELD: $TYPE,
+    }
+constraints:
+  TYPE:
+    regex: "^String$|^i32$|^i64$|^f32$|^f64$|^u32$|^u64$|^bool$"

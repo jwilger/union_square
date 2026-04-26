@@ -10,8 +10,9 @@ use crate::proxy::types::{
     RequestId, RequestUri, SessionId as ProxySessionId, TargetUrl,
 };
 use chrono::Utc;
-use eventcore::{CommandExecutor, EventStore, ExecutionOptions, StreamId};
+use eventcore::{RetryPolicy, StreamId};
 use eventcore_memory::InMemoryEventStore;
+use eventcore_types::EventStore;
 use proptest::prelude::*;
 use std::sync::Arc;
 
@@ -60,10 +61,9 @@ mod test_helpers {
         }
     }
 
-    /// Create a test command executor with in-memory store
-    pub fn create_test_executor() -> Arc<CommandExecutor<InMemoryEventStore<DomainEvent>>> {
-        let event_store = InMemoryEventStore::new();
-        Arc::new(CommandExecutor::new(event_store))
+    /// Create a test in-memory event store
+    pub fn create_test_store() -> InMemoryEventStore {
+        InMemoryEventStore::new()
     }
 
     /// Create a valid OpenAI request body
@@ -104,7 +104,7 @@ mod concurrent_processing {
 
     #[tokio::test]
     async fn test_concurrent_event_processing_maintains_order() {
-        let executor = create_test_executor();
+        let store = Arc::new(create_test_store());
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -137,8 +137,10 @@ mod concurrent_processing {
         let handles: Vec<_> = commands
             .into_iter()
             .map(|cmd| {
-                let exec = executor.clone();
-                tokio::spawn(async move { exec.execute(cmd, ExecutionOptions::default()).await })
+                let store = Arc::clone(&store);
+                tokio::spawn(async move {
+                    eventcore::execute(&*store, cmd, RetryPolicy::default()).await
+                })
             })
             .collect();
 
@@ -154,17 +156,17 @@ mod concurrent_processing {
         // Verify events are in correct order
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
         // Should have at least one event (RequestReceived)
-        assert!(!events.events.is_empty());
+        assert!(!events.is_empty());
 
         // Verify the first event is RequestReceived
-        if let DomainEvent::LlmRequestReceived { .. } = &events.events[0].payload {
+        let first_event = events.iter().next().unwrap();
+        if let DomainEvent::LlmRequestReceived { .. } = first_event {
             // Success
         } else {
             panic!("Expected first event to be LlmRequestReceived");
@@ -173,17 +175,17 @@ mod concurrent_processing {
 
     #[tokio::test]
     async fn test_concurrent_writes_to_different_streams() {
-        let executor = create_test_executor();
+        let store = Arc::new(create_test_store());
         let num_requests = 10;
 
         // Create multiple concurrent requests for different sessions
         let handles: Vec<_> = (0..num_requests)
             .map(|_| {
-                let exec = executor.clone();
+                let store = Arc::clone(&store);
                 tokio::spawn(async move {
                     let audit_event = create_test_audit_event(request_received_event());
                     let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-                    exec.execute(command, ExecutionOptions::default()).await
+                    eventcore::execute(&*store, command, RetryPolicy::default()).await
                 })
             })
             .collect();
@@ -204,16 +206,13 @@ mod event_store_failures {
 
     #[tokio::test]
     async fn test_command_execution_with_retry_options() {
-        // Use the in-memory executor which doesn't fail
-        let executor = create_test_executor();
+        // Use the in-memory store which doesn't fail
+        let store = create_test_store();
 
         let audit_event = create_test_audit_event(request_received_event());
         let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
 
-        // Execute with retry options
-        let options = ExecutionOptions::default();
-
-        let result = executor.execute(command, options).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
 
         // Should succeed
         assert!(result.is_ok());
@@ -238,7 +237,7 @@ mod malformed_events {
 
     #[tokio::test]
     async fn test_malformed_request_body_uses_fallback() {
-        let executor = create_test_executor();
+        let store = create_test_store();
 
         // Create command with malformed JSON body
         let malformed_body = b"{ invalid json }";
@@ -247,24 +246,24 @@ mod malformed_events {
             .unwrap()
             .with_body(malformed_body);
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify event was created with fallback values
         let session_stream =
             StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
+        let first_event = events.iter().next().unwrap();
         if let DomainEvent::LlmRequestReceived {
             model_version,
             prompt,
             ..
-        } = &events.events[0].payload
+        } = first_event
         {
             assert_eq!(model_version.model_id.as_ref(), "unknown-model");
             assert!(prompt.as_ref().contains("Failed to parse"));
@@ -275,20 +274,20 @@ mod malformed_events {
 
     #[tokio::test]
     async fn test_empty_request_body_uses_fallback() {
-        let executor = create_test_executor();
+        let store = create_test_store();
 
         let audit_event = create_test_audit_event(request_received_event());
         let command = RecordAuditEvent::from_audit_event(&audit_event)
             .unwrap()
             .with_body(&[]);
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_non_utf8_request_body_uses_fallback() {
-        let executor = create_test_executor();
+        let store = create_test_store();
 
         // Invalid UTF-8 sequence
         let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
@@ -297,7 +296,7 @@ mod malformed_events {
             .unwrap()
             .with_body(&invalid_utf8);
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
     }
 }
@@ -308,7 +307,7 @@ mod event_ordering {
 
     #[tokio::test]
     async fn test_events_ordered_within_stream() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -336,8 +335,7 @@ mod event_ordering {
                 event_type,
             };
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            executor
-                .execute(command, ExecutionOptions::default())
+            eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
         }
@@ -345,36 +343,32 @@ mod event_ordering {
         // Read events back
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let session_events = executor
-            .event_store()
-            .read_streams(
-                std::slice::from_ref(&session_stream),
-                &eventcore::ReadOptions::default(),
-            )
+        let session_events = store
+            .read_stream::<DomainEvent>(session_stream.clone())
             .await
             .unwrap();
 
         // Verify we got the expected event
-        assert_eq!(session_events.events.len(), 1); // Only RequestReceived goes to session stream
+        assert_eq!(session_events.len(), 1); // Only RequestReceived goes to session stream
 
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let request_events = executor
-            .event_store()
-            .read_streams(&[request_stream], &eventcore::ReadOptions::default())
+        let request_events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
-        assert_eq!(request_events.events.len(), 2); // RequestForwarded and ResponseReceived
+        assert_eq!(request_events.len(), 2); // RequestForwarded and ResponseReceived
 
         // Verify events are in chronological order
-        for window in request_events.events.windows(2) {
-            assert!(window[0].timestamp <= window[1].timestamp);
+        let request_events_vec: Vec<_> = request_events.iter().collect();
+        for window in request_events_vec.windows(2) {
+            assert!(window[0].occurred_at() <= window[1].occurred_at());
         }
     }
 
     #[tokio::test]
     async fn test_multiple_stream_reads() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let num_sessions = 5;
         let mut stream_ids = Vec::new();
 
@@ -386,21 +380,23 @@ mod event_ordering {
             stream_ids.push(session_stream);
 
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            executor
-                .execute(command, ExecutionOptions::default())
+            eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
         }
 
-        // Read all streams at once
-        let all_events = executor
-            .event_store()
-            .read_streams(&stream_ids, &eventcore::ReadOptions::default())
-            .await
-            .unwrap();
+        // Read each stream individually and verify events
+        let mut total_events = 0;
+        for stream_id in &stream_ids {
+            let events = store
+                .read_stream::<DomainEvent>(stream_id.clone())
+                .await
+                .unwrap();
+            total_events += events.len();
+        }
 
         // Should have events from all streams
-        assert_eq!(all_events.events.len(), num_sessions);
+        assert_eq!(total_events, num_sessions);
     }
 }
 
@@ -410,35 +406,32 @@ mod idempotency {
 
     #[tokio::test]
     async fn test_duplicate_request_received_ignored() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let audit_event = create_test_audit_event(request_received_event());
 
         // Execute same command twice
         let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-        executor
-            .execute(command.clone(), ExecutionOptions::default())
+        eventcore::execute(&store, command.clone(), RetryPolicy::default())
             .await
             .unwrap();
-        executor
-            .execute(command, ExecutionOptions::default())
+        eventcore::execute(&store, command, RetryPolicy::default())
             .await
             .unwrap();
 
         // Should only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
     }
 
     #[tokio::test]
     async fn test_duplicate_request_forwarded_ignored() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -450,8 +443,7 @@ mod idempotency {
             event_type: request_received_event(),
         };
         let cmd = RecordAuditEvent::from_audit_event(&received_event).unwrap();
-        executor
-            .execute(cmd, ExecutionOptions::default())
+        eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
 
@@ -463,27 +455,20 @@ mod idempotency {
             event_type: request_forwarded_event(),
         };
         let cmd = RecordAuditEvent::from_audit_event(&forwarded_event).unwrap();
-        executor
-            .execute(cmd.clone(), ExecutionOptions::default())
-            .await
-            .unwrap();
-        executor
-            .execute(cmd, ExecutionOptions::default())
+        eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
 
         // Should only have one forwarded event
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[request_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
         let forwarded_count = events
-            .events
             .iter()
-            .filter(|e| matches!(e.payload, DomainEvent::LlmRequestStarted { .. }))
+            .filter(|e| matches!(e, DomainEvent::LlmRequestStarted { .. }))
             .count();
 
         assert_eq!(forwarded_count, 1);
@@ -491,7 +476,7 @@ mod idempotency {
 
     #[tokio::test]
     async fn test_idempotency_across_different_timestamps() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -505,8 +490,7 @@ mod idempotency {
                 event_type: request_received_event(),
             };
             let cmd = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            executor
-                .execute(cmd, ExecutionOptions::default())
+            eventcore::execute(&store, cmd, RetryPolicy::default())
                 .await
                 .unwrap();
         }
@@ -514,13 +498,12 @@ mod idempotency {
         // Should still only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
     }
 }
 
@@ -623,6 +606,7 @@ mod property_tests {
                 let domain_event = match event_type {
                     AuditEventType::RequestReceived { .. } => {
                         Some(DomainEvent::LlmRequestReceived {
+                            stream_id: StreamId::try_new("session-default".to_string()).unwrap(),
                             request_id: request_id.clone(),
                             session_id: session_id.clone(),
                             model_version: crate::domain::llm::ModelVersion {
@@ -638,12 +622,14 @@ mod property_tests {
                     },
                     AuditEventType::RequestForwarded { .. } => {
                         Some(DomainEvent::LlmRequestStarted {
+                            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
                             request_id: request_id.clone(),
                             started_at: timestamp,
                         })
                     },
                     AuditEventType::ResponseReceived { .. } => {
                         Some(DomainEvent::LlmResponseReceived {
+                            stream_id: StreamId::try_new("request-default".to_string()).unwrap(),
                             request_id: request_id.clone(),
                             response_text: crate::domain::types::ResponseText::try_new("test".to_string()).unwrap(),
                             metadata: Default::default(),
@@ -690,7 +676,7 @@ mod recovery_scenarios {
 
     #[tokio::test]
     async fn test_recovery_after_partial_processing() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -702,8 +688,7 @@ mod recovery_scenarios {
             event_type: request_received_event(),
         };
         let cmd = RecordAuditEvent::from_audit_event(&received_event).unwrap();
-        executor
-            .execute(cmd, ExecutionOptions::default())
+        eventcore::execute(&store, cmd, RetryPolicy::default())
             .await
             .unwrap();
 
@@ -716,23 +701,21 @@ mod recovery_scenarios {
             event_type: response_received_event(),
         };
         let cmd = RecordAuditEvent::from_audit_event(&response_event).unwrap();
-        let result = executor.execute(cmd, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, cmd, RetryPolicy::default()).await;
 
         // Should succeed but not emit event due to invalid state transition
         assert!(result.is_ok());
 
         // Verify no response event was recorded
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[request_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(request_stream)
             .await
             .unwrap();
 
         let response_count = events
-            .events
             .iter()
-            .filter(|e| matches!(e.payload, DomainEvent::LlmResponseReceived { .. }))
+            .filter(|e| matches!(e, DomainEvent::LlmResponseReceived { .. }))
             .count();
 
         assert_eq!(response_count, 0);
@@ -740,7 +723,7 @@ mod recovery_scenarios {
 
     #[tokio::test]
     async fn test_recovery_with_out_of_order_events() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let base_time = Utc::now();
@@ -766,8 +749,7 @@ mod recovery_scenarios {
                 event_type,
             };
             let cmd = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            executor
-                .execute(cmd, ExecutionOptions::default())
+            eventcore::execute(&store, cmd, RetryPolicy::default())
                 .await
                 .unwrap();
         }
@@ -775,15 +757,14 @@ mod recovery_scenarios {
         // Only the last one (request received) should have been recorded
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let session_events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let session_events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(session_events.events.len(), 1);
+        assert_eq!(session_events.len(), 1);
         assert!(matches!(
-            session_events.events[0].payload,
+            session_events.iter().next().unwrap(),
             DomainEvent::LlmRequestReceived { .. }
         ));
     }
@@ -795,7 +776,7 @@ mod process_request_body_tests {
 
     #[tokio::test]
     async fn test_process_request_body_parses_openai_format() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -816,24 +797,24 @@ mod process_request_body_tests {
             timestamp: Timestamp::now(),
         };
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify parsed content
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
+        let first_event = events.iter().next().unwrap();
         if let DomainEvent::LlmRequestReceived {
             model_version,
             prompt,
             ..
-        } = &events.events[0].payload
+        } = first_event
         {
             assert_eq!(model_version.model_id.as_ref(), "gpt-4");
             assert!(prompt.as_ref().contains("Hello, world!"));
@@ -844,7 +825,7 @@ mod process_request_body_tests {
 
     #[tokio::test]
     async fn test_process_request_body_parses_anthropic_format() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -865,24 +846,24 @@ mod process_request_body_tests {
             timestamp: Timestamp::now(),
         };
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify parsed content
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
+        let first_event = events.iter().next().unwrap();
         if let DomainEvent::LlmRequestReceived {
             model_version,
             prompt,
             ..
-        } = &events.events[0].payload
+        } = first_event
         {
             assert_eq!(model_version.model_id.as_ref(), "claude-3-opus-20240229");
             assert!(prompt.as_ref().contains("What is 2+2?"));
@@ -893,7 +874,7 @@ mod process_request_body_tests {
 
     #[tokio::test]
     async fn test_process_request_body_idempotent() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -915,25 +896,22 @@ mod process_request_body_tests {
         };
 
         // Execute twice
-        executor
-            .execute(command.clone(), ExecutionOptions::default())
+        eventcore::execute(&store, command.clone(), RetryPolicy::default())
             .await
             .unwrap();
-        executor
-            .execute(command, ExecutionOptions::default())
+        eventcore::execute(&store, command, RetryPolicy::default())
             .await
             .unwrap();
 
         // Should only have one event
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
     }
 }
 
@@ -943,7 +921,7 @@ mod edge_cases {
 
     #[tokio::test]
     async fn test_extremely_large_request_body() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -976,14 +954,14 @@ mod edge_cases {
             timestamp: Timestamp::now(),
         };
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         // Should handle large payloads gracefully
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_request_with_special_characters_in_uri() {
-        let executor = create_test_executor();
+        let store = create_test_store();
 
         // Test various special characters in URI
         let test_uris = vec![
@@ -1007,14 +985,14 @@ mod edge_cases {
             };
 
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            let result = executor.execute(command, ExecutionOptions::default()).await;
+            let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
             assert!(result.is_ok());
         }
     }
 
     #[tokio::test]
     async fn test_zero_duration_response() {
-        let executor = create_test_executor();
+        let store = create_test_store();
 
         let audit_event = AuditEvent {
             request_id: RequestId::new(),
@@ -1029,7 +1007,7 @@ mod edge_cases {
         };
 
         let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
     }
 }
@@ -1040,7 +1018,7 @@ mod headers_tests {
 
     #[tokio::test]
     async fn test_headers_with_authorization() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
 
@@ -1070,18 +1048,17 @@ mod headers_tests {
             timestamp: Timestamp::now(),
         };
 
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify event was created (headers should be processed, not stored directly)
         let session_stream =
             StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
-        let events = executor
-            .event_store()
-            .read_streams(&[session_stream], &eventcore::ReadOptions::default())
+        let events = store
+            .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
     }
 }
 
@@ -1093,15 +1070,14 @@ mod benchmarks {
 
     #[tokio::test]
     async fn bench_single_command_execution() {
-        let executor = create_test_executor();
+        let store = create_test_store();
         let iterations = 100; // Reduced for test speed
 
         let start = Instant::now();
         for _ in 0..iterations {
             let audit_event = create_test_audit_event(request_received_event());
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-            executor
-                .execute(command, ExecutionOptions::default())
+            eventcore::execute(&store, command, RetryPolicy::default())
                 .await
                 .unwrap();
         }
@@ -1116,17 +1092,17 @@ mod benchmarks {
 
     #[tokio::test]
     async fn bench_concurrent_command_execution() {
-        let executor = create_test_executor();
+        let store = Arc::new(create_test_store());
         let concurrent_commands = 50; // Reduced for test speed
 
         let start = Instant::now();
         let handles: Vec<_> = (0..concurrent_commands)
             .map(|_| {
-                let exec = executor.clone();
+                let store = Arc::clone(&store);
                 tokio::spawn(async move {
                     let audit_event = create_test_audit_event(request_received_event());
                     let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
-                    exec.execute(command, ExecutionOptions::default()).await
+                    eventcore::execute(&*store, command, RetryPolicy::default()).await
                 })
             })
             .collect();

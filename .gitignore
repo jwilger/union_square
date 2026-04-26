@@ -2,6 +2,7 @@
 node_modules/
 .dependencies/
 npm-debug.log*
+.dependencies/
 
 # Log4brains
 .log4brains/

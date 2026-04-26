@@ -11,12 +11,7 @@ use crate::domain::session::{ApplicationId, SessionId};
 use crate::domain::test_case::{TestCaseId, TestCaseName};
 use crate::domain::types::{LlmParameters, Prompt};
 use crate::domain::user::UserId;
-use async_trait::async_trait;
-use eventcore::StreamId;
-use eventcore::{
-    emit, require, CommandLogic, CommandResult, ReadOptions, ReadStreams, StoredEvent,
-    StreamResolver, StreamWrite,
-};
+use eventcore::{require, CommandError, CommandLogic, NewEvents, RetryPolicy, StreamId};
 use eventcore_macros::Command;
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
@@ -44,13 +39,12 @@ pub struct SessionState {
     request_count: usize,
 }
 
-#[async_trait]
 impl CommandLogic for StartSession {
     type State = SessionState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        match &event.payload {
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        match event {
             DomainEvent::SessionStarted { .. } => {
                 state.started = true;
             }
@@ -62,14 +56,11 @@ impl CommandLogic for StartSession {
             }
             _ => {}
         }
+
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         // Business rule: Cannot start an already started session
@@ -79,19 +70,15 @@ impl CommandLogic for StartSession {
         let session_id = SessionId::generate();
 
         // Emit the session started event
-        emit!(
-            events,
-            &read_streams,
-            self.session_stream.clone(),
-            DomainEvent::SessionStarted {
-                session_id,
-                user_id: self.user_id.clone(),
-                application_id: self.application_id.clone(),
-                started_at: Timestamp::now(),
-            }
-        );
+        events.push(DomainEvent::SessionStarted {
+            stream_id: self.session_stream.clone(),
+            session_id,
+            user_id: self.user_id.clone(),
+            application_id: self.application_id.clone(),
+            started_at: Timestamp::now(),
+        });
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -121,44 +108,43 @@ pub struct AnalysisCommandState {
     analysis_id: Option<AnalysisId>,
 }
 
-#[async_trait]
 impl CommandLogic for StartSessionAnalysis {
     type State = AnalysisCommandState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
         // Handle events from different streams by checking stream ID
-        match &event.stream_id {
-            stream_id if stream_id.as_ref() == self.session_stream.as_ref() => {
+        match event {
+            DomainEvent::SessionStarted {
+                stream_id,
+                session_id,
+                ..
+            } if stream_id.as_ref() == self.session_stream.as_ref() => {
+                state.session_started = true;
+                state.session_id = Some(session_id.clone());
+            }
+            DomainEvent::LlmRequestReceived { stream_id, .. }
+                if stream_id.as_ref() == self.session_stream.as_ref() =>
+            {
+                state.request_count += 1;
+            }
+            event
+                if eventcore::Event::stream_id(event).as_ref() == self.analysis_stream.as_ref() =>
+            {
                 // In a real implementation, you'd decode session events here
                 // For this example, we'll track basic session state
-                match &event.payload {
-                    DomainEvent::SessionStarted { .. } => {
-                        state.session_started = true;
-                        state.session_id = Some(SessionId::generate());
-                    }
-                    DomainEvent::LlmRequestReceived { .. } => {
-                        state.request_count += 1;
-                    }
-                    _ => {}
-                }
-            }
-            stream_id if stream_id.as_ref() == self.analysis_stream.as_ref() => {
-                // In real code, you'd handle analysis events here
                 state.analysis_started = true;
                 state.analysis_id = Some(AnalysisId::generate());
             }
             _ => {}
         }
+
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
+        let _ = &self.reason;
 
         // Business rules - check state from multiple streams
         require!(state.session_started, "Session not found");
@@ -170,19 +156,14 @@ impl CommandLogic for StartSessionAnalysis {
         let session_id = state.session_id.unwrap_or_else(SessionId::generate);
 
         // Emit event to analysis stream
-        emit!(
-            events,
-            &read_streams,
-            self.analysis_stream.clone(),
-            // In real code, this would be a proper analysis event
-            DomainEvent::SessionEnded {
-                session_id,
-                ended_at: Timestamp::now(),
-                final_status: crate::domain::session::SessionStatus::Completed,
-            }
-        );
+        events.push(DomainEvent::SessionEnded {
+            stream_id: self.analysis_stream.clone(),
+            session_id,
+            ended_at: Timestamp::now(),
+            final_status: crate::domain::session::SessionStatus::Completed,
+        });
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -199,13 +180,12 @@ pub struct CaptureRequest {
     parameters: LlmParameters,
 }
 
-#[async_trait]
 impl CommandLogic for CaptureRequest {
     type State = SessionState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
-        match &event.payload {
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
+        match event {
             DomainEvent::SessionStarted { .. } => {
                 state.started = true;
             }
@@ -217,14 +197,11 @@ impl CommandLogic for CaptureRequest {
             }
             _ => {}
         }
+
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
         // Business rules
@@ -237,21 +214,17 @@ impl CommandLogic for CaptureRequest {
         let session_id = SessionId::generate();
 
         // Emit the request received event
-        emit!(
-            events,
-            &read_streams,
-            self.session_stream.clone(),
-            DomainEvent::LlmRequestReceived {
-                request_id: self.request_id.clone(),
-                session_id,
-                model_version: self.model_version.clone(),
-                prompt: self.prompt.clone(),
-                parameters: self.parameters.clone(),
-                received_at: Timestamp::now(),
-            }
-        );
+        events.push(DomainEvent::LlmRequestReceived {
+            stream_id: self.session_stream.clone(),
+            request_id: self.request_id.clone(),
+            session_id,
+            model_version: self.model_version.clone(),
+            prompt: self.prompt.clone(),
+            parameters: self.parameters.clone(),
+            received_at: Timestamp::now(),
+        });
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -279,14 +252,13 @@ pub struct ExtractTestCaseState {
     test_case_already_extracted: bool,
 }
 
-#[async_trait]
 impl CommandLogic for ExtractTestCase {
     type State = ExtractTestCaseState;
     type Event = DomainEvent;
 
-    fn apply(&self, state: &mut Self::State, event: &StoredEvent<Self::Event>) {
+    fn apply(&self, mut state: Self::State, event: &Self::Event) -> Self::State {
         // Handle events from different streams
-        match &event.stream_id {
+        match eventcore::Event::stream_id(event) {
             stream_id if stream_id.as_ref() == self.session_stream.as_ref() => {
                 state.session_exists = true;
             }
@@ -300,15 +272,13 @@ impl CommandLogic for ExtractTestCase {
             }
             _ => {}
         }
+
+        state
     }
 
-    async fn handle(
-        &self,
-        read_streams: ReadStreams<Self::StreamSet>,
-        state: Self::State,
-        _stream_resolver: &mut StreamResolver,
-    ) -> CommandResult<Vec<StreamWrite<Self::StreamSet, Self::Event>>> {
+    fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
+        let _ = (&self.request_id, &self.test_name);
 
         // Complex business rules checking state from multiple streams
         require!(state.session_exists, "Session not found");
@@ -326,47 +296,35 @@ impl CommandLogic for ExtractTestCase {
         // Emit events to multiple streams atomically
 
         // 1. Record in analysis stream that a test case was identified
-        emit!(
-            events,
-            &read_streams,
-            self.analysis_stream.clone(),
-            // In real code, this would be a proper test case event
-            DomainEvent::SessionEnded {
-                session_id: SessionId::generate(),
-                ended_at: Timestamp::now(),
-                final_status: crate::domain::session::SessionStatus::Completed,
-            }
-        );
+        events.push(DomainEvent::SessionEnded {
+            stream_id: self.analysis_stream.clone(),
+            session_id: SessionId::generate(),
+            ended_at: Timestamp::now(),
+            final_status: crate::domain::session::SessionStatus::Completed,
+        });
 
         // 2. Create the test case extraction in its own stream
-        emit!(
-            events,
-            &read_streams,
-            self.test_case_stream.clone(),
-            // In real code, this would be a proper extraction event
-            DomainEvent::SessionEnded {
-                session_id: SessionId::generate(),
-                ended_at: Timestamp::now(),
-                final_status: crate::domain::session::SessionStatus::Completed,
-            }
-        );
+        events.push(DomainEvent::SessionEnded {
+            stream_id: self.test_case_stream.clone(),
+            session_id: SessionId::generate(),
+            ended_at: Timestamp::now(),
+            final_status: crate::domain::session::SessionStatus::Completed,
+        });
 
-        Ok(events)
+        Ok(events.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eventcore::{CommandExecutor, EventStore, ExecutionOptions};
     use eventcore_memory::InMemoryEventStore;
-    use std::sync::Arc;
+    use eventcore_types::EventStore;
 
     #[tokio::test]
     async fn test_start_session_command() {
         // Create in-memory event store
         let event_store = InMemoryEventStore::new();
-        let executor = Arc::new(CommandExecutor::new(event_store));
 
         // Create stream ID
         let session_id = SessionId::generate();
@@ -380,32 +338,27 @@ mod tests {
         };
 
         // Execute command
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&event_store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify events were written
-        let events = executor
-            .event_store()
-            .read_streams(
-                std::slice::from_ref(&session_stream),
-                &ReadOptions::default(),
-            )
+        let events = event_store
+            .read_stream::<DomainEvent>(session_stream.clone())
             .await
             .unwrap();
 
-        assert_eq!(events.events.len(), 1);
-        match &events.events[0].payload {
+        assert_eq!(events.len(), 1);
+        match events.iter().next().unwrap() {
             DomainEvent::SessionStarted { application_id, .. } => {
                 assert_eq!(application_id.as_ref(), "test-app");
             }
             _ => panic!("Expected SessionStarted event"),
-        }
+        };
     }
 
     #[tokio::test]
     async fn test_cannot_start_session_twice() {
         let event_store = InMemoryEventStore::new();
-        let executor = Arc::new(CommandExecutor::new(event_store));
         let session_id = SessionId::generate();
         let session_stream = crate::domain::streams::session_stream(&session_id);
 
@@ -416,13 +369,14 @@ mod tests {
         };
 
         // First execution should succeed
-        assert!(executor
-            .execute(command.clone(), ExecutionOptions::default())
-            .await
-            .is_ok());
+        assert!(
+            eventcore::execute(&event_store, command.clone(), RetryPolicy::default())
+                .await
+                .is_ok()
+        );
 
         // Second execution should fail
-        let result = executor.execute(command, ExecutionOptions::default()).await;
+        let result = eventcore::execute(&event_store, command, RetryPolicy::default()).await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -433,7 +387,6 @@ mod tests {
     #[tokio::test]
     async fn test_multi_stream_analysis_command() {
         let event_store = InMemoryEventStore::new();
-        let executor = Arc::new(CommandExecutor::new(event_store));
 
         // First, start a session
         let session_id = SessionId::generate();
@@ -443,8 +396,7 @@ mod tests {
             user_id: UserId::generate(),
             application_id: ApplicationId::try_new("test-app".to_string()).unwrap(),
         };
-        executor
-            .execute(start_session, ExecutionOptions::default())
+        eventcore::execute(&event_store, start_session, RetryPolicy::default())
             .await
             .unwrap();
 
@@ -459,8 +411,7 @@ mod tests {
             prompt: Prompt::try_new("Hello, world!".to_string()).unwrap(),
             parameters: LlmParameters::new(serde_json::json!({})),
         };
-        executor
-            .execute(capture_request, ExecutionOptions::default())
+        eventcore::execute(&event_store, capture_request, RetryPolicy::default())
             .await
             .unwrap();
 
@@ -473,29 +424,22 @@ mod tests {
             reason: AnalysisReason::new("Test analysis".to_string()),
         };
 
-        let result = executor
-            .execute(start_analysis, ExecutionOptions::default())
-            .await;
+        let result = eventcore::execute(&event_store, start_analysis, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Verify event was written to analysis stream
-        let events = executor
-            .event_store()
-            .read_streams(
-                std::slice::from_ref(&analysis_stream),
-                &ReadOptions::default(),
-            )
+        let events = event_store
+            .read_stream::<DomainEvent>(analysis_stream.clone())
             .await
             .unwrap();
 
         // For this example, we just verify an event was written
-        assert_eq!(events.events.len(), 1);
+        assert_eq!(events.len(), 1);
     }
 
     #[tokio::test]
     async fn test_three_stream_extraction_command() {
         let event_store = InMemoryEventStore::new();
-        let executor = Arc::new(CommandExecutor::new(event_store));
 
         // Setup: Create session, start analysis
         let session_id = SessionId::generate();
@@ -518,9 +462,8 @@ mod tests {
         };
 
         // This would fail without proper setup, demonstrating the state validation
-        let result = executor
-            .execute(extract_command, ExecutionOptions::default())
-            .await;
+        let result =
+            eventcore::execute(&event_store, extract_command, RetryPolicy::default()).await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
