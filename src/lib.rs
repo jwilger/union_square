@@ -3,6 +3,7 @@
 //! This service intercepts and records all LLM interactions for later analysis
 //! and test-case extraction, following type-driven development principles.
 
+pub mod adapters;
 pub mod application;
 pub mod config;
 pub mod domain;

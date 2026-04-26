@@ -343,6 +343,21 @@ pub struct LlmParameters(serde_json::Value);
 #[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize))]
 pub struct MetadataAssertions(serde_json::Value);
 
+/// Domain validation errors
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DomainError {
+    #[error("invalid HTTP method: {0}")]
+    InvalidHttpMethod(String),
+    #[error("invalid request URI: {0}")]
+    InvalidRequestUri(String),
+    #[error("invalid header name: {0}")]
+    InvalidHeaderName(String),
+    #[error("invalid target URL: {0}")]
+    InvalidTargetUrl(String),
+    #[error("invalid HTTP status code: {0}")]
+    InvalidHttpStatusCode(u16),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

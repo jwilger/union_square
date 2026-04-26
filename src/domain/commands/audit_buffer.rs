@@ -3,13 +3,59 @@
 //! This module provides functionality to buffer request/response bodies
 //! from chunk events and process them when complete.
 
-use crate::proxy::types::{ChunkOffset, RequestId};
+use crate::domain::llm::RequestId;
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Semantic newtype for chunk offset
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkOffset(usize);
+
+impl ChunkOffset {
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+}
+
+impl AsRef<usize> for ChunkOffset {
+    fn as_ref(&self) -> &usize {
+        &self.0
+    }
+}
+
+/// Semantic newtype for chunk payload
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChunkData(Vec<u8>);
+
+impl ChunkData {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self(data)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Errors that can occur in audit buffering
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum AuditBufferError {
+    #[error("chunk offset overflow")]
+    OffsetOverflow,
+}
 
 /// Buffered data for a request or response
 #[derive(Debug, Clone)]
 pub struct BufferedData {
-    chunks: Vec<(ChunkOffset, Vec<u8>)>,
+    chunks: Vec<(ChunkOffset, ChunkData)>,
     total_size: usize,
 }
 
@@ -22,9 +68,18 @@ impl BufferedData {
     }
 
     /// Add a chunk to the buffer
-    pub fn add_chunk(&mut self, offset: ChunkOffset, data: Vec<u8>) {
-        self.total_size = (*offset.as_ref() + data.len()).max(self.total_size);
+    pub fn add_chunk(
+        &mut self,
+        offset: ChunkOffset,
+        data: ChunkData,
+    ) -> Result<(), AuditBufferError> {
+        let new_end = offset
+            .as_ref()
+            .checked_add(data.len())
+            .ok_or(AuditBufferError::OffsetOverflow)?;
+        self.total_size = new_end.max(self.total_size);
         self.chunks.push((offset, data));
+        Ok(())
     }
 
     /// Set the expected total size (for cases where we know it upfront)
@@ -70,7 +125,7 @@ impl BufferedData {
 
         let mut result = Vec::with_capacity(self.total_size);
         for (_, data) in sorted_chunks {
-            result.extend_from_slice(&data);
+            result.extend_from_slice(data.as_slice());
         }
 
         Some(result)
@@ -92,11 +147,16 @@ impl AuditBufferManager {
     }
 
     /// Add a request chunk
-    pub fn add_request_chunk(&mut self, request_id: RequestId, offset: ChunkOffset, data: Vec<u8>) {
+    pub fn add_request_chunk(
+        &mut self,
+        request_id: RequestId,
+        offset: ChunkOffset,
+        data: ChunkData,
+    ) -> Result<(), AuditBufferError> {
         self.request_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)
-            .add_chunk(offset, data);
+            .add_chunk(offset, data)
     }
 
     /// Add a response chunk
@@ -104,12 +164,12 @@ impl AuditBufferManager {
         &mut self,
         request_id: RequestId,
         offset: ChunkOffset,
-        data: Vec<u8>,
-    ) {
+        data: ChunkData,
+    ) -> Result<(), AuditBufferError> {
         self.response_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)
-            .add_chunk(offset, data);
+            .add_chunk(offset, data)
     }
 
     /// Check if request body is complete and return it
@@ -158,8 +218,12 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks in order
-        buffer.add_chunk(ChunkOffset::from(0), vec![1, 2, 3]);
-        buffer.add_chunk(ChunkOffset::from(3), vec![4, 5, 6]);
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(0), ChunkData::new(vec![1, 2, 3]))
+            .is_ok());
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(3), ChunkData::new(vec![4, 5, 6]))
+            .is_ok());
 
         assert!(buffer.is_complete());
         assert_eq!(buffer.reconstruct(), Some(vec![1, 2, 3, 4, 5, 6]));
@@ -170,8 +234,12 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks with a gap
-        buffer.add_chunk(ChunkOffset::from(0), vec![1, 2, 3]);
-        buffer.add_chunk(ChunkOffset::from(6), vec![7, 8, 9]); // Gap at 3-5
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(0), ChunkData::new(vec![1, 2, 3]))
+            .is_ok());
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(6), ChunkData::new(vec![7, 8, 9]))
+            .is_ok()); // Gap at 3-5
 
         assert!(!buffer.is_complete());
         assert_eq!(buffer.reconstruct(), None);
@@ -182,28 +250,54 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks out of order
-        buffer.add_chunk(ChunkOffset::from(3), vec![4, 5, 6]);
-        buffer.add_chunk(ChunkOffset::from(0), vec![1, 2, 3]);
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(3), ChunkData::new(vec![4, 5, 6]))
+            .is_ok());
+        assert!(buffer
+            .add_chunk(ChunkOffset::new(0), ChunkData::new(vec![1, 2, 3]))
+            .is_ok());
 
         assert!(buffer.is_complete());
         assert_eq!(buffer.reconstruct(), Some(vec![1, 2, 3, 4, 5, 6]));
     }
 
     #[test]
+    fn test_buffered_data_overflow() {
+        let mut buffer = BufferedData::new();
+
+        let offset = ChunkOffset::new(usize::MAX);
+        let data = ChunkData::new(vec![1, 2, 3]);
+        assert!(buffer.add_chunk(offset, data).is_err());
+    }
+
+    #[test]
     fn test_audit_buffer_manager() {
         let mut manager = AuditBufferManager::new();
-        let request_id = RequestId::new();
+        let request_id = RequestId::generate();
 
-        // For this test, we need a different approach since we need to know total size
-        // Let's test the cleanup functionality instead
-        manager.add_request_chunk(request_id, ChunkOffset::from(0), vec![1, 2, 3]);
-        manager.add_response_chunk(request_id, ChunkOffset::from(0), vec![4, 5, 6]);
+        // Add request chunks
+        assert!(manager
+            .add_request_chunk(
+                request_id.clone(),
+                ChunkOffset::new(0),
+                ChunkData::new(vec![1, 2, 3])
+            )
+            .is_ok());
+        assert!(manager
+            .add_request_chunk(
+                request_id.clone(),
+                ChunkOffset::new(3),
+                ChunkData::new(vec![4, 5, 6])
+            )
+            .is_ok());
 
-        // Cleanup should remove both buffers
-        manager.cleanup_request(&request_id);
+        // Should be able to reconstruct
+        assert_eq!(
+            manager.get_complete_request_body(&request_id),
+            Some(vec![1, 2, 3, 4, 5, 6])
+        );
 
-        // After cleanup, trying to get data returns None
-        assert!(manager.get_complete_request_body(&request_id).is_none());
-        assert!(manager.get_complete_response_body(&request_id).is_none());
+        // Buffer should be cleaned up after reconstruction
+        assert_eq!(manager.get_complete_request_body(&request_id), None);
     }
 }
