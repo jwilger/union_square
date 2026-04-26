@@ -362,7 +362,7 @@ impl RecordAuditEvent {
 
     /// Create stream ID for a request
     pub fn request_stream_id(request_id: &RequestId) -> Result<StreamId, AuditCommandError> {
-        StreamId::try_new(format!("request-{request_id}"))
+        crate::domain::streams::request_stream(request_id)
             .map_err(|e| AuditCommandError::InvalidStreamId(e.to_string()))
     }
 
@@ -387,12 +387,6 @@ impl RecordAuditEvent {
                     ));
                 }
                 Err(e) => {
-                    // Log the error and use fallback
-                    tracing::warn!(
-                        "Failed to parse LLM request for {}: {}. Using fallback.",
-                        self.request_id,
-                        e
-                    );
                     // Store both the fallback and the error for later emission
                     self.parsed_request = Some(ParsedLlmRequestWithError::new(
                         create_fallback_request(&e),
@@ -506,7 +500,7 @@ mod transformers {
 
     /// Create fallback LLM data when parsing fails
     fn create_fallback_llm_data(
-        request_id: RequestId,
+        _request_id: RequestId,
     ) -> Result<
         (
             crate::domain::llm::ModelVersion,
@@ -515,11 +509,6 @@ mod transformers {
         ),
         CommandError,
     > {
-        tracing::warn!(
-            "No parsed LLM data available for request {}. Using defaults.",
-            request_id
-        );
-
         // Create safe fallback values that should never fail validation
         let fallback_provider = crate::domain::config_types::ProviderName::try_new(
             "unknown".to_string(),
@@ -791,11 +780,6 @@ impl CommandLogic for ProcessRequestBody {
         let (model_version, prompt, parameters, parsing_error) = parsed_result
             .map(|parsed| (parsed.model_version, parsed.prompt, parsed.parameters, None))
             .unwrap_or_else(|e| {
-                tracing::warn!(
-                    "Failed to parse LLM request {}: {}. Using fallback.",
-                    self.request_id,
-                    e
-                );
                 let fallback = create_fallback_request(&e);
                 (
                     fallback.model_version,

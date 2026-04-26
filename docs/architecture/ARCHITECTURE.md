@@ -194,6 +194,7 @@ The source of truth for stream factories is `src/domain/streams.rs`.
 | Pattern | Purpose |
 | --- | --- |
 | `session:{session_id}` | Durable facts for one LLM session |
+| `request-{request_id}` | Command boundary for a single request lifecycle |
 | `analysis:{analysis_id}` | Analysis workflow decisions and outcomes |
 | `user:{user_id}:settings` | Settings for one user |
 | `extraction:{extraction_id}` | Test-case extraction workflow decisions and outcomes |

@@ -29,7 +29,6 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             rustToolchain
-            git
             lefthook
             nodejs_22
             bun

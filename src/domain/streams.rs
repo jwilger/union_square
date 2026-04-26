@@ -64,7 +64,21 @@ pub const STREAM_DOCUMENTATION: &[StreamDocumentation] = &[
             closed_by: "RecordAuditEvent(SessionEnded)",
             retention: RetentionPolicy::Days(90),
         },
-        related_streams: &["analysis:{analysis_id}", "user:{user_id}:settings"],
+        related_streams: &[
+            "request-{request_id}",
+            "analysis:{analysis_id}",
+            "user:{user_id}:settings",
+        ],
+    },
+    StreamDocumentation {
+        stream_pattern: "request-{request_id}",
+        purpose: "Command boundary for a single request lifecycle.",
+        lifecycle: StreamLifecycle::Bounded {
+            created_by: "RecordAuditEvent",
+            closed_by: "RecordAuditEvent(RequestCompleted)",
+            retention: RetentionPolicy::Days(90),
+        },
+        related_streams: &["session:{session_id}"],
     },
     StreamDocumentation {
         stream_pattern: "analysis:{analysis_id}",
@@ -99,6 +113,10 @@ pub const STREAM_DOCUMENTATION: &[StreamDocumentation] = &[
 
 pub fn session_stream(session_id: &SessionId) -> Result<StreamId, StreamNameError> {
     stream_id(format!("session:{}", session_id.as_ref()))
+}
+
+pub fn request_stream(request_id: impl std::fmt::Display) -> Result<StreamId, StreamNameError> {
+    stream_id(format!("request-{request_id}"))
 }
 
 pub fn analysis_stream(analysis_id: &AnalysisId) -> Result<StreamId, StreamNameError> {
@@ -158,10 +176,15 @@ mod tests {
         let analysis_id = AnalysisId::generate();
         let user_id = UserId::generate();
         let extraction_id = ExtractionId::generate();
+        let request_id = crate::domain::llm::RequestId::generate();
 
         assert_eq!(
             session_stream(&session_id).unwrap().as_ref(),
             format!("session:{}", session_id.as_ref())
+        );
+        assert_eq!(
+            request_stream(&request_id).unwrap().as_ref(),
+            format!("request-{request_id}")
         );
         assert_eq!(
             analysis_stream(&analysis_id).unwrap().as_ref(),
@@ -185,6 +208,7 @@ mod tests {
             .collect();
 
         assert!(patterns.contains(&"session:{session_id}"));
+        assert!(patterns.contains(&"request-{request_id}"));
         assert!(patterns.contains(&"analysis:{analysis_id}"));
         assert!(patterns.contains(&"user:{user_id}:settings"));
         assert!(patterns.contains(&"extraction:{extraction_id}"));
