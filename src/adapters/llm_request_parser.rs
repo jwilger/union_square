@@ -19,7 +19,8 @@ pub fn parse_llm_request(
     headers: &[(String, String)],
 ) -> ParseResult<ParsedLlmRequest> {
     // Parse JSON body
-    let json: Value = serde_json::from_slice(body)?;
+    let json: Value =
+        serde_json::from_slice(body).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
 
     // Determine provider based on URI patterns
     if uri.contains("/v1/chat/completions") || uri.contains("/v1/completions") {

@@ -56,6 +56,6 @@ async fn session_records_all_llm_interactions() {
 
 ### Enforcement
 
-- `tdd-coach` agent reviews all code changes
-- Coverage gates in CI
-- PRs without tests are rejected
+- The `tdd-coach` bot runs automated checks and posts review comments on PRs that match configured source-code paths. It flags code changes that lack corresponding tests. It does not replace human approval.
+- The CI workflow `ci.yml` runs `cargo nextest run --workspace` and `cargo tarpaulin` (or equivalent coverage job). PRs that reduce coverage below the threshold configured in `codecov.yml` (or the active coverage gate) will fail the coverage check.
+- The pre-merge `test-presence` check (via lefthook or the CI `test` job) flags PRs missing tests for new behavior. Branch-protection rules on `main` require the `test` and `coverage` checks to pass before merging; maintainers may override with documented justification.

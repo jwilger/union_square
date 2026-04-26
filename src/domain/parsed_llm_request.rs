@@ -12,7 +12,7 @@ use crate::domain::{
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     #[error("Invalid JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
+    InvalidJson(String),
 
     #[error("Missing required field: {0}")]
     MissingField(String),
