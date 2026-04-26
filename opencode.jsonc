@@ -26,7 +26,26 @@
           "*": "ask",
           "rtk": "allow",
           "gh *": "allow",
-          "git *": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git fetch*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "allow",
+          "git push --force*": "deny",
+          "git push --delete*": "deny",
+          "git branch*": "allow",
+          "git branch -D*": "deny",
+          "git branch -d*": "deny",
+          "git checkout*": "allow",
+          "git merge*": "allow",
+          "git remote*": "allow",
+          "git rev-parse*": "allow",
+          "git reset*": "deny",
+          "git clean*": "deny",
+          "git rebase*": "deny",
+          "git *": "ask"
         },
         "task": {
           "*": "allow"
@@ -42,12 +61,12 @@
       "permission": {
         "edit": "deny",
         "bash": "ask",
-      },
-      "task": {
-        "*": "allow"
-      },
-      "skill": {
-        "*": "allow"
+        "task": {
+          "*": "allow"
+        },
+        "skill": {
+          "*": "allow"
+        }
       }
     }
   }
