@@ -386,7 +386,10 @@ mod tests {
         // Verify events were written
         let events = executor
             .event_store()
-            .read_streams(&[session_stream.clone()], &ReadOptions::default())
+            .read_streams(
+                std::slice::from_ref(&session_stream),
+                &ReadOptions::default(),
+            )
             .await
             .unwrap();
 
@@ -478,7 +481,10 @@ mod tests {
         // Verify event was written to analysis stream
         let events = executor
             .event_store()
-            .read_streams(&[analysis_stream.clone()], &ReadOptions::default())
+            .read_streams(
+                std::slice::from_ref(&analysis_stream),
+                &ReadOptions::default(),
+            )
             .await
             .unwrap();
 

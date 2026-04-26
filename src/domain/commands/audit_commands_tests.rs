@@ -348,7 +348,7 @@ mod event_ordering {
         let session_events = executor
             .event_store()
             .read_streams(
-                &[session_stream.clone()],
+                std::slice::from_ref(&session_stream),
                 &eventcore::ReadOptions::default(),
             )
             .await

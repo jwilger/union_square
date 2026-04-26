@@ -389,7 +389,10 @@ mod tests {
         // Check from_version stream
         let from_stream_data = executor
             .event_store()
-            .read_streams(&[command.from_stream.clone()], &ReadOptions::default())
+            .read_streams(
+                std::slice::from_ref(&command.from_stream),
+                &ReadOptions::default(),
+            )
             .await
             .unwrap();
         let from_events = from_stream_data.events;
