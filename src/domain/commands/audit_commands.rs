@@ -879,6 +879,7 @@ impl fmt::Display for RequestLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::streams::session_stream;
     use crate::proxy::types::{
         BodySize, DurationMillis, HttpStatusCode, SessionId as ProxySessionId, TargetUrl,
     };
@@ -963,11 +964,7 @@ mod tests {
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let _command = RecordAuditEvent {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id,
@@ -1001,11 +998,7 @@ mod tests {
         });
 
         let command = RecordAuditEvent {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id,
@@ -1051,11 +1044,7 @@ mod tests {
         });
 
         let _command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id,
@@ -1254,11 +1243,7 @@ mod tests {
 
         // Create a command with invalid JSON body
         let command = RecordAuditEvent {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -1305,11 +1290,7 @@ mod tests {
 
         // Try to forward a request that hasn't been received
         let command = RecordAuditEvent {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
             request_id,
             session_id: session_id.clone(),
@@ -1355,7 +1336,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream(&session_id).unwrap();
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
 
         // First request received
@@ -1413,11 +1394,7 @@ mod tests {
 
         // Create a command with an unhandled event type
         let command = RecordAuditEvent {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
             request_id,
             session_id: session_id.clone(),
@@ -1464,11 +1441,7 @@ mod tests {
 
         // Create command with invalid JSON body
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
             request_id,
             session_id,
