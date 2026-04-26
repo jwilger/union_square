@@ -1,43 +1,16 @@
-//! Parser for extracting LLM request data from HTTP request bodies
+//! Adapter-side parser for extracting LLM request data from HTTP request bodies
 //!
-//! This module provides functionality to parse various LLM provider request formats
-//! and extract the common elements (prompt, model, parameters) from them.
+//! All raw JSON, URI string, and header tuple parsing happens here at the boundary.
+//! The resulting semantic facts are returned as domain types.
 
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::domain::{
     config_types::ProviderName,
     llm::{LlmProvider, ModelVersion},
+    parsed_llm_request::{ParseError, ParseResult, ParsedLlmRequest},
     types::{LlmParameters, ModelId, Prompt},
 };
-
-/// Errors that can occur when parsing LLM requests
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error("Invalid JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
-
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-
-    #[error("Invalid field value for {field}: {reason}")]
-    InvalidFieldValue { field: String, reason: String },
-
-    #[error("Unknown request format")]
-    UnknownFormat,
-}
-
-/// Result type for parsing operations
-type ParseResult<T> = Result<T, ParseError>;
-
-/// Parsed LLM request data
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedLlmRequest {
-    pub model_version: ModelVersion,
-    pub prompt: Prompt,
-    pub parameters: LlmParameters,
-}
 
 /// Parse an LLM request from raw bytes
 pub fn parse_llm_request(
@@ -262,18 +235,6 @@ fn parse_bedrock_format(json: &Value, uri: &str) -> ParseResult<ParsedLlmRequest
     })
 }
 
-/// Create a fallback parsed request when parsing fails
-pub fn create_fallback_request(error: &ParseError) -> ParsedLlmRequest {
-    ParsedLlmRequest {
-        model_version: ModelVersion {
-            provider: LlmProvider::Other(ProviderName::try_new("unknown".to_string()).unwrap()),
-            model_id: ModelId::try_new("unknown-model".to_string()).unwrap(),
-        },
-        prompt: Prompt::try_new(format!("Failed to parse request: {error}")).unwrap(),
-        parameters: LlmParameters::new(Value::Object(HashMap::new().into_iter().collect())),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,11 +314,8 @@ mod tests {
     }
 
     #[test]
-    fn test_fallback_on_parse_error() {
-        let error = ParseError::MissingField("model".to_string());
-        let fallback = create_fallback_request(&error);
-
-        assert_eq!(fallback.model_version.model_id.as_ref(), "unknown-model");
-        assert!(fallback.prompt.as_ref().contains("Failed to parse request"));
+    fn test_parse_returns_error_on_invalid_json() {
+        let result = parse_llm_request(b"{ invalid json }", "/v1/chat/completions", &[]);
+        assert!(result.is_err());
     }
 }

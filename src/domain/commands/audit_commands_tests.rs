@@ -248,7 +248,7 @@ mod malformed_events {
     use super::*;
 
     #[tokio::test]
-    async fn test_malformed_request_body_uses_fallback() {
+    async fn test_malformed_request_body_emits_parse_failure() {
         let store = create_test_store();
 
         // Create command with malformed JSON body
@@ -263,32 +263,42 @@ mod malformed_events {
         {
             let parsed =
                 crate::adapters::proxy_audit::parse_request_body(malformed_body, uri, headers);
+            assert!(parsed.parsed.is_none());
+            assert!(parsed.error.is_some());
             command = command.with_parsed_request(Some(parsed));
         }
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
-        // Verify event was created with fallback values
+        // Session stream should contain LlmRequestDeferred
         let session_stream = proxy_session_stream_for(&audit_event.session_id);
-        let events = store
+        let session_events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
             .unwrap();
 
-        assert_eq!(events.len(), 1);
-        let first_event = events.iter().next().unwrap();
-        if let DomainEvent::LlmRequestReceived {
-            model_version,
-            prompt,
-            ..
-        } = first_event
-        {
-            assert_eq!(model_version.model_id.as_ref(), "unknown-model");
-            assert!(prompt.as_ref().contains("Failed to parse"));
-        } else {
-            panic!("Expected LlmRequestReceived event");
-        }
+        assert_eq!(session_events.len(), 1);
+        assert!(matches!(
+            session_events.iter().next().unwrap(),
+            DomainEvent::LlmRequestDeferred { .. }
+        ));
+
+        // Request stream should contain LlmRequestParsingFailed
+        let request_stream = crate::domain::streams::request_stream(
+            crate::domain::llm::RequestId::new(*audit_event.request_id.as_ref()),
+        )
+        .unwrap();
+        let request_events = store
+            .read_stream::<DomainEvent>(request_stream)
+            .await
+            .unwrap();
+
+        assert_eq!(request_events.len(), 1);
+        assert!(matches!(
+            request_events.iter().next().unwrap(),
+            DomainEvent::LlmRequestParsingFailed { .. }
+        ));
     }
 
     #[tokio::test]
