@@ -10,6 +10,7 @@ npm-debug.log*
 # Rust
 target/
 **/*.rs.bk
+dhat-heap.json
 
 # IDE
 .vscode/
@@ -37,4 +38,3 @@ logs/
 # Log4brains build artifacts
 docs/adr/*
 !docs/adr/*.md
-dhat-heap.json

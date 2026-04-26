@@ -443,7 +443,7 @@ mod transformers {
                 parsed.parameters.clone(),
             )
         } else {
-            create_fallback_llm_data(request_id)?
+            create_fallback_llm_data()?
         };
 
         Ok(DomainEvent::LlmRequestReceived {
@@ -499,9 +499,7 @@ mod transformers {
     }
 
     /// Create fallback LLM data when parsing fails
-    fn create_fallback_llm_data(
-        _request_id: RequestId,
-    ) -> Result<
+    fn create_fallback_llm_data() -> Result<
         (
             crate::domain::llm::ModelVersion,
             crate::domain::types::Prompt,
