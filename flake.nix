@@ -24,7 +24,6 @@
 
         rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-        dependenciesDir = "./.dependencies";
       in
       {
         devShells.default = pkgs.mkShell {
@@ -42,17 +41,19 @@
 
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
 
-          CARGO_HOME = "${dependenciesDir}/cargo";
-          CARGO_INSTALL_ROOT = "${dependenciesDir}/cargo";
-          npm_config_prefix = "${dependenciesDir}/npm";
-          BUN_INSTALL = "${dependenciesDir}/bun";
-
           shellHook = ''
-            mkdir -p ${dependenciesDir}/cargo/bin
-            mkdir -p ${dependenciesDir}/npm/bin
-            mkdir -p ${dependenciesDir}/bun/bin
+            dependenciesDir="$PWD/.dependencies"
 
-            export PATH="${dependenciesDir}/cargo/bin:${dependenciesDir}/npm/bin:${dependenciesDir}/bun/bin:$PATH"
+            export CARGO_HOME="$dependenciesDir/cargo"
+            export CARGO_INSTALL_ROOT="$dependenciesDir/cargo"
+            export npm_config_prefix="$dependenciesDir/npm"
+            export BUN_INSTALL="$dependenciesDir/bun"
+
+            mkdir -p "$dependenciesDir"/cargo/bin
+            mkdir -p "$dependenciesDir"/npm/bin
+            mkdir -p "$dependenciesDir"/bun/bin
+
+            export PATH="$dependenciesDir/cargo/bin:$dependenciesDir/npm/bin:$dependenciesDir/bun/bin:$PATH"
           '';
         };
       }
