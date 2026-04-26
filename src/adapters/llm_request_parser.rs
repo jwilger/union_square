@@ -59,9 +59,14 @@ fn parse_openai_format(json: &Value) -> ParseResult<ParsedLlmRequest> {
     let provider = if model_str.starts_with("gpt-") || model_str.starts_with("o1-") {
         LlmProvider::OpenAI
     } else {
-        LlmProvider::Other(
-            ProviderName::try_new("openai-compatible".to_string()).unwrap(), // Safe because we know this is valid
-        )
+        let provider_name =
+            ProviderName::try_new("openai-compatible".to_string()).map_err(|e| {
+                ParseError::InvalidFieldValue {
+                    field: "provider".to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+        LlmProvider::Other(provider_name)
     };
 
     let model_version = ModelVersion { provider, model_id };
@@ -196,8 +201,14 @@ fn parse_bedrock_format(json: &Value, uri: &str) -> ParseResult<ParsedLlmRequest
             reason: e.to_string(),
         })?;
 
+    let provider_name = ProviderName::try_new("bedrock".to_string()).map_err(|e| {
+        ParseError::InvalidFieldValue {
+            field: "provider".to_string(),
+            reason: e.to_string(),
+        }
+    })?;
     let model_version = ModelVersion {
-        provider: LlmProvider::Other(ProviderName::try_new("bedrock".to_string()).unwrap()),
+        provider: LlmProvider::Other(provider_name),
         model_id,
     };
 
