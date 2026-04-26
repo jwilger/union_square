@@ -118,10 +118,10 @@ pub fn session_with_analyses_streams(
     analysis_ids: &[AnalysisId],
 ) -> Result<SessionWithAnalysesStreams, StreamNameError> {
     let session_stream = session_stream(session_id)?;
-    let mut seen = std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<&AnalysisId> = std::collections::HashSet::new();
     let analysis_streams = analysis_ids
         .iter()
-        .filter(|analysis_id| seen.insert((*analysis_id).clone()))
+        .filter(|analysis_id| seen.insert(*analysis_id))
         .map(analysis_stream)
         .collect::<Result<Vec<_>, _>>()?;
 

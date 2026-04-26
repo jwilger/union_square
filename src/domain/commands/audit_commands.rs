@@ -356,7 +356,7 @@ impl RecordAuditEvent {
 
     /// Create stream ID for a session
     pub fn session_stream_id(session_id: &SessionId) -> Result<StreamId, AuditCommandError> {
-        StreamId::try_new(format!("session-{}", session_id.clone().into_inner()))
+        crate::domain::streams::session_stream(session_id)
             .map_err(|e| AuditCommandError::InvalidStreamId(e.to_string()))
     }
 
@@ -969,7 +969,7 @@ mod tests {
         let request_id = RequestId::new();
         let _command = RecordAuditEvent {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1007,7 +1007,7 @@ mod tests {
 
         let command = RecordAuditEvent {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1057,7 +1057,7 @@ mod tests {
 
         let _command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1260,7 +1260,7 @@ mod tests {
         // Create a command with invalid JSON body
         let command = RecordAuditEvent {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1311,7 +1311,7 @@ mod tests {
         // Try to forward a request that hasn't been received
         let command = RecordAuditEvent {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1360,8 +1360,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
 
         // First request received
@@ -1420,7 +1419,7 @@ mod tests {
         // Create a command with an unhandled event type
         let command = RecordAuditEvent {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1471,7 +1470,7 @@ mod tests {
         // Create command with invalid JSON body
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),

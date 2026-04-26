@@ -154,8 +154,7 @@ mod concurrent_processing {
         }
 
         // Verify events are in correct order
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -251,7 +250,7 @@ mod malformed_events {
 
         // Verify event was created with fallback values
         let session_stream =
-            StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
+            StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -341,8 +340,7 @@ mod event_ordering {
         }
 
         // Read events back
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let session_events = store
             .read_stream::<DomainEvent>(session_stream.clone())
             .await
@@ -376,7 +374,7 @@ mod event_ordering {
         for _ in 0..num_sessions {
             let audit_event = create_test_audit_event(request_received_event());
             let session_stream =
-                StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
+                StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
             stream_ids.push(session_stream);
 
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
@@ -420,7 +418,7 @@ mod idempotency {
 
         // Should only have one event
         let session_stream =
-            StreamId::try_new(format!("session-{}", audit_event.session_id.as_ref())).unwrap();
+            StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -496,8 +494,7 @@ mod idempotency {
         }
 
         // Should still only have one event
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -755,8 +752,7 @@ mod recovery_scenarios {
         }
 
         // Only the last one (request received) should have been recorded
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let session_events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -783,7 +779,7 @@ mod process_request_body_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -801,8 +797,7 @@ mod process_request_body_tests {
         assert!(result.is_ok());
 
         // Verify parsed content
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -832,7 +827,7 @@ mod process_request_body_tests {
         let body = create_anthropic_request_body();
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -850,8 +845,7 @@ mod process_request_body_tests {
         assert!(result.is_ok());
 
         // Verify parsed content
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -881,7 +875,7 @@ mod process_request_body_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -904,8 +898,7 @@ mod process_request_body_tests {
             .unwrap();
 
         // Should only have one event
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -940,7 +933,7 @@ mod edge_cases {
 
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1034,7 +1027,7 @@ mod headers_tests {
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
             session_stream: StreamId::try_new(format!(
-                "session-{}",
+                "session:{}",
                 session_id.clone().into_inner()
             ))
             .unwrap(),
@@ -1052,8 +1045,7 @@ mod headers_tests {
         assert!(result.is_ok());
 
         // Verify event was created (headers should be processed, not stored directly)
-        let session_stream =
-            StreamId::try_new(format!("session-{}", session_id.clone().into_inner())).unwrap();
+        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
