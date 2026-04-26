@@ -649,10 +649,6 @@ impl CommandLogic for RecordAuditEvent {
 
                 // Emit an error event for unhandled audit event types
                 let event_type_str = match &self.audit_event {
-                    RequestBody { .. } => "RequestBody",
-                    ResponseBody { .. } => "ResponseBody",
-                    RequestChunk { .. } => "RequestChunk",
-                    ResponseChunk { .. } => "ResponseChunk",
                     Error { .. } => "Error",
                     _ => "Unknown",
                 };
@@ -1299,53 +1295,6 @@ mod tests {
         assert!(
             has_duplicate_error,
             "Should emit error for duplicate request received"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_unhandled_audit_event_error() {
-        use eventcore::RetryPolicy;
-        use eventcore_memory::InMemoryEventStore;
-
-        let store = InMemoryEventStore::new();
-        let session_id = SessionId::generate();
-        let request_id = llm::RequestId::generate();
-        let request_stream = request_stream(&request_id).unwrap();
-
-        // Create a command with an unhandled event type
-        let command = RecordAuditEvent {
-            session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream.clone(),
-            request_id: request_id.clone(),
-            session_id: session_id.clone(),
-            audit_event: audit_types::AuditEventType::RequestBody {
-                content: vec![1, 2, 3],
-                truncated: false,
-            },
-            timestamp: Timestamp::now(),
-            parsed_request: None,
-        };
-
-        // Execute the command
-        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
-        assert!(result.is_ok());
-
-        // Read events from the request stream
-        let stream_data = store
-            .read_stream::<DomainEvent>(request_stream)
-            .await
-            .unwrap();
-        let events = stream_data;
-
-        // Should have emitted an audit event processing failed event
-        let has_processing_error = events.iter().any(|e| matches!(
-            e,
-            DomainEvent::AuditEventProcessingFailed { event_type, .. } if event_type == "RequestBody"
-        ));
-
-        assert!(
-            has_processing_error,
-            "Should emit error for unhandled audit event type"
         );
     }
 

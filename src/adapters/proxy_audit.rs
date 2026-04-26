@@ -103,28 +103,18 @@ fn convert_audit_event_type(
                 duration_ms: *duration_ms.as_ref(),
             })
         }
-        ProxyType::RequestBody { content, truncated } => {
-            Ok(audit_types::AuditEventType::RequestBody {
-                content: content.clone(),
-                truncated: *truncated,
-            })
-        }
-        ProxyType::ResponseBody { content, truncated } => {
-            Ok(audit_types::AuditEventType::ResponseBody {
-                content: content.clone(),
-                truncated: *truncated,
-            })
-        }
-        ProxyType::RequestChunk { offset, data } => Ok(audit_types::AuditEventType::RequestChunk {
-            offset: *offset.as_ref(),
-            data: data.clone(),
-        }),
-        ProxyType::ResponseChunk { offset, data } => {
-            Ok(audit_types::AuditEventType::ResponseChunk {
-                offset: *offset.as_ref(),
-                data: data.clone(),
-            })
-        }
+        ProxyType::RequestBody { .. } => Err(AuditCommandError::InvalidField(
+            "RequestBody not supported at domain boundary".to_string(),
+        )),
+        ProxyType::ResponseBody { .. } => Err(AuditCommandError::InvalidField(
+            "ResponseBody not supported at domain boundary".to_string(),
+        )),
+        ProxyType::RequestChunk { .. } => Err(AuditCommandError::InvalidField(
+            "RequestChunk not supported at domain boundary".to_string(),
+        )),
+        ProxyType::ResponseChunk { .. } => Err(AuditCommandError::InvalidField(
+            "ResponseChunk not supported at domain boundary".to_string(),
+        )),
         ProxyType::Error { error, phase } => {
             let error = crate::domain::types::ErrorMessage::try_new(error.clone())
                 .map_err(|e| AuditCommandError::InvalidField(format!("error: {e}")))?;

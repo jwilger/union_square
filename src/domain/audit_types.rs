@@ -64,14 +64,6 @@ pub enum AuditEventType {
         error: ErrorMessage,
         phase: ErrorPhase,
     },
-    /// Complete request body received
-    RequestBody { content: Vec<u8>, truncated: bool },
-    /// Complete response body received
-    ResponseBody { content: Vec<u8>, truncated: bool },
-    /// Chunk of request body
-    RequestChunk { offset: usize, data: Vec<u8> },
-    /// Chunk of response body
-    ResponseChunk { offset: usize, data: Vec<u8> },
 }
 
 /// HTTP method as a semantic domain type
