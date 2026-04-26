@@ -66,6 +66,18 @@ mod test_helpers {
         InMemoryEventStore::new()
     }
 
+    /// Create the canonical session stream ID for a domain session.
+    pub fn session_stream_for(session_id: &SessionId) -> StreamId {
+        crate::domain::streams::session_stream(session_id)
+            .expect("valid canonical session stream id in tests")
+    }
+
+    /// Create the canonical session stream ID for a proxy session.
+    pub fn proxy_session_stream_for(session_id: &ProxySessionId) -> StreamId {
+        crate::domain::streams::session_stream(&SessionId::new(*session_id.as_ref()))
+            .expect("valid canonical session stream id in tests")
+    }
+
     /// Create a valid OpenAI request body
     pub fn create_openai_request_body() -> Vec<u8> {
         serde_json::json!({
@@ -154,7 +166,7 @@ mod concurrent_processing {
         }
 
         // Verify events are in correct order
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -249,8 +261,7 @@ mod malformed_events {
         assert!(result.is_ok());
 
         // Verify event was created with fallback values
-        let session_stream =
-            StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
+        let session_stream = proxy_session_stream_for(&audit_event.session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -340,7 +351,7 @@ mod event_ordering {
         }
 
         // Read events back
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let session_events = store
             .read_stream::<DomainEvent>(session_stream.clone())
             .await
@@ -373,8 +384,7 @@ mod event_ordering {
         // Create events for multiple sessions
         for _ in 0..num_sessions {
             let audit_event = create_test_audit_event(request_received_event());
-            let session_stream =
-                StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
+            let session_stream = proxy_session_stream_for(&audit_event.session_id);
             stream_ids.push(session_stream);
 
             let command = RecordAuditEvent::from_audit_event(&audit_event).unwrap();
@@ -417,8 +427,7 @@ mod idempotency {
             .unwrap();
 
         // Should only have one event
-        let session_stream =
-            StreamId::try_new(format!("session:{}", audit_event.session_id.as_ref())).unwrap();
+        let session_stream = proxy_session_stream_for(&audit_event.session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -494,7 +503,7 @@ mod idempotency {
         }
 
         // Should still only have one event
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -752,7 +761,7 @@ mod recovery_scenarios {
         }
 
         // Only the last one (request received) should have been recorded
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let session_events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -778,11 +787,7 @@ mod process_request_body_tests {
 
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream_for(&session_id),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -797,7 +802,7 @@ mod process_request_body_tests {
         assert!(result.is_ok());
 
         // Verify parsed content
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -826,11 +831,7 @@ mod process_request_body_tests {
 
         let body = create_anthropic_request_body();
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream_for(&session_id),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -845,7 +846,7 @@ mod process_request_body_tests {
         assert!(result.is_ok());
 
         // Verify parsed content
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -874,11 +875,7 @@ mod process_request_body_tests {
 
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream_for(&session_id),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -898,7 +895,7 @@ mod process_request_body_tests {
             .unwrap();
 
         // Should only have one event
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
@@ -932,11 +929,7 @@ mod edge_cases {
         .to_vec();
 
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream_for(&session_id),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -1026,11 +1019,7 @@ mod headers_tests {
 
         let body = create_openai_request_body();
         let command = ProcessRequestBody {
-            session_stream: StreamId::try_new(format!(
-                "session:{}",
-                session_id.clone().into_inner()
-            ))
-            .unwrap(),
+            session_stream: session_stream_for(&session_id),
             request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
             request_id,
             session_id: session_id.clone(),
@@ -1045,7 +1034,7 @@ mod headers_tests {
         assert!(result.is_ok());
 
         // Verify event was created (headers should be processed, not stored directly)
-        let session_stream = StreamId::try_new(format!("session:{}", session_id.as_ref())).unwrap();
+        let session_stream = session_stream_for(&session_id);
         let events = store
             .read_stream::<DomainEvent>(session_stream)
             .await
