@@ -863,7 +863,7 @@ impl fmt::Display for RequestLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::streams::session_stream;
+    use crate::domain::streams::{request_stream, session_stream};
     use crate::proxy::types::{
         BodySize, DurationMillis, HttpStatusCode, SessionId as ProxySessionId, TargetUrl,
     };
@@ -949,7 +949,7 @@ mod tests {
         let request_id = RequestId::new();
         let _command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
+            request_stream: request_stream(request_id).unwrap(),
             request_id,
             session_id,
             audit_event: AuditEventType::RequestReceived {
@@ -983,7 +983,7 @@ mod tests {
 
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
+            request_stream: request_stream(request_id).unwrap(),
             request_id,
             session_id,
             audit_event: AuditEventType::RequestReceived {
@@ -1029,7 +1029,7 @@ mod tests {
 
         let _command = ProcessRequestBody {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
+            request_stream: request_stream(request_id).unwrap(),
             request_id,
             session_id,
             method: HttpMethod::try_new("POST".to_string()).unwrap(),
@@ -1228,7 +1228,7 @@ mod tests {
         // Create a command with invalid JSON body
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: StreamId::try_new(format!("request-{request_id}")).unwrap(),
+            request_stream: request_stream(request_id).unwrap(),
             request_id,
             session_id: session_id.clone(),
             audit_event: AuditEventType::RequestReceived {
@@ -1247,7 +1247,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
+        let request_stream = request_stream(request_id).unwrap();
         let stream_data = store
             .read_stream::<DomainEvent>(request_stream)
             .await
@@ -1270,7 +1270,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
-        let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
+        let request_stream = request_stream(request_id).unwrap();
 
         // Try to forward a request that hasn't been received
         let command = RecordAuditEvent {
@@ -1321,7 +1321,7 @@ mod tests {
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
         let session_stream = session_stream(&session_id).unwrap();
-        let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
+        let request_stream = request_stream(request_id).unwrap();
 
         // First request received
         let command = RecordAuditEvent {
@@ -1374,7 +1374,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
-        let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
+        let request_stream = request_stream(request_id).unwrap();
 
         // Create a command with an unhandled event type
         let command = RecordAuditEvent {
@@ -1421,7 +1421,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
         let request_id = RequestId::new();
-        let request_stream = StreamId::try_new(format!("request-{request_id}")).unwrap();
+        let request_stream = request_stream(request_id).unwrap();
 
         // Create command with invalid JSON body
         let command = ProcessRequestBody {
