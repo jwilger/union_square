@@ -37,3 +37,4 @@ logs/
 # Log4brains build artifacts
 docs/adr/*
 !docs/adr/*.md
+dhat-heap.json
