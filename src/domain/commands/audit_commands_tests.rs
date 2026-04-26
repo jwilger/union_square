@@ -173,15 +173,15 @@ mod concurrent_processing {
             .await
             .unwrap();
 
-        // Should have at least one event (RequestReceived)
+        // Should have at least one event (LlmRequestDeferred since no body parsed)
         assert!(!events.is_empty());
 
-        // Verify the first event is RequestReceived
+        // Verify the first event is LlmRequestDeferred
         let first_event = events.iter().next().unwrap();
-        if let DomainEvent::LlmRequestReceived { .. } = first_event {
+        if let DomainEvent::LlmRequestDeferred { .. } = first_event {
             // Success
         } else {
-            panic!("Expected first event to be LlmRequestReceived");
+            panic!("Expected first event to be LlmRequestDeferred");
         }
     }
 
@@ -794,7 +794,7 @@ mod recovery_scenarios {
         assert_eq!(session_events.len(), 1);
         assert!(matches!(
             session_events.iter().next().unwrap(),
-            DomainEvent::LlmRequestReceived { .. }
+            DomainEvent::LlmRequestDeferred { .. }
         ));
     }
 }

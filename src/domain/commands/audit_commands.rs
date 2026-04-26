@@ -44,7 +44,12 @@ impl ParsedLlmRequestWithError {
 pub enum RequestLifecycle {
     /// Initial state - no request received yet
     NotStarted,
-    /// Request has been received from the client
+    /// Request headers received but body not yet parsed
+    Deferred {
+        request_id: crate::domain::llm::RequestId,
+        received_at: Timestamp,
+    },
+    /// Request has been received and parsed from the client
     Received {
         request_id: crate::domain::llm::RequestId,
         received_at: Timestamp,
@@ -88,6 +93,7 @@ impl fmt::Display for RequestState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.lifecycle {
             RequestLifecycle::NotStarted => write!(f, "NotStarted"),
+            RequestLifecycle::Deferred { request_id, .. } => write!(f, "Deferred({request_id:?})"),
             RequestLifecycle::Received { request_id, .. } => write!(f, "Received({request_id:?})"),
             RequestLifecycle::Forwarded { request_id, .. } => {
                 write!(f, "Forwarded({request_id:?})")
@@ -123,7 +129,8 @@ impl RequestState {
     pub fn request_id(&self) -> Option<&crate::domain::llm::RequestId> {
         match &self.lifecycle {
             RequestLifecycle::NotStarted => None,
-            RequestLifecycle::Received { request_id, .. }
+            RequestLifecycle::Deferred { request_id, .. }
+            | RequestLifecycle::Received { request_id, .. }
             | RequestLifecycle::Forwarded { request_id, .. }
             | RequestLifecycle::ResponseReceived { request_id, .. }
             | RequestLifecycle::Completed { request_id, .. }
@@ -173,6 +180,17 @@ impl RequestLifecycle {
             // Valid transitions from NotStarted
             (
                 NotStarted,
+                DomainEvent::LlmRequestDeferred {
+                    request_id,
+                    received_at,
+                    ..
+                },
+            ) => Deferred {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+            },
+            (
+                NotStarted,
                 DomainEvent::LlmRequestReceived {
                     request_id,
                     received_at,
@@ -181,6 +199,29 @@ impl RequestLifecycle {
             ) => Received {
                 request_id: request_id.clone(),
                 received_at: *received_at,
+            },
+
+            // Valid transitions from Deferred
+            (
+                Deferred {
+                    request_id,
+                    received_at,
+                },
+                DomainEvent::LlmRequestReceived { .. },
+            ) => Received {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+            },
+            (
+                Deferred {
+                    request_id,
+                    received_at,
+                },
+                DomainEvent::LlmRequestStarted { started_at, .. },
+            ) => Forwarded {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+                forwarded_at: *started_at,
             },
 
             // Valid transitions from Received
@@ -268,9 +309,16 @@ impl RequestLifecycle {
         }
     }
 
-    /// Check if the request has been received
+    /// Check if the request has been received (including deferred)
     pub const fn is_request_received(&self) -> bool {
-        !matches!(self, RequestLifecycle::NotStarted)
+        matches!(
+            self,
+            RequestLifecycle::Deferred { .. }
+                | RequestLifecycle::Received { .. }
+                | RequestLifecycle::Forwarded { .. }
+                | RequestLifecycle::ResponseReceived { .. }
+                | RequestLifecycle::Completed { .. }
+        )
     }
 
     /// Check if the request has been forwarded
@@ -393,25 +441,15 @@ mod transformers {
         request_id: llm::RequestId,
         session_id: SessionId,
         timestamp: Timestamp,
-        parsed_request: Option<&ParsedLlmRequest>,
+        parsed_request: &ParsedLlmRequest,
     ) -> Result<DomainEvent, CommandError> {
-        let (model_version, prompt, parameters) = if let Some(parsed) = parsed_request {
-            (
-                parsed.model_version.clone(),
-                parsed.prompt.clone(),
-                parsed.parameters.clone(),
-            )
-        } else {
-            create_fallback_llm_data()?
-        };
-
         Ok(DomainEvent::LlmRequestReceived {
             stream_id: session_stream,
             request_id,
             session_id,
-            model_version,
-            prompt,
-            parameters,
+            model_version: parsed_request.model_version.clone(),
+            prompt: parsed_request.prompt.clone(),
+            parameters: parsed_request.parameters.clone(),
             received_at: timestamp,
         })
     }
@@ -456,44 +494,6 @@ mod transformers {
             received_at: timestamp,
         })
     }
-
-    /// Create fallback LLM data when parsing fails
-    fn create_fallback_llm_data() -> Result<
-        (
-            crate::domain::llm::ModelVersion,
-            crate::domain::types::Prompt,
-            crate::domain::types::LlmParameters,
-        ),
-        CommandError,
-    > {
-        // Create safe fallback values that should never fail validation
-        let fallback_provider = crate::domain::config_types::ProviderName::try_new(
-            "unknown".to_string(),
-        )
-        .map_err(|e| {
-            CommandError::ValidationError(format!("Failed to create fallback provider name: {e}"))
-        })?;
-
-        let fallback_model_id = crate::domain::types::ModelId::try_new("unknown-model".to_string())
-            .map_err(|e| {
-                CommandError::ValidationError(format!("Failed to create fallback model ID: {e}"))
-            })?;
-
-        let fallback_prompt =
-            crate::domain::types::Prompt::try_new("Request body not available".to_string())
-                .map_err(|e| {
-                    CommandError::ValidationError(format!("Failed to create fallback prompt: {e}"))
-                })?;
-
-        Ok((
-            crate::domain::llm::ModelVersion {
-                provider: crate::domain::llm::LlmProvider::Other(fallback_provider),
-                model_id: fallback_model_id,
-            },
-            fallback_prompt,
-            crate::domain::types::LlmParameters::new(Default::default()),
-        ))
-    }
 }
 
 impl CommandLogic for RecordAuditEvent {
@@ -514,33 +514,38 @@ impl CommandLogic for RecordAuditEvent {
         match &self.audit_event {
             RequestReceived { .. } => {
                 if !state.is_request_received() {
-                    // Emit the request received event
-                    let event = transformers::request_received_to_domain(
-                        self.session_stream.clone(),
-                        self.request_id.clone(),
-                        self.session_id.clone(),
-                        self.timestamp,
-                        self.parsed_request.as_ref().map(|p| &p.parsed),
-                    )?;
+                    if let Some(parsed_request) = &self.parsed_request {
+                        // Emit the request received event with parsed data
+                        let event = transformers::request_received_to_domain(
+                            self.session_stream.clone(),
+                            self.request_id.clone(),
+                            self.session_id.clone(),
+                            self.timestamp,
+                            &parsed_request.parsed,
+                        )?;
 
-                    events.push(event);
+                        events.push(event);
 
-                    // If there was a parsing error, emit an error event
-                    if let Some(ParsedLlmRequestWithError {
-                        error: Some(error_msg),
-                        raw_uri,
-                        ..
-                    }) = &self.parsed_request
-                    {
-                        let error_message = error_messages::parse_error(error_msg.clone())?;
+                        // If there was a parsing error, emit an error event
+                        if let Some(error_msg) = &parsed_request.error {
+                            let error_message = error_messages::parse_error(error_msg.clone())?;
 
-                        events.push(DomainEvent::LlmRequestParsingFailed {
-                            stream_id: self.request_stream.clone(),
+                            events.push(DomainEvent::LlmRequestParsingFailed {
+                                stream_id: self.request_stream.clone(),
+                                request_id: self.request_id.clone(),
+                                session_id: self.session_id.clone(),
+                                parsing_error: error_message,
+                                raw_uri: parsed_request.raw_uri.clone(),
+                                occurred_at: self.timestamp,
+                            });
+                        }
+                    } else {
+                        // Body not yet available — defer parsing
+                        events.push(DomainEvent::LlmRequestDeferred {
+                            stream_id: self.session_stream.clone(),
                             request_id: self.request_id.clone(),
                             session_id: self.session_id.clone(),
-                            parsing_error: error_message,
-                            raw_uri: raw_uri.as_ref().to_string(),
-                            occurred_at: self.timestamp,
+                            received_at: self.timestamp,
                         });
                     }
                 } else {
@@ -697,8 +702,8 @@ impl CommandLogic for ProcessRequestBody {
     fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
-        // Check if we've already recorded this request
-        if state.is_request_received() {
+        // Only process if request is deferred or not yet received
+        if matches!(state.lifecycle, RequestLifecycle::Received { .. }) {
             return Ok(events.into());
         }
 
@@ -727,7 +732,7 @@ impl CommandLogic for ProcessRequestBody {
                 request_id: self.request_id.clone(),
                 session_id: self.session_id.clone(),
                 parsing_error: error_message,
-                raw_uri: parsed_request.raw_uri.as_ref().to_string(),
+                raw_uri: parsed_request.raw_uri.clone(),
                 occurred_at: self.timestamp,
             });
         }
@@ -767,6 +772,8 @@ impl fmt::Display for RequestLifecycle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotStarted => write!(f, "NotStarted"),
+            Self::Deferred { request_id, received_at } =>
+                write!(f, "Deferred {{ request_id: {request_id:?}, received_at: {received_at:?} }}"),
             Self::Received { request_id, received_at } =>
                 write!(f, "Received {{ request_id: {request_id:?}, received_at: {received_at:?} }}"),
             Self::Forwarded { request_id, received_at, forwarded_at } =>
