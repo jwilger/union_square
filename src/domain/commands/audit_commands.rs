@@ -409,6 +409,7 @@ impl RecordAuditEvent {
 /// Error messages as constants for compile-time validation
 mod error_messages {
     use crate::domain::types::ErrorMessage;
+    use eventcore::CommandError;
 
     pub const REQUEST_ALREADY_RECEIVED: &str = "Request already received";
     pub const REQUEST_ALREADY_FORWARDED: &str = "Request already forwarded";
@@ -420,10 +421,11 @@ mod error_messages {
     pub const UNKNOWN_PARSING_ERROR: &str = "Unknown parsing error";
     pub const REQUEST_CANCELLED: &str = "Request cancelled";
 
-    /// Create an ErrorMessage from a static string - this is safe because we control all the strings
+    /// Create an ErrorMessage from a static string - all static strings are controlled and non-empty
     #[inline]
-    pub fn static_error(msg: &'static str) -> ErrorMessage {
-        ErrorMessage::try_new(msg.to_string()).expect("static error message should be valid")
+    pub fn static_error(msg: &'static str) -> Result<ErrorMessage, CommandError> {
+        ErrorMessage::try_new(msg.to_string())
+            .map_err(|e| CommandError::ValidationError(format!("Invalid static error message: {e}")))
     }
 }
 
@@ -499,13 +501,6 @@ mod transformers {
             metadata,
             received_at: timestamp,
         })
-    }
-
-    /// Helper to create error message safely
-    #[allow(dead_code)]
-    pub fn create_error_message(msg: &str) -> ErrorMessage {
-        ErrorMessage::try_new(msg.to_string())
-            .expect("error message creation should not fail for valid strings")
     }
 
     /// Create fallback LLM data when parsing fails
@@ -592,11 +587,11 @@ impl CommandLogic for RecordAuditEvent {
                         }) = &self.parsed_request
                         {
                             let error_message = ErrorMessage::try_new(error_msg.clone())
-                                .unwrap_or_else(|_| {
+                                .or_else(|_| {
                                     error_messages::static_error(
                                         error_messages::UNKNOWN_PARSING_ERROR,
                                     )
-                                });
+                                })?;
 
                             events.push(DomainEvent::LlmRequestParsingFailed {
                                 stream_id: self.request_stream.clone(),
@@ -620,7 +615,7 @@ impl CommandLogic for RecordAuditEvent {
                         event_type: "RequestReceived".to_string(),
                         reason: error_messages::static_error(
                             error_messages::REQUEST_ALREADY_RECEIVED,
-                        ),
+                        )?,
                         occurred_at: self.timestamp,
                     });
                 }
@@ -640,7 +635,7 @@ impl CommandLogic for RecordAuditEvent {
                             event_type: "RequestForwarded".to_string(),
                             reason: error_messages::static_error(
                                 error_messages::CANNOT_FORWARD_UNRECEIVED,
-                            ),
+                            )?,
                             occurred_at: self.timestamp,
                         });
                     } else {
@@ -668,7 +663,7 @@ impl CommandLogic for RecordAuditEvent {
                         event_type: "RequestForwarded".to_string(),
                         reason: error_messages::static_error(
                             error_messages::REQUEST_ALREADY_FORWARDED,
-                        ),
+                        )?,
                         occurred_at: self.timestamp,
                     });
                 }
@@ -693,7 +688,7 @@ impl CommandLogic for RecordAuditEvent {
                         event_type: "ResponseReceived".to_string(),
                         reason: error_messages::static_error(
                             error_messages::CANNOT_RECEIVE_RESPONSE_UNFORWARDED,
-                        ),
+                        )?,
                         occurred_at: self.timestamp,
                     });
                 } else {
@@ -706,7 +701,7 @@ impl CommandLogic for RecordAuditEvent {
                         event_type: "ResponseReceived".to_string(),
                         reason: error_messages::static_error(
                             error_messages::RESPONSE_ALREADY_RECEIVED,
-                        ),
+                        )?,
                         occurred_at: self.timestamp,
                     });
                 }
@@ -736,7 +731,7 @@ impl CommandLogic for RecordAuditEvent {
                     event_type: event_type_str.to_string(),
                     error_message: error_messages::static_error(
                         error_messages::AUDIT_EVENT_NOT_IMPLEMENTED,
-                    ),
+                    )?,
                     occurred_at: self.timestamp,
                 });
             }
@@ -821,9 +816,8 @@ impl CommandLogic for ProcessRequestBody {
 
         // If there was a parsing error, emit an error event
         if let Some(error_msg) = parsing_error {
-            let error_message = ErrorMessage::try_new(error_msg).unwrap_or_else(|_| {
-                error_messages::static_error(error_messages::UNKNOWN_PARSING_ERROR)
-            });
+            let error_message = ErrorMessage::try_new(error_msg)
+                .or_else(|_| error_messages::static_error(error_messages::UNKNOWN_PARSING_ERROR))?;
 
             events.push(DomainEvent::LlmRequestParsingFailed {
                 stream_id: self.request_stream.clone(),
