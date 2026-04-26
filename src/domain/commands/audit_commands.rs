@@ -11,7 +11,7 @@ use crate::domain::{
     audit_types, events::DomainEvent, llm, metrics::Timestamp, session::SessionId,
 };
 
-use super::llm_request_parser::{create_fallback_request, parse_llm_request, ParsedLlmRequest};
+use super::llm_request_parser::ParsedLlmRequest;
 
 use std::fmt;
 
@@ -333,36 +333,17 @@ impl RecordAuditEvent {
             .map_err(|e| AuditCommandError::InvalidStreamId(e.to_string()))
     }
 
-    /// Set the parsed LLM request data from a request body
-    pub fn with_body(mut self, body: &[u8]) -> Self {
-        // Only parse body for RequestReceived events
-        if let audit_types::AuditEventType::RequestReceived { uri, headers, .. } = &self.audit_event
-        {
-            // Convert headers to the format expected by the parser
-            let headers_vec = headers
-                .as_pairs()
-                .iter()
-                .map(|(name, value)| (name.as_ref().to_string(), value.as_ref().to_string()))
-                .collect::<Vec<_>>();
-
-            // Try to parse the request body
-            match parse_llm_request(body, uri.as_ref(), &headers_vec) {
-                Ok(parsed) => {
-                    self.parsed_request = Some(ParsedLlmRequestWithError::new(
-                        parsed,
-                        None,
-                        uri.as_ref().to_string(),
-                    ));
-                }
-                Err(e) => {
-                    // Store both the fallback and the error for later emission
-                    self.parsed_request = Some(ParsedLlmRequestWithError::new(
-                        create_fallback_request(&e),
-                        Some(e.to_string()),
-                        uri.as_ref().to_string(),
-                    ));
-                }
-            }
+    /// Set pre-parsed LLM request data directly.
+    ///
+    /// Parsing must happen at the adapter boundary; the domain command
+    /// only accepts already-parsed semantic facts.
+    pub fn with_parsed_request(mut self, parsed: Option<ParsedLlmRequestWithError>) -> Self {
+        // Only set parsed request for RequestReceived events
+        if matches!(
+            &self.audit_event,
+            audit_types::AuditEventType::RequestReceived { .. }
+        ) {
+            self.parsed_request = parsed;
         }
         self
     }
@@ -695,7 +676,10 @@ impl CommandLogic for RecordAuditEvent {
 
 // The redundant command structs have been removed in favor of the unified RecordAuditEvent command
 
-/// Command to process buffered request body and emit LlmRequestReceived event
+/// Command to process a pre-parsed LLM request and emit domain events.
+///
+/// All parsing happens at the adapter boundary; this command only accepts
+/// already-parsed semantic facts.
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct ProcessRequestBody {
     #[stream]
@@ -704,10 +688,8 @@ pub struct ProcessRequestBody {
     pub request_stream: StreamId,
     pub request_id: llm::RequestId,
     pub session_id: SessionId,
-    pub method: audit_types::HttpMethod,
-    pub uri: audit_types::RequestUri,
-    pub headers: audit_types::HttpHeaders,
-    pub body: Vec<u8>,
+    #[serde(skip)]
+    pub parsed_request: Option<ParsedLlmRequestWithError>,
     pub timestamp: Timestamp,
 }
 
@@ -728,49 +710,32 @@ impl CommandLogic for ProcessRequestBody {
             return Ok(events.into());
         }
 
-        // Convert headers for parser
-        let headers_vec = self
-            .headers
-            .as_pairs()
-            .iter()
-            .map(|(name, value)| (name.as_ref().to_string(), value.as_ref().to_string()))
-            .collect::<Vec<_>>();
-
-        // Parse the LLM request
-        let parsed_result = parse_llm_request(&self.body, self.uri.as_ref(), &headers_vec);
-
-        let (model_version, prompt, parameters, parsing_error) = parsed_result
-            .map(|parsed| (parsed.model_version, parsed.prompt, parsed.parameters, None))
-            .unwrap_or_else(|e| {
-                let fallback = create_fallback_request(&e);
-                (
-                    fallback.model_version,
-                    fallback.prompt,
-                    fallback.parameters,
-                    Some(e.to_string()),
-                )
-            });
+        let parsed_request = self
+            .parsed_request
+            .as_ref()
+            .ok_or_else(|| CommandError::ValidationError("Missing parsed request".to_string()))?;
+        let parsed = &parsed_request.parsed;
 
         events.push(DomainEvent::LlmRequestReceived {
             stream_id: self.session_stream.clone(),
             request_id: self.request_id.clone(),
             session_id: self.session_id.clone(),
-            model_version,
-            prompt,
-            parameters,
+            model_version: parsed.model_version.clone(),
+            prompt: parsed.prompt.clone(),
+            parameters: parsed.parameters.clone(),
             received_at: self.timestamp,
         });
 
         // If there was a parsing error, emit an error event
-        if let Some(error_msg) = parsing_error {
-            let error_message = error_messages::parse_error(error_msg)?;
+        if let Some(ref error_msg) = parsed_request.error {
+            let error_message = error_messages::parse_error(error_msg.clone())?;
 
             events.push(DomainEvent::LlmRequestParsingFailed {
                 stream_id: self.request_stream.clone(),
                 request_id: self.request_id.clone(),
                 session_id: self.session_id.clone(),
                 parsing_error: error_message,
-                raw_uri: self.uri.as_ref().to_string(),
+                raw_uri: parsed_request.raw_uri.clone(),
                 occurred_at: self.timestamp,
             });
         }
@@ -951,8 +916,15 @@ mod tests {
             parsed_request: None,
         };
 
-        // Apply body parsing
-        let command_with_body = command.with_body(body.to_string().as_bytes());
+        // Apply body parsing at adapter boundary
+        let uri = audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed = crate::adapters::proxy_audit::parse_request_body(
+            body.to_string().as_bytes(),
+            &uri,
+            &headers,
+        );
+        let command_with_body = command.with_parsed_request(Some(parsed));
 
         // Verify parsing succeeded
         assert!(command_with_body.parsed_request.is_some());
@@ -982,15 +954,20 @@ mod tests {
             "max_tokens": 100
         });
 
+        let uri = audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed_request = crate::adapters::proxy_audit::parse_request_body(
+            body.to_string().as_bytes(),
+            &uri,
+            &headers,
+        );
+
         let _command = ProcessRequestBody {
             session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream(&request_id).unwrap(),
             request_id: request_id.clone(),
             session_id,
-            method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap(),
-            headers: audit_types::HttpHeaders::new(),
-            body: body.to_string().as_bytes().to_vec(),
+            parsed_request: Some(parsed_request),
             timestamp: Timestamp::now(),
         };
 
@@ -1180,7 +1157,11 @@ mod tests {
         let session_id = SessionId::generate();
         let request_id = llm::RequestId::generate();
 
-        // Create a command with invalid JSON body
+        // Create a command with invalid JSON body (parsed at adapter boundary)
+        let uri = audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed =
+            crate::adapters::proxy_audit::parse_request_body(b"invalid json {", &uri, &headers);
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream(&request_id).unwrap(),
@@ -1188,14 +1169,14 @@ mod tests {
             session_id: session_id.clone(),
             audit_event: audit_types::AuditEventType::RequestReceived {
                 method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-                uri: audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-                headers: audit_types::HttpHeaders::new(),
+                uri,
+                headers,
                 body_size: audit_types::BodySize::from(15),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
         }
-        .with_body(b"invalid json {"); // Invalid JSON
+        .with_parsed_request(Some(parsed));
 
         // Execute the command
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
@@ -1378,16 +1359,21 @@ mod tests {
         let request_id = llm::RequestId::generate();
         let request_stream = request_stream(&request_id).unwrap();
 
-        // Create command with invalid JSON body
+        // Create command with invalid JSON body (parsed at adapter boundary)
+        let uri = audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed_request = crate::adapters::proxy_audit::parse_request_body(
+            b"not valid json at all",
+            &uri,
+            &headers,
+        );
+
         let command = ProcessRequestBody {
             session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
             request_id: request_id.clone(),
             session_id,
-            method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap(),
-            headers: audit_types::HttpHeaders::new(),
-            body: b"not valid json at all".to_vec(),
+            parsed_request: Some(parsed_request),
             timestamp: Timestamp::now(),
         };
 
@@ -1470,14 +1456,14 @@ impl RecordAuditEventBuilder {
             request_stream: self.request_stream.ok_or_else(|| {
                 AuditCommandError::InvalidStreamId("Missing request stream".to_string())
             })?,
-            request_id: self.request_id.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing request ID".to_string())
-            })?,
-            session_id: self.session_id.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing session ID".to_string())
-            })?,
+            request_id: self
+                .request_id
+                .ok_or_else(|| AuditCommandError::InvalidField("Missing request ID".to_string()))?,
+            session_id: self
+                .session_id
+                .ok_or_else(|| AuditCommandError::InvalidField("Missing session ID".to_string()))?,
             audit_event: self.audit_event.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing audit event".to_string())
+                AuditCommandError::InvalidField("Missing audit event".to_string())
             })?,
             timestamp: self.timestamp.ok_or_else(|| {
                 AuditCommandError::InvalidTimestamp("Missing timestamp".to_string())

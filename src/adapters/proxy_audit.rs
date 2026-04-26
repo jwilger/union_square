@@ -165,6 +165,33 @@ fn convert_error_phase(proxy_phase: &crate::proxy::types::ErrorPhase) -> audit_t
     }
 }
 
+/// Parse a request body into domain semantic facts at the adapter boundary.
+///
+/// This keeps all transport-to-domain parsing out of the functional core.
+pub fn parse_request_body(
+    body: &[u8],
+    uri: &audit_types::RequestUri,
+    headers: &audit_types::HttpHeaders,
+) -> crate::domain::commands::audit_commands::ParsedLlmRequestWithError {
+    use crate::domain::commands::audit_commands::ParsedLlmRequestWithError;
+    use crate::domain::commands::llm_request_parser::{create_fallback_request, parse_llm_request};
+
+    let headers_vec = headers
+        .as_pairs()
+        .iter()
+        .map(|(name, value)| (name.as_ref().to_string(), value.as_ref().to_string()))
+        .collect::<Vec<_>>();
+
+    match parse_llm_request(body, uri.as_ref(), &headers_vec) {
+        Ok(parsed) => ParsedLlmRequestWithError::new(parsed, None, uri.as_ref().to_string()),
+        Err(e) => ParsedLlmRequestWithError::new(
+            create_fallback_request(&e),
+            Some(e.to_string()),
+            uri.as_ref().to_string(),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

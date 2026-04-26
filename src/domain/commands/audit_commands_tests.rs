@@ -254,9 +254,17 @@ mod malformed_events {
         // Create command with malformed JSON body
         let malformed_body = b"{ invalid json }";
         let audit_event = create_test_audit_event(request_received_event());
-        let command = convert_audit_event(&audit_event)
-            .unwrap()
-            .with_body(malformed_body);
+        let mut command = convert_audit_event(&audit_event).unwrap();
+        if let crate::domain::audit_types::AuditEventType::RequestReceived {
+            ref uri,
+            ref headers,
+            ..
+        } = command.audit_event
+        {
+            let parsed =
+                crate::adapters::proxy_audit::parse_request_body(malformed_body, uri, headers);
+            command = command.with_parsed_request(Some(parsed));
+        }
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
@@ -288,7 +296,16 @@ mod malformed_events {
         let store = create_test_store();
 
         let audit_event = create_test_audit_event(request_received_event());
-        let command = convert_audit_event(&audit_event).unwrap().with_body(&[]);
+        let mut command = convert_audit_event(&audit_event).unwrap();
+        if let crate::domain::audit_types::AuditEventType::RequestReceived {
+            ref uri,
+            ref headers,
+            ..
+        } = command.audit_event
+        {
+            let parsed = crate::adapters::proxy_audit::parse_request_body(&[], uri, headers);
+            command = command.with_parsed_request(Some(parsed));
+        }
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
@@ -301,9 +318,17 @@ mod malformed_events {
         // Invalid UTF-8 sequence
         let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
         let audit_event = create_test_audit_event(request_received_event());
-        let command = convert_audit_event(&audit_event)
-            .unwrap()
-            .with_body(&invalid_utf8);
+        let mut command = convert_audit_event(&audit_event).unwrap();
+        if let crate::domain::audit_types::AuditEventType::RequestReceived {
+            ref uri,
+            ref headers,
+            ..
+        } = command.audit_event
+        {
+            let parsed =
+                crate::adapters::proxy_audit::parse_request_body(&invalid_utf8, uri, headers);
+            command = command.with_parsed_request(Some(parsed));
+        }
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
@@ -793,13 +818,14 @@ mod process_request_body_tests {
             .unwrap(),
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: crate::domain::audit_types::RequestUri::try_new(
-                "/v1/chat/completions".to_string(),
-            )
-            .unwrap(),
-            headers: crate::domain::audit_types::HttpHeaders::new(),
-            body,
+            parsed_request: Some(crate::adapters::proxy_audit::parse_request_body(
+                &body,
+                &crate::domain::audit_types::RequestUri::try_new(
+                    "/v1/chat/completions".to_string(),
+                )
+                .unwrap(),
+                &crate::domain::audit_types::HttpHeaders::new(),
+            )),
             timestamp: Timestamp::now(),
         };
 
@@ -843,11 +869,12 @@ mod process_request_body_tests {
             .unwrap(),
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: crate::domain::audit_types::RequestUri::try_new("/v1/messages".to_string())
-                .unwrap(),
-            headers: crate::domain::audit_types::HttpHeaders::new(),
-            body,
+            parsed_request: Some(crate::adapters::proxy_audit::parse_request_body(
+                &body,
+                &crate::domain::audit_types::RequestUri::try_new("/v1/messages".to_string())
+                    .unwrap(),
+                &crate::domain::audit_types::HttpHeaders::new(),
+            )),
             timestamp: Timestamp::now(),
         };
 
@@ -891,13 +918,14 @@ mod process_request_body_tests {
             .unwrap(),
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: crate::domain::audit_types::RequestUri::try_new(
-                "/v1/chat/completions".to_string(),
-            )
-            .unwrap(),
-            headers: crate::domain::audit_types::HttpHeaders::new(),
-            body,
+            parsed_request: Some(crate::adapters::proxy_audit::parse_request_body(
+                &body,
+                &crate::domain::audit_types::RequestUri::try_new(
+                    "/v1/chat/completions".to_string(),
+                )
+                .unwrap(),
+                &crate::domain::audit_types::HttpHeaders::new(),
+            )),
             timestamp: Timestamp::now(),
         };
 
@@ -951,13 +979,14 @@ mod edge_cases {
             .unwrap(),
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: crate::domain::audit_types::RequestUri::try_new(
-                "/v1/chat/completions".to_string(),
-            )
-            .unwrap(),
-            headers: crate::domain::audit_types::HttpHeaders::new(),
-            body,
+            parsed_request: Some(crate::adapters::proxy_audit::parse_request_body(
+                &body,
+                &crate::domain::audit_types::RequestUri::try_new(
+                    "/v1/chat/completions".to_string(),
+                )
+                .unwrap(),
+                &crate::domain::audit_types::HttpHeaders::new(),
+            )),
             timestamp: Timestamp::now(),
         };
 
@@ -1047,20 +1076,21 @@ mod headers_tests {
             .unwrap(),
             request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
             session_id: session_id.clone(),
-            method: crate::domain::audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: crate::domain::audit_types::RequestUri::try_new(
-                "/v1/chat/completions".to_string(),
-            )
-            .unwrap(),
-            headers: crate::domain::audit_types::HttpHeaders::try_from_pairs(
-                headers
-                    .as_vec()
-                    .iter()
-                    .map(|(n, v)| (n.as_ref().to_string(), v.as_ref().to_string()))
-                    .collect(),
-            )
-            .unwrap(),
-            body,
+            parsed_request: Some(crate::adapters::proxy_audit::parse_request_body(
+                &body,
+                &crate::domain::audit_types::RequestUri::try_new(
+                    "/v1/chat/completions".to_string(),
+                )
+                .unwrap(),
+                &crate::domain::audit_types::HttpHeaders::try_from_pairs(
+                    headers
+                        .as_vec()
+                        .iter()
+                        .map(|(n, v)| (n.as_ref().to_string(), v.as_ref().to_string()))
+                        .collect(),
+                )
+                .unwrap(),
+            )),
             timestamp: Timestamp::now(),
         };
 

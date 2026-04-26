@@ -22,9 +22,13 @@ impl BufferedData {
     }
 
     /// Add a chunk to the buffer
-    pub fn add_chunk(&mut self, offset: usize, data: Vec<u8>) {
-        self.total_size = (offset + data.len()).max(self.total_size);
+    pub fn add_chunk(&mut self, offset: usize, data: Vec<u8>) -> Result<(), String> {
+        let new_end = offset
+            .checked_add(data.len())
+            .ok_or("chunk offset overflow")?;
+        self.total_size = new_end.max(self.total_size);
         self.chunks.push((offset, data));
+        Ok(())
     }
 
     /// Set the expected total size (for cases where we know it upfront)
@@ -92,19 +96,29 @@ impl AuditBufferManager {
     }
 
     /// Add a request chunk
-    pub fn add_request_chunk(&mut self, request_id: RequestId, offset: usize, data: Vec<u8>) {
+    pub fn add_request_chunk(
+        &mut self,
+        request_id: RequestId,
+        offset: usize,
+        data: Vec<u8>,
+    ) -> Result<(), String> {
         self.request_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)
-            .add_chunk(offset, data);
+            .add_chunk(offset, data)
     }
 
     /// Add a response chunk
-    pub fn add_response_chunk(&mut self, request_id: RequestId, offset: usize, data: Vec<u8>) {
+    pub fn add_response_chunk(
+        &mut self,
+        request_id: RequestId,
+        offset: usize,
+        data: Vec<u8>,
+    ) -> Result<(), String> {
         self.response_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)
-            .add_chunk(offset, data);
+            .add_chunk(offset, data)
     }
 
     /// Check if request body is complete and return it
@@ -153,8 +167,8 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks in order
-        buffer.add_chunk(0, vec![1, 2, 3]);
-        buffer.add_chunk(3, vec![4, 5, 6]);
+        assert!(buffer.add_chunk(0, vec![1, 2, 3]).is_ok());
+        assert!(buffer.add_chunk(3, vec![4, 5, 6]).is_ok());
 
         assert!(buffer.is_complete());
         assert_eq!(buffer.reconstruct(), Some(vec![1, 2, 3, 4, 5, 6]));
@@ -165,8 +179,8 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks with a gap
-        buffer.add_chunk(0, vec![1, 2, 3]);
-        buffer.add_chunk(6, vec![7, 8, 9]); // Gap at 3-5
+        assert!(buffer.add_chunk(0, vec![1, 2, 3]).is_ok());
+        assert!(buffer.add_chunk(6, vec![7, 8, 9]).is_ok()); // Gap at 3-5
 
         assert!(!buffer.is_complete());
         assert_eq!(buffer.reconstruct(), None);
@@ -177,8 +191,8 @@ mod tests {
         let mut buffer = BufferedData::new();
 
         // Add chunks out of order
-        buffer.add_chunk(3, vec![4, 5, 6]);
-        buffer.add_chunk(0, vec![1, 2, 3]);
+        assert!(buffer.add_chunk(3, vec![4, 5, 6]).is_ok());
+        assert!(buffer.add_chunk(0, vec![1, 2, 3]).is_ok());
 
         assert!(buffer.is_complete());
         assert_eq!(buffer.reconstruct(), Some(vec![1, 2, 3, 4, 5, 6]));
@@ -191,8 +205,12 @@ mod tests {
 
         // For this test, we need a different approach since we need to know total size
         // Let's test the cleanup functionality instead
-        manager.add_request_chunk(request_id.clone(), 0, vec![1, 2, 3]);
-        manager.add_response_chunk(request_id.clone(), 0, vec![4, 5, 6]);
+        assert!(manager
+            .add_request_chunk(request_id.clone(), 0, vec![1, 2, 3])
+            .is_ok());
+        assert!(manager
+            .add_response_chunk(request_id.clone(), 0, vec![4, 5, 6])
+            .is_ok());
 
         // Cleanup should remove both buffers
         manager.cleanup_request(&request_id);
