@@ -700,7 +700,6 @@ impl CommandLogic for RecordAuditEvent {
             }
             _ => {
                 // Other audit event types not yet handled
-                tracing::debug!("Unhandled audit event type: {:?}", self.audit_event);
 
                 // Emit an error event for unhandled audit event types
                 let event_type_str = match &self.audit_event {
