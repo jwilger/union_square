@@ -5,6 +5,14 @@
 
 use crate::domain::llm::RequestId;
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur in audit buffering
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum AuditBufferError {
+    #[error("chunk offset overflow")]
+    OffsetOverflow,
+}
 
 /// Buffered data for a request or response
 #[derive(Debug, Clone)]
@@ -22,10 +30,10 @@ impl BufferedData {
     }
 
     /// Add a chunk to the buffer
-    pub fn add_chunk(&mut self, offset: usize, data: Vec<u8>) -> Result<(), String> {
+    pub fn add_chunk(&mut self, offset: usize, data: Vec<u8>) -> Result<(), AuditBufferError> {
         let new_end = offset
             .checked_add(data.len())
-            .ok_or("chunk offset overflow")?;
+            .ok_or(AuditBufferError::OffsetOverflow)?;
         self.total_size = new_end.max(self.total_size);
         self.chunks.push((offset, data));
         Ok(())
@@ -101,7 +109,7 @@ impl AuditBufferManager {
         request_id: RequestId,
         offset: usize,
         data: Vec<u8>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AuditBufferError> {
         self.request_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)
@@ -114,7 +122,7 @@ impl AuditBufferManager {
         request_id: RequestId,
         offset: usize,
         data: Vec<u8>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AuditBufferError> {
         self.response_buffers
             .entry(request_id)
             .or_insert_with(BufferedData::new)

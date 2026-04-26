@@ -173,11 +173,11 @@ pub fn parse_request_body(
         .collect::<Vec<_>>();
 
     match parse_llm_request(body, uri.as_ref(), &headers_vec) {
-        Ok(parsed) => ParsedLlmRequestWithError::new(parsed, None, uri.as_ref().to_string()),
+        Ok(parsed) => ParsedLlmRequestWithError::new(parsed, None, uri.clone()),
         Err(e) => ParsedLlmRequestWithError::new(
             create_fallback_request(&e),
             Some(e.to_string()),
-            uri.as_ref().to_string(),
+            uri.clone(),
         ),
     }
 }

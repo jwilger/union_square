@@ -20,12 +20,16 @@ use std::fmt;
 pub struct ParsedLlmRequestWithError {
     pub parsed: ParsedLlmRequest,
     pub error: Option<String>,
-    pub raw_uri: String,
+    pub raw_uri: audit_types::RequestUri,
 }
 
 impl ParsedLlmRequestWithError {
     /// Create a new parsed request with error information
-    pub const fn new(parsed: ParsedLlmRequest, error: Option<String>, raw_uri: String) -> Self {
+    pub const fn new(
+        parsed: ParsedLlmRequest,
+        error: Option<String>,
+        raw_uri: audit_types::RequestUri,
+    ) -> Self {
         Self {
             parsed,
             error,
@@ -536,7 +540,7 @@ impl CommandLogic for RecordAuditEvent {
                                 request_id: self.request_id.clone(),
                                 session_id: self.session_id.clone(),
                                 parsing_error: error_message,
-                                raw_uri: raw_uri.clone(),
+                                raw_uri: raw_uri.as_ref().to_string(),
                                 occurred_at: self.timestamp,
                             });
                         }
@@ -731,7 +735,7 @@ impl CommandLogic for ProcessRequestBody {
                 request_id: self.request_id.clone(),
                 session_id: self.session_id.clone(),
                 parsing_error: error_message,
-                raw_uri: parsed_request.raw_uri.clone(),
+                raw_uri: parsed_request.raw_uri.as_ref().to_string(),
                 occurred_at: self.timestamp,
             });
         }
