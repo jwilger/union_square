@@ -44,14 +44,13 @@ impl CommandLogic for PlaceOrder {
         require!(state.status == OrderStatus::Draft, "Order must be in draft status");
 
         let total = calculate_total(&self.items);
-        emit!(
-            events,
+        events.push(
             &read_streams,
             self.order_stream.clone(),
             DomainEvent::OrderPlaced {
                 items: self.items.clone(),
                 total,
-            }
+            },
         );
 
         Ok(events)
@@ -64,7 +63,7 @@ impl CommandLogic for PlaceOrder {
 1. **Always derive `Command`** — Never implement stream types manually
 2. **Use `#[stream]` attribute** — Mark all stream fields explicitly
 3. **Use `require!` for business rules** — Not `if` + `return Err`
-4. **Use `emit!` for events** — Never push events manually to the vec
+4. **Push events into the vec** — Use `events.push(...)` to emit events
 5. **Event names are past tense** — `OrderPlaced`, not `PlaceOrder`
 6. **State defaults to `Default`** — Ensure `State: Default + Send + Sync`
 

@@ -89,7 +89,7 @@ EventCore differs from traditional event sourcing frameworks:
 **IMPORTANT**: Always use the macros from eventcore-macros to reduce boilerplate:
 - `#[derive(Command)]` - Automatically generates stream set types and trait implementations
 - `require!` - Simplifies business rule validation
-- `emit!` - Simplifies event emission
+- Push events into the vec directly — No macro needed
 
 The `#[derive(Command)]` macro automatically generates:
 - A phantom type for compile-time stream access control (e.g., `MyCommandStreamSet`)
@@ -105,7 +105,7 @@ enum DomainEvent {
 }
 
 // 2. Define your command with the Command derive macro
-use eventcore::{emit, require};
+use eventcore::require;
 use eventcore_macros::Command;
 
 #[derive(Command, Clone, Debug, Serialize, Deserialize)]
@@ -147,12 +147,11 @@ impl CommandLogic for MyCommand {
         // Use require! for business rule validation
         require!(state.balance >= self.amount, "Insufficient funds");
 
-        // Use emit! for event emission
-        emit!(
-            events,
+        // Push events into the vec
+        events.push(
             &read_streams,
             self.primary_stream.clone(),
-            DomainEvent::SomethingHappened { data: "test".into() }
+            DomainEvent::SomethingHappened { data: "test".into() },
         );
 
         Ok(events)

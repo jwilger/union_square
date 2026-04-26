@@ -19,5 +19,5 @@ Use this skill when implementing or reviewing event-sourced features, designing 
 - [ ] Events are past tense (`SessionRecorded`, not `RecordSession`)
 - [ ] Events are immutable and self-contained
 - [ ] Stream boundaries match consistency requirements
-- [ ] Commands use `require!` and `emit!` macros
+- [ ] Commands use `require!` macro and push events into the vec
 - [ ] Event schema changes follow incremental field rules
