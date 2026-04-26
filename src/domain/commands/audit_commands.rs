@@ -526,24 +526,22 @@ impl CommandLogic for RecordAuditEvent {
                     events.push(event);
 
                     // If there was a parsing error, emit an error event
-                    if let Some(_parsed_with_error) = &self.parsed_request {
-                        if let Some(ParsedLlmRequestWithError {
-                            error: Some(error_msg),
-                            raw_uri,
-                            ..
-                        }) = &self.parsed_request
-                        {
-                            let error_message = error_messages::parse_error(error_msg.clone())?;
+                    if let Some(ParsedLlmRequestWithError {
+                        error: Some(error_msg),
+                        raw_uri,
+                        ..
+                    }) = &self.parsed_request
+                    {
+                        let error_message = error_messages::parse_error(error_msg.clone())?;
 
-                            events.push(DomainEvent::LlmRequestParsingFailed {
-                                stream_id: self.request_stream.clone(),
-                                request_id: self.request_id.clone(),
-                                session_id: self.session_id.clone(),
-                                parsing_error: error_message,
-                                raw_uri: raw_uri.as_ref().to_string(),
-                                occurred_at: self.timestamp,
-                            });
-                        }
+                        events.push(DomainEvent::LlmRequestParsingFailed {
+                            stream_id: self.request_stream.clone(),
+                            request_id: self.request_id.clone(),
+                            session_id: self.session_id.clone(),
+                            parsing_error: error_message,
+                            raw_uri: raw_uri.as_ref().to_string(),
+                            occurred_at: self.timestamp,
+                        });
                     }
                 } else {
                     // Invalid state transition - request already received
@@ -577,16 +575,10 @@ impl CommandLogic for RecordAuditEvent {
                             occurred_at: self.timestamp,
                         });
                     } else {
-                        let timestamp = Timestamp::try_new(*start_time).map_err(|e| {
-                            CommandError::ValidationError(format!(
-                                "Failed to convert start_time: {e}"
-                            ))
-                        })?;
-
                         let event = transformers::request_forwarded_to_domain(
                             self.request_stream.clone(),
                             self.request_id.clone(),
-                            timestamp,
+                            *start_time,
                         );
 
                         events.push(event);
@@ -1219,7 +1211,7 @@ mod tests {
                     "https://api.openai.com/v1/chat/completions".to_string(),
                 )
                 .unwrap(),
-                start_time: Utc::now(),
+                start_time: Timestamp::now(),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,

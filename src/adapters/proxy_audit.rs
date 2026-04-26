@@ -76,9 +76,11 @@ fn convert_audit_event_type(
         } => {
             let target_url = audit_types::TargetUrl::try_new(target_url.as_ref().to_string())
                 .map_err(|e| AuditCommandError::InvalidField(format!("target_url: {e}")))?;
+            let start_time = Timestamp::try_new(*start_time)
+                .map_err(|e| AuditCommandError::InvalidTimestamp(format!("start_time: {e}")))?;
             Ok(audit_types::AuditEventType::RequestForwarded {
                 target_url,
-                start_time: *start_time,
+                start_time,
             })
         }
         ProxyType::ResponseReceived {
@@ -91,16 +93,17 @@ fn convert_audit_event_type(
                 .map_err(|e| AuditCommandError::InvalidField(format!("status: {e}")))?;
             let headers = convert_headers(headers)?;
             let body_size = audit_types::BodySize::from(*body_size.as_ref());
+            let duration_ms = audit_types::DurationMs::from(*duration_ms.as_ref());
             Ok(audit_types::AuditEventType::ResponseReceived {
                 status,
                 headers,
                 body_size,
-                duration_ms: *duration_ms.as_ref(),
+                duration_ms,
             })
         }
         ProxyType::ResponseReturned { duration_ms } => {
             Ok(audit_types::AuditEventType::ResponseReturned {
-                duration_ms: *duration_ms.as_ref(),
+                duration_ms: audit_types::DurationMs::from(*duration_ms.as_ref()),
             })
         }
         ProxyType::RequestBody { .. } => Err(AuditCommandError::InvalidField(

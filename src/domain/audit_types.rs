@@ -4,7 +4,7 @@
 //! raw proxy types that previously leaked into the domain core. These types
 //! represent business facts rather than transport structures.
 
-use crate::domain::{llm::RequestId, session::SessionId, types::ErrorMessage};
+use crate::domain::{llm::RequestId, metrics::Timestamp, session::SessionId, types::ErrorMessage};
 use serde::{Deserialize, Serialize};
 
 /// Size of HTTP body in bytes
@@ -28,8 +28,24 @@ impl AsRef<usize> for BodySize {
 pub struct AuditEvent {
     pub request_id: RequestId,
     pub session_id: SessionId,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: Timestamp,
     pub event_type: AuditEventType,
+}
+
+/// Duration in milliseconds as a semantic domain type
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DurationMs(u64);
+
+impl DurationMs {
+    pub const fn from(ms: u64) -> Self {
+        Self(ms)
+    }
+}
+
+impl AsRef<u64> for DurationMs {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
 }
 
 /// Types of audit events as semantic domain facts.
@@ -48,17 +64,17 @@ pub enum AuditEventType {
     /// Request forwarded to target provider
     RequestForwarded {
         target_url: TargetUrl,
-        start_time: chrono::DateTime<chrono::Utc>,
+        start_time: Timestamp,
     },
     /// Response received from provider
     ResponseReceived {
         status: HttpStatusCode,
         headers: HttpHeaders,
         body_size: BodySize,
-        duration_ms: u64,
+        duration_ms: DurationMs,
     },
     /// Response returned to client
-    ResponseReturned { duration_ms: u64 },
+    ResponseReturned { duration_ms: DurationMs },
     /// Error during processing
     Error {
         error: ErrorMessage,
