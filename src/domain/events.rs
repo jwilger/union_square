@@ -7,6 +7,7 @@ use eventcore::StreamId;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
+    audit_types::RequestUri,
     llm::{ModelVersion, RequestId, ResponseMetadata},
     metrics::{SampleCount, Timestamp},
     session::{ApplicationId, SessionId, SessionStatus},
@@ -41,6 +42,12 @@ pub enum DomainEvent {
     },
 
     // LLM Request Events
+    LlmRequestDeferred {
+        stream_id: StreamId,
+        request_id: RequestId,
+        session_id: SessionId,
+        received_at: Timestamp,
+    },
     LlmRequestReceived {
         stream_id: StreamId,
         request_id: RequestId,
@@ -80,7 +87,7 @@ pub enum DomainEvent {
         request_id: RequestId,
         session_id: SessionId,
         parsing_error: ErrorMessage,
-        raw_uri: String,
+        raw_uri: RequestUri,
         occurred_at: Timestamp,
     },
     InvalidStateTransition {
@@ -181,6 +188,7 @@ impl eventcore::Event for DomainEvent {
             DomainEvent::SessionStarted { stream_id, .. } => stream_id,
             DomainEvent::SessionEnded { stream_id, .. } => stream_id,
             DomainEvent::SessionTagged { stream_id, .. } => stream_id,
+            DomainEvent::LlmRequestDeferred { stream_id, .. } => stream_id,
             DomainEvent::LlmRequestReceived { stream_id, .. } => stream_id,
             DomainEvent::LlmRequestStarted { stream_id, .. } => stream_id,
             DomainEvent::LlmResponseReceived { stream_id, .. } => stream_id,
@@ -216,6 +224,7 @@ impl DomainEvent {
             DomainEvent::SessionStarted { started_at, .. } => *started_at,
             DomainEvent::SessionEnded { ended_at, .. } => *ended_at,
             DomainEvent::SessionTagged { tagged_at, .. } => *tagged_at,
+            DomainEvent::LlmRequestDeferred { received_at, .. } => *received_at,
             DomainEvent::LlmRequestReceived { received_at, .. } => *received_at,
             DomainEvent::LlmRequestStarted { started_at, .. } => *started_at,
             DomainEvent::LlmResponseReceived { received_at, .. } => *received_at,

@@ -7,10 +7,11 @@ use eventcore::{CommandError, CommandLogic, NewEvents, StreamId};
 use eventcore_macros::Command;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{events::DomainEvent, metrics::Timestamp, session::SessionId};
-use crate::proxy::types::{AuditEvent, AuditEventType, Headers, HttpMethod, RequestId, RequestUri};
+use crate::domain::{
+    audit_types, events::DomainEvent, llm, metrics::Timestamp, session::SessionId,
+};
 
-use super::llm_request_parser::{create_fallback_request, parse_llm_request, ParsedLlmRequest};
+use super::llm_request_parser::ParsedLlmRequest;
 
 use std::fmt;
 
@@ -19,12 +20,16 @@ use std::fmt;
 pub struct ParsedLlmRequestWithError {
     pub parsed: ParsedLlmRequest,
     pub error: Option<String>,
-    pub raw_uri: String,
+    pub raw_uri: audit_types::RequestUri,
 }
 
 impl ParsedLlmRequestWithError {
     /// Create a new parsed request with error information
-    pub const fn new(parsed: ParsedLlmRequest, error: Option<String>, raw_uri: String) -> Self {
+    pub const fn new(
+        parsed: ParsedLlmRequest,
+        error: Option<String>,
+        raw_uri: audit_types::RequestUri,
+    ) -> Self {
         Self {
             parsed,
             error,
@@ -39,7 +44,12 @@ impl ParsedLlmRequestWithError {
 pub enum RequestLifecycle {
     /// Initial state - no request received yet
     NotStarted,
-    /// Request has been received from the client
+    /// Request headers received but body not yet parsed
+    Deferred {
+        request_id: crate::domain::llm::RequestId,
+        received_at: Timestamp,
+    },
+    /// Request has been received and parsed from the client
     Received {
         request_id: crate::domain::llm::RequestId,
         received_at: Timestamp,
@@ -83,6 +93,7 @@ impl fmt::Display for RequestState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.lifecycle {
             RequestLifecycle::NotStarted => write!(f, "NotStarted"),
+            RequestLifecycle::Deferred { request_id, .. } => write!(f, "Deferred({request_id:?})"),
             RequestLifecycle::Received { request_id, .. } => write!(f, "Received({request_id:?})"),
             RequestLifecycle::Forwarded { request_id, .. } => {
                 write!(f, "Forwarded({request_id:?})")
@@ -118,7 +129,8 @@ impl RequestState {
     pub fn request_id(&self) -> Option<&crate::domain::llm::RequestId> {
         match &self.lifecycle {
             RequestLifecycle::NotStarted => None,
-            RequestLifecycle::Received { request_id, .. }
+            RequestLifecycle::Deferred { request_id, .. }
+            | RequestLifecycle::Received { request_id, .. }
             | RequestLifecycle::Forwarded { request_id, .. }
             | RequestLifecycle::ResponseReceived { request_id, .. }
             | RequestLifecycle::Completed { request_id, .. }
@@ -168,6 +180,17 @@ impl RequestLifecycle {
             // Valid transitions from NotStarted
             (
                 NotStarted,
+                DomainEvent::LlmRequestDeferred {
+                    request_id,
+                    received_at,
+                    ..
+                },
+            ) => Deferred {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+            },
+            (
+                NotStarted,
                 DomainEvent::LlmRequestReceived {
                     request_id,
                     received_at,
@@ -176,6 +199,29 @@ impl RequestLifecycle {
             ) => Received {
                 request_id: request_id.clone(),
                 received_at: *received_at,
+            },
+
+            // Valid transitions from Deferred
+            (
+                Deferred {
+                    request_id,
+                    received_at,
+                },
+                DomainEvent::LlmRequestReceived { .. },
+            ) => Received {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+            },
+            (
+                Deferred {
+                    request_id,
+                    received_at,
+                },
+                DomainEvent::LlmRequestStarted { started_at, .. },
+            ) => Forwarded {
+                request_id: request_id.clone(),
+                received_at: *received_at,
+                forwarded_at: *started_at,
             },
 
             // Valid transitions from Received
@@ -263,9 +309,16 @@ impl RequestLifecycle {
         }
     }
 
-    /// Check if the request has been received
+    /// Check if the request has been received (including deferred)
     pub const fn is_request_received(&self) -> bool {
-        !matches!(self, RequestLifecycle::NotStarted)
+        matches!(
+            self,
+            RequestLifecycle::Deferred { .. }
+                | RequestLifecycle::Received { .. }
+                | RequestLifecycle::Forwarded { .. }
+                | RequestLifecycle::ResponseReceived { .. }
+                | RequestLifecycle::Completed { .. }
+        )
     }
 
     /// Check if the request has been forwarded
@@ -305,49 +358,16 @@ pub struct RecordAuditEvent {
     pub session_stream: StreamId,
     #[stream]
     pub request_stream: StreamId,
-    pub request_id: RequestId,
+    pub request_id: llm::RequestId,
     pub session_id: SessionId,
-    pub audit_event: AuditEventType,
+    pub audit_event: audit_types::AuditEventType,
     pub timestamp: Timestamp,
     /// Optional parsed request data (only used for RequestReceived events with body)
     #[serde(skip)]
     pub parsed_request: Option<ParsedLlmRequestWithError>,
 }
 
-impl TryFrom<&AuditEvent> for RecordAuditEvent {
-    type Error = AuditCommandError;
-
-    fn try_from(audit_event: &AuditEvent) -> Result<Self, Self::Error> {
-        let session_stream =
-            Self::session_stream_id(&SessionId::new(*audit_event.session_id.as_ref()))?;
-        let request_stream = Self::request_stream_id(&audit_event.request_id)?;
-
-        // Convert proxy SessionId to domain SessionId by extracting the inner UUID
-        let session_id = SessionId::new(*audit_event.session_id.as_ref());
-
-        // Convert chrono DateTime to domain Timestamp
-        let timestamp = Timestamp::try_new(audit_event.timestamp).map_err(|e| {
-            AuditCommandError::InvalidTimestamp(format!("Failed to convert timestamp: {e}"))
-        })?;
-
-        Ok(Self {
-            session_stream,
-            request_stream,
-            request_id: audit_event.request_id,
-            session_id,
-            audit_event: audit_event.event_type.clone(),
-            timestamp,
-            parsed_request: None,
-        })
-    }
-}
-
 impl RecordAuditEvent {
-    /// Create from an audit event (convenience method that delegates to TryFrom)
-    pub fn from_audit_event(audit_event: &AuditEvent) -> Result<Self, AuditCommandError> {
-        Self::try_from(audit_event)
-    }
-
     /// Builder method to create a new instance
     pub fn builder() -> RecordAuditEventBuilder {
         RecordAuditEventBuilder::default()
@@ -360,40 +380,22 @@ impl RecordAuditEvent {
     }
 
     /// Create stream ID for a request
-    pub fn request_stream_id(request_id: &RequestId) -> Result<StreamId, AuditCommandError> {
+    pub fn request_stream_id(request_id: &llm::RequestId) -> Result<StreamId, AuditCommandError> {
         crate::domain::streams::request_stream(request_id)
             .map_err(|e| AuditCommandError::InvalidStreamId(e.to_string()))
     }
 
-    /// Set the parsed LLM request data from a request body
-    pub fn with_body(mut self, body: &[u8]) -> Self {
-        // Only parse body for RequestReceived events
-        if let AuditEventType::RequestReceived { uri, headers, .. } = &self.audit_event {
-            // Convert headers to the format expected by the parser
-            let headers_vec = headers
-                .as_vec()
-                .iter()
-                .map(|(name, value)| (name.as_ref().to_string(), value.as_ref().to_string()))
-                .collect::<Vec<_>>();
-
-            // Try to parse the request body
-            match parse_llm_request(body, uri.as_ref(), &headers_vec) {
-                Ok(parsed) => {
-                    self.parsed_request = Some(ParsedLlmRequestWithError::new(
-                        parsed,
-                        None,
-                        uri.as_ref().to_string(),
-                    ));
-                }
-                Err(e) => {
-                    // Store both the fallback and the error for later emission
-                    self.parsed_request = Some(ParsedLlmRequestWithError::new(
-                        create_fallback_request(&e),
-                        Some(e.to_string()),
-                        uri.as_ref().to_string(),
-                    ));
-                }
-            }
+    /// Set pre-parsed LLM request data directly.
+    ///
+    /// Parsing must happen at the adapter boundary; the domain command
+    /// only accepts already-parsed semantic facts.
+    pub fn with_parsed_request(mut self, parsed: Option<ParsedLlmRequestWithError>) -> Self {
+        // Only set parsed request for RequestReceived events
+        if matches!(
+            &self.audit_event,
+            audit_types::AuditEventType::RequestReceived { .. }
+        ) {
+            self.parsed_request = parsed;
         }
         self
     }
@@ -436,28 +438,18 @@ mod transformers {
     /// Transform RequestReceived audit event to domain event
     pub fn request_received_to_domain(
         session_stream: StreamId,
-        request_id: RequestId,
+        request_id: llm::RequestId,
         session_id: SessionId,
         timestamp: Timestamp,
-        parsed_request: Option<&ParsedLlmRequest>,
+        parsed_request: &ParsedLlmRequest,
     ) -> Result<DomainEvent, CommandError> {
-        let (model_version, prompt, parameters) = if let Some(parsed) = parsed_request {
-            (
-                parsed.model_version.clone(),
-                parsed.prompt.clone(),
-                parsed.parameters.clone(),
-            )
-        } else {
-            create_fallback_llm_data()?
-        };
-
         Ok(DomainEvent::LlmRequestReceived {
             stream_id: session_stream,
-            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            request_id,
             session_id,
-            model_version,
-            prompt,
-            parameters,
+            model_version: parsed_request.model_version.clone(),
+            prompt: parsed_request.prompt.clone(),
+            parameters: parsed_request.parameters.clone(),
             received_at: timestamp,
         })
     }
@@ -465,12 +457,12 @@ mod transformers {
     /// Transform RequestForwarded audit event to domain event
     pub fn request_forwarded_to_domain(
         request_stream: StreamId,
-        request_id: RequestId,
+        request_id: llm::RequestId,
         timestamp: Timestamp,
     ) -> DomainEvent {
         DomainEvent::LlmRequestStarted {
             stream_id: request_stream,
-            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            request_id,
             started_at: timestamp,
         }
     }
@@ -478,7 +470,7 @@ mod transformers {
     /// Transform ResponseReceived audit event to domain event
     pub fn response_received_to_domain(
         request_stream: StreamId,
-        request_id: RequestId,
+        request_id: llm::RequestId,
         timestamp: Timestamp,
     ) -> Result<DomainEvent, CommandError> {
         // For now, we don't have the response body here
@@ -496,49 +488,11 @@ mod transformers {
 
         Ok(DomainEvent::LlmResponseReceived {
             stream_id: request_stream,
-            request_id: crate::domain::llm::RequestId::new(*request_id.as_ref()),
+            request_id,
             response_text,
             metadata,
             received_at: timestamp,
         })
-    }
-
-    /// Create fallback LLM data when parsing fails
-    fn create_fallback_llm_data() -> Result<
-        (
-            crate::domain::llm::ModelVersion,
-            crate::domain::types::Prompt,
-            crate::domain::types::LlmParameters,
-        ),
-        CommandError,
-    > {
-        // Create safe fallback values that should never fail validation
-        let fallback_provider = crate::domain::config_types::ProviderName::try_new(
-            "unknown".to_string(),
-        )
-        .map_err(|e| {
-            CommandError::ValidationError(format!("Failed to create fallback provider name: {e}"))
-        })?;
-
-        let fallback_model_id = crate::domain::types::ModelId::try_new("unknown-model".to_string())
-            .map_err(|e| {
-                CommandError::ValidationError(format!("Failed to create fallback model ID: {e}"))
-            })?;
-
-        let fallback_prompt =
-            crate::domain::types::Prompt::try_new("Request body not available".to_string())
-                .map_err(|e| {
-                    CommandError::ValidationError(format!("Failed to create fallback prompt: {e}"))
-                })?;
-
-        Ok((
-            crate::domain::llm::ModelVersion {
-                provider: crate::domain::llm::LlmProvider::Other(fallback_provider),
-                model_id: fallback_model_id,
-            },
-            fallback_prompt,
-            crate::domain::types::LlmParameters::new(Default::default()),
-        ))
     }
 }
 
@@ -554,50 +508,51 @@ impl CommandLogic for RecordAuditEvent {
     fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
-        use AuditEventType::*;
+        use audit_types::AuditEventType::*;
 
         // Determine which event to emit based on audit event type and current state
         match &self.audit_event {
             RequestReceived { .. } => {
                 if !state.is_request_received() {
-                    // Emit the request received event
-                    let event = transformers::request_received_to_domain(
-                        self.session_stream.clone(),
-                        self.request_id,
-                        self.session_id.clone(),
-                        self.timestamp,
-                        self.parsed_request.as_ref().map(|p| &p.parsed),
-                    )?;
+                    if let Some(parsed_request) = &self.parsed_request {
+                        // Emit the request received event with parsed data
+                        let event = transformers::request_received_to_domain(
+                            self.session_stream.clone(),
+                            self.request_id.clone(),
+                            self.session_id.clone(),
+                            self.timestamp,
+                            &parsed_request.parsed,
+                        )?;
 
-                    events.push(event);
+                        events.push(event);
 
-                    // If there was a parsing error, emit an error event
-                    if let Some(_parsed_with_error) = &self.parsed_request {
-                        if let Some(ParsedLlmRequestWithError {
-                            error: Some(error_msg),
-                            raw_uri,
-                            ..
-                        }) = &self.parsed_request
-                        {
+                        // If there was a parsing error, emit an error event
+                        if let Some(error_msg) = &parsed_request.error {
                             let error_message = error_messages::parse_error(error_msg.clone())?;
 
                             events.push(DomainEvent::LlmRequestParsingFailed {
                                 stream_id: self.request_stream.clone(),
-                                request_id: crate::domain::llm::RequestId::new(
-                                    *self.request_id.as_ref(),
-                                ),
+                                request_id: self.request_id.clone(),
                                 session_id: self.session_id.clone(),
                                 parsing_error: error_message,
-                                raw_uri: raw_uri.clone(),
+                                raw_uri: parsed_request.raw_uri.clone(),
                                 occurred_at: self.timestamp,
                             });
                         }
+                    } else {
+                        // Body not yet available — defer parsing
+                        events.push(DomainEvent::LlmRequestDeferred {
+                            stream_id: self.session_stream.clone(),
+                            request_id: self.request_id.clone(),
+                            session_id: self.session_id.clone(),
+                            received_at: self.timestamp,
+                        });
                     }
                 } else {
                     // Invalid state transition - request already received
                     events.push(DomainEvent::InvalidStateTransition {
                         stream_id: self.request_stream.clone(),
-                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
                         from_state: state.to_string(),
                         event_type: "RequestReceived".to_string(),
@@ -615,9 +570,7 @@ impl CommandLogic for RecordAuditEvent {
                         // Invalid transition - trying to forward before receiving
                         events.push(DomainEvent::InvalidStateTransition {
                             stream_id: self.request_stream.clone(),
-                            request_id: crate::domain::llm::RequestId::new(
-                                *self.request_id.as_ref(),
-                            ),
+                            request_id: self.request_id.clone(),
                             session_id: self.session_id.clone(),
                             from_state: state.to_string(),
                             event_type: "RequestForwarded".to_string(),
@@ -627,16 +580,10 @@ impl CommandLogic for RecordAuditEvent {
                             occurred_at: self.timestamp,
                         });
                     } else {
-                        let timestamp = Timestamp::try_new(*start_time).map_err(|e| {
-                            CommandError::ValidationError(format!(
-                                "Failed to convert start_time: {e}"
-                            ))
-                        })?;
-
                         let event = transformers::request_forwarded_to_domain(
                             self.request_stream.clone(),
-                            self.request_id,
-                            timestamp,
+                            self.request_id.clone(),
+                            *start_time,
                         );
 
                         events.push(event);
@@ -645,7 +592,7 @@ impl CommandLogic for RecordAuditEvent {
                     // Invalid state transition - request already forwarded
                     events.push(DomainEvent::InvalidStateTransition {
                         stream_id: self.request_stream.clone(),
-                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
                         from_state: state.to_string(),
                         event_type: "RequestForwarded".to_string(),
@@ -661,7 +608,7 @@ impl CommandLogic for RecordAuditEvent {
                 if state.is_request_forwarded() && !state.is_response_received() {
                     let event = transformers::response_received_to_domain(
                         self.request_stream.clone(),
-                        self.request_id,
+                        self.request_id.clone(),
                         self.timestamp,
                     )?;
 
@@ -670,7 +617,7 @@ impl CommandLogic for RecordAuditEvent {
                     // Invalid transition - response received before forwarding
                     events.push(DomainEvent::InvalidStateTransition {
                         stream_id: self.request_stream.clone(),
-                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
                         from_state: state.to_string(),
                         event_type: "ResponseReceived".to_string(),
@@ -683,7 +630,7 @@ impl CommandLogic for RecordAuditEvent {
                     // Response already received
                     events.push(DomainEvent::InvalidStateTransition {
                         stream_id: self.request_stream.clone(),
-                        request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                        request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
                         from_state: state.to_string(),
                         event_type: "ResponseReceived".to_string(),
@@ -703,17 +650,13 @@ impl CommandLogic for RecordAuditEvent {
 
                 // Emit an error event for unhandled audit event types
                 let event_type_str = match &self.audit_event {
-                    RequestBody { .. } => "RequestBody",
-                    ResponseBody { .. } => "ResponseBody",
-                    RequestChunk { .. } => "RequestChunk",
-                    ResponseChunk { .. } => "ResponseChunk",
                     Error { .. } => "Error",
                     _ => "Unknown",
                 };
 
                 events.push(DomainEvent::AuditEventProcessingFailed {
                     stream_id: self.request_stream.clone(),
-                    request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                    request_id: self.request_id.clone(),
                     session_id: self.session_id.clone(),
                     event_type: event_type_str.to_string(),
                     error_message: error_messages::static_error(
@@ -730,19 +673,20 @@ impl CommandLogic for RecordAuditEvent {
 
 // The redundant command structs have been removed in favor of the unified RecordAuditEvent command
 
-/// Command to process buffered request body and emit LlmRequestReceived event
+/// Command to process a pre-parsed LLM request and emit domain events.
+///
+/// All parsing happens at the adapter boundary; this command only accepts
+/// already-parsed semantic facts.
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct ProcessRequestBody {
     #[stream]
     pub session_stream: StreamId,
     #[stream]
     pub request_stream: StreamId,
-    pub request_id: RequestId,
+    pub request_id: llm::RequestId,
     pub session_id: SessionId,
-    pub method: HttpMethod,
-    pub uri: RequestUri,
-    pub headers: Headers,
-    pub body: Vec<u8>,
+    #[serde(skip)]
+    pub parsed_request: Option<ParsedLlmRequestWithError>,
     pub timestamp: Timestamp,
 }
 
@@ -758,54 +702,37 @@ impl CommandLogic for ProcessRequestBody {
     fn handle(&self, state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
-        // Check if we've already recorded this request
-        if state.is_request_received() {
+        // Only process if request is deferred or not yet received
+        if matches!(state.lifecycle, RequestLifecycle::Received { .. }) {
             return Ok(events.into());
         }
 
-        // Convert headers for parser
-        let headers_vec = self
-            .headers
-            .as_vec()
-            .iter()
-            .map(|(name, value)| (name.as_ref().to_string(), value.as_ref().to_string()))
-            .collect::<Vec<_>>();
-
-        // Parse the LLM request
-        let parsed_result = parse_llm_request(&self.body, self.uri.as_ref(), &headers_vec);
-
-        let (model_version, prompt, parameters, parsing_error) = parsed_result
-            .map(|parsed| (parsed.model_version, parsed.prompt, parsed.parameters, None))
-            .unwrap_or_else(|e| {
-                let fallback = create_fallback_request(&e);
-                (
-                    fallback.model_version,
-                    fallback.prompt,
-                    fallback.parameters,
-                    Some(e.to_string()),
-                )
-            });
+        let parsed_request = self
+            .parsed_request
+            .as_ref()
+            .ok_or_else(|| CommandError::ValidationError("Missing parsed request".to_string()))?;
+        let parsed = &parsed_request.parsed;
 
         events.push(DomainEvent::LlmRequestReceived {
             stream_id: self.session_stream.clone(),
-            request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+            request_id: self.request_id.clone(),
             session_id: self.session_id.clone(),
-            model_version,
-            prompt,
-            parameters,
+            model_version: parsed.model_version.clone(),
+            prompt: parsed.prompt.clone(),
+            parameters: parsed.parameters.clone(),
             received_at: self.timestamp,
         });
 
         // If there was a parsing error, emit an error event
-        if let Some(error_msg) = parsing_error {
-            let error_message = error_messages::parse_error(error_msg)?;
+        if let Some(ref error_msg) = parsed_request.error {
+            let error_message = error_messages::parse_error(error_msg.clone())?;
 
             events.push(DomainEvent::LlmRequestParsingFailed {
                 stream_id: self.request_stream.clone(),
-                request_id: crate::domain::llm::RequestId::new(*self.request_id.as_ref()),
+                request_id: self.request_id.clone(),
                 session_id: self.session_id.clone(),
                 parsing_error: error_message,
-                raw_uri: self.uri.as_ref().to_string(),
+                raw_uri: parsed_request.raw_uri.clone(),
                 occurred_at: self.timestamp,
             });
         }
@@ -836,12 +763,17 @@ pub enum AuditCommandError {
 
     #[error("Invalid response text: {0}")]
     InvalidResponseText(String),
+
+    #[error("Invalid field: {0}")]
+    InvalidField(String),
 }
 
 impl fmt::Display for RequestLifecycle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotStarted => write!(f, "NotStarted"),
+            Self::Deferred { request_id, received_at } =>
+                write!(f, "Deferred {{ request_id: {request_id:?}, received_at: {received_at:?} }}"),
             Self::Received { request_id, received_at } =>
                 write!(f, "Received {{ request_id: {request_id:?}, received_at: {received_at:?} }}"),
             Self::Forwarded { request_id, received_at, forwarded_at } =>
@@ -859,81 +791,72 @@ impl fmt::Display for RequestLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapters::proxy_audit::convert_audit_event;
     use crate::domain::streams::{request_stream, session_stream};
-    use crate::proxy::types::{
-        BodySize, DurationMillis, HttpStatusCode, SessionId as ProxySessionId, TargetUrl,
-    };
     use chrono::Utc;
     use eventcore_types::EventStore;
 
     #[test]
     fn test_audit_event_to_unified_command() {
-        let audit_event = AuditEvent {
-            request_id: RequestId::new(),
-            session_id: ProxySessionId::new(),
+        let proxy_event = crate::proxy::types::AuditEvent {
+            request_id: crate::proxy::types::RequestId::new(),
+            session_id: crate::proxy::types::SessionId::new(),
             timestamp: Utc::now(),
-            event_type: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("GET".to_string()).unwrap(),
-                uri: RequestUri::try_new("/test".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(0),
+            event_type: crate::proxy::types::AuditEventType::RequestReceived {
+                method: crate::proxy::types::HttpMethod::try_new("GET".to_string()).unwrap(),
+                uri: crate::proxy::types::RequestUri::try_new("/test".to_string()).unwrap(),
+                headers: crate::proxy::types::Headers::new(),
+                body_size: crate::proxy::types::BodySize::from(0),
             },
         };
 
-        let command = RecordAuditEvent::from_audit_event(&audit_event);
+        let command = convert_audit_event(&proxy_event);
         assert!(command.is_ok());
         let cmd = command.unwrap();
-        assert_eq!(cmd.request_id, audit_event.request_id);
-        // Can't directly compare different SessionId types, so check they wrap the same UUID
-        assert_eq!(
-            cmd.session_id.into_inner(),
-            *audit_event.session_id.as_ref()
-        );
-
         // Verify the audit event type was preserved
         assert!(matches!(
             cmd.audit_event,
-            AuditEventType::RequestReceived { .. }
+            audit_types::AuditEventType::RequestReceived { .. }
         ));
     }
 
     #[test]
     fn test_unified_command_handles_all_event_types() {
-        // Test that the unified command can handle any audit event type
+        // Test that the adapter can handle any audit event type
         let event_types = vec![
-            AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("GET".to_string()).unwrap(),
-                uri: RequestUri::try_new("/test".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(0),
+            crate::proxy::types::AuditEventType::RequestReceived {
+                method: crate::proxy::types::HttpMethod::try_new("GET".to_string()).unwrap(),
+                uri: crate::proxy::types::RequestUri::try_new("/test".to_string()).unwrap(),
+                headers: crate::proxy::types::Headers::new(),
+                body_size: crate::proxy::types::BodySize::from(0),
             },
-            AuditEventType::RequestForwarded {
-                target_url: TargetUrl::try_new(
+            crate::proxy::types::AuditEventType::RequestForwarded {
+                target_url: crate::proxy::types::TargetUrl::try_new(
                     "https://api.openai.com/v1/chat/completions".to_string(),
                 )
                 .unwrap(),
                 start_time: Utc::now(),
             },
-            AuditEventType::ResponseReceived {
-                status: HttpStatusCode::try_new(200).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(1024),
-                duration_ms: DurationMillis::from(100),
+            crate::proxy::types::AuditEventType::ResponseReceived {
+                status: crate::proxy::types::HttpStatusCode::try_new(200).unwrap(),
+                headers: crate::proxy::types::Headers::new(),
+                body_size: crate::proxy::types::BodySize::from(1024),
+                duration_ms: crate::proxy::types::DurationMillis::from(100),
             },
-            AuditEventType::ResponseReturned {
-                duration_ms: DurationMillis::from(200),
+            crate::proxy::types::AuditEventType::ResponseReturned {
+                duration_ms: crate::proxy::types::DurationMillis::from(200),
             },
         ];
 
         for event_type in event_types {
-            let audit_event = AuditEvent {
-                request_id: RequestId::new(),
-                session_id: ProxySessionId::new(),
+            let proxy_event = crate::proxy::types::AuditEvent {
+                request_id: crate::proxy::types::RequestId::new(),
+                session_id: crate::proxy::types::SessionId::new(),
                 timestamp: Utc::now(),
                 event_type: event_type.clone(),
             };
 
-            let command = RecordAuditEvent::from_audit_event(&audit_event);
+            let command = convert_audit_event(&proxy_event);
             assert!(command.is_ok(), "Failed for event type: {event_type:?}");
         }
     }
@@ -942,17 +865,17 @@ mod tests {
     async fn test_unified_command_logic() {
         // Create a command
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
+        let request_id = llm::RequestId::generate();
         let _command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream(request_id).unwrap(),
-            request_id,
+            request_stream: request_stream(&request_id).unwrap(),
+            request_id: request_id.clone(),
             session_id,
-            audit_event: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("POST".to_string()).unwrap(),
-                uri: RequestUri::try_new("/api/test".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(1024),
+            audit_event: audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+                uri: audit_types::RequestUri::try_new("/api/test".to_string()).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(1024),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
@@ -966,7 +889,7 @@ mod tests {
     #[test]
     fn test_unified_command_with_body_parsing() {
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
+        let request_id = llm::RequestId::generate();
 
         // Create a sample OpenAI request body
         let body = serde_json::json!({
@@ -979,21 +902,28 @@ mod tests {
 
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream(request_id).unwrap(),
-            request_id,
+            request_stream: request_stream(&request_id).unwrap(),
+            request_id: request_id.clone(),
             session_id,
-            audit_event: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("POST".to_string()).unwrap(),
-                uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(body.to_string().len()),
+            audit_event: audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+                uri: audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(body.to_string().len()),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
         };
 
-        // Apply body parsing
-        let command_with_body = command.with_body(body.to_string().as_bytes());
+        // Apply body parsing at adapter boundary
+        let uri = audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed = crate::adapters::proxy_audit::parse_request_body(
+            body.to_string().as_bytes(),
+            &uri,
+            &headers,
+        );
+        let command_with_body = command.with_parsed_request(Some(parsed));
 
         // Verify parsing succeeded
         assert!(command_with_body.parsed_request.is_some());
@@ -1013,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_request_body_command() {
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
+        let request_id = llm::RequestId::generate();
 
         let body = serde_json::json!({
             "model": "claude-3-opus-20240229",
@@ -1023,15 +953,20 @@ mod tests {
             "max_tokens": 100
         });
 
+        let uri = audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed_request = crate::adapters::proxy_audit::parse_request_body(
+            body.to_string().as_bytes(),
+            &uri,
+            &headers,
+        );
+
         let _command = ProcessRequestBody {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream(request_id).unwrap(),
-            request_id,
+            request_stream: request_stream(&request_id).unwrap(),
+            request_id: request_id.clone(),
             session_id,
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/messages".to_string()).unwrap(),
-            headers: Headers::new(),
-            body: body.to_string().as_bytes().to_vec(),
+            parsed_request: Some(parsed_request),
             timestamp: Timestamp::now(),
         };
 
@@ -1219,31 +1154,35 @@ mod tests {
 
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
+        let request_id = llm::RequestId::generate();
 
-        // Create a command with invalid JSON body
+        // Create a command with invalid JSON body (parsed at adapter boundary)
+        let uri = audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed =
+            crate::adapters::proxy_audit::parse_request_body(b"invalid json {", &uri, &headers);
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream(request_id).unwrap(),
-            request_id,
+            request_stream: request_stream(&request_id).unwrap(),
+            request_id: request_id.clone(),
             session_id: session_id.clone(),
-            audit_event: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("POST".to_string()).unwrap(),
-                uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(15),
+            audit_event: audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+                uri,
+                headers,
+                body_size: audit_types::BodySize::from(15),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
         }
-        .with_body(b"invalid json {"); // Invalid JSON
+        .with_parsed_request(Some(parsed));
 
         // Execute the command
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
         // Read events from the request stream
-        let request_stream = request_stream(request_id).unwrap();
+        let request_stream = request_stream(&request_id).unwrap();
         let stream_data = store
             .read_stream::<DomainEvent>(request_stream)
             .await
@@ -1265,21 +1204,21 @@ mod tests {
 
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
-        let request_stream = request_stream(request_id).unwrap();
+        let request_id = llm::RequestId::generate();
+        let request_stream = request_stream(&request_id).unwrap();
 
         // Try to forward a request that hasn't been received
         let command = RecordAuditEvent {
             session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
-            request_id,
+            request_id: request_id.clone(),
             session_id: session_id.clone(),
-            audit_event: AuditEventType::RequestForwarded {
-                target_url: TargetUrl::try_new(
+            audit_event: audit_types::AuditEventType::RequestForwarded {
+                target_url: audit_types::TargetUrl::try_new(
                     "https://api.openai.com/v1/chat/completions".to_string(),
                 )
                 .unwrap(),
-                start_time: Utc::now(),
+                start_time: Timestamp::now(),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
@@ -1315,21 +1254,21 @@ mod tests {
 
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
+        let request_id = llm::RequestId::generate();
         let session_stream = session_stream(&session_id).unwrap();
-        let request_stream = request_stream(request_id).unwrap();
+        let request_stream = request_stream(&request_id).unwrap();
 
         // First request received
         let command = RecordAuditEvent {
             session_stream: session_stream.clone(),
             request_stream: request_stream.clone(),
-            request_id,
+            request_id: request_id.clone(),
             session_id: session_id.clone(),
-            audit_event: AuditEventType::RequestReceived {
-                method: HttpMethod::try_new("POST".to_string()).unwrap(),
-                uri: RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
-                headers: Headers::new(),
-                body_size: BodySize::from(0),
+            audit_event: audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("POST".to_string()).unwrap(),
+                uri: audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(0),
             },
             timestamp: Timestamp::now(),
             parsed_request: None,
@@ -1363,72 +1302,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unhandled_audit_event_error() {
-        use eventcore::RetryPolicy;
-        use eventcore_memory::InMemoryEventStore;
-
-        let store = InMemoryEventStore::new();
-        let session_id = SessionId::generate();
-        let request_id = RequestId::new();
-        let request_stream = request_stream(request_id).unwrap();
-
-        // Create a command with an unhandled event type
-        let command = RecordAuditEvent {
-            session_stream: session_stream(&session_id).unwrap(),
-            request_stream: request_stream.clone(),
-            request_id,
-            session_id: session_id.clone(),
-            audit_event: AuditEventType::RequestBody {
-                content: vec![1, 2, 3],
-                truncated: false,
-            },
-            timestamp: Timestamp::now(),
-            parsed_request: None,
-        };
-
-        // Execute the command
-        let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
-        assert!(result.is_ok());
-
-        // Read events from the request stream
-        let stream_data = store
-            .read_stream::<DomainEvent>(request_stream)
-            .await
-            .unwrap();
-        let events = stream_data;
-
-        // Should have emitted an audit event processing failed event
-        let has_processing_error = events.iter().any(|e| matches!(
-            e,
-            DomainEvent::AuditEventProcessingFailed { event_type, .. } if event_type == "RequestBody"
-        ));
-
-        assert!(
-            has_processing_error,
-            "Should emit error for unhandled audit event type"
-        );
-    }
-
-    #[tokio::test]
     async fn test_process_request_body_with_parsing_error() {
         use eventcore::RetryPolicy;
         use eventcore_memory::InMemoryEventStore;
 
         let store = InMemoryEventStore::new();
         let session_id = SessionId::generate();
-        let request_id = RequestId::new();
-        let request_stream = request_stream(request_id).unwrap();
+        let request_id = llm::RequestId::generate();
+        let request_stream = request_stream(&request_id).unwrap();
 
-        // Create command with invalid JSON body
+        // Create command with invalid JSON body (parsed at adapter boundary)
+        let uri = audit_types::RequestUri::try_new("/v1/messages".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let parsed_request = crate::adapters::proxy_audit::parse_request_body(
+            b"not valid json at all",
+            &uri,
+            &headers,
+        );
+
         let command = ProcessRequestBody {
             session_stream: session_stream(&session_id).unwrap(),
             request_stream: request_stream.clone(),
-            request_id,
+            request_id: request_id.clone(),
             session_id,
-            method: HttpMethod::try_new("POST".to_string()).unwrap(),
-            uri: RequestUri::try_new("/v1/messages".to_string()).unwrap(),
-            headers: Headers::new(),
-            body: b"not valid json at all".to_vec(),
+            parsed_request: Some(parsed_request),
             timestamp: Timestamp::now(),
         };
 
@@ -1460,9 +1357,9 @@ mod tests {
 pub struct RecordAuditEventBuilder {
     session_stream: Option<StreamId>,
     request_stream: Option<StreamId>,
-    request_id: Option<RequestId>,
+    request_id: Option<llm::RequestId>,
     session_id: Option<SessionId>,
-    audit_event: Option<AuditEventType>,
+    audit_event: Option<audit_types::AuditEventType>,
     timestamp: Option<Timestamp>,
     parsed_request: Option<ParsedLlmRequestWithError>,
 }
@@ -1478,7 +1375,7 @@ impl RecordAuditEventBuilder {
         self
     }
 
-    pub fn request_id(mut self, id: RequestId) -> Self {
+    pub fn request_id(mut self, id: llm::RequestId) -> Self {
         self.request_id = Some(id);
         self
     }
@@ -1488,7 +1385,7 @@ impl RecordAuditEventBuilder {
         self
     }
 
-    pub fn audit_event(mut self, event: AuditEventType) -> Self {
+    pub fn audit_event(mut self, event: audit_types::AuditEventType) -> Self {
         self.audit_event = Some(event);
         self
     }
@@ -1511,14 +1408,14 @@ impl RecordAuditEventBuilder {
             request_stream: self.request_stream.ok_or_else(|| {
                 AuditCommandError::InvalidStreamId("Missing request stream".to_string())
             })?,
-            request_id: self.request_id.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing request ID".to_string())
-            })?,
-            session_id: self.session_id.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing session ID".to_string())
-            })?,
+            request_id: self
+                .request_id
+                .ok_or_else(|| AuditCommandError::InvalidField("Missing request ID".to_string()))?,
+            session_id: self
+                .session_id
+                .ok_or_else(|| AuditCommandError::InvalidField("Missing session ID".to_string()))?,
             audit_event: self.audit_event.ok_or_else(|| {
-                AuditCommandError::InvalidStreamId("Missing audit event".to_string())
+                AuditCommandError::InvalidField("Missing audit event".to_string())
             })?,
             timestamp: self.timestamp.ok_or_else(|| {
                 AuditCommandError::InvalidTimestamp("Missing timestamp".to_string())
