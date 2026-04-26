@@ -166,8 +166,8 @@ pub fn parse_request_body(
     uri: &audit_types::RequestUri,
     headers: &audit_types::HttpHeaders,
 ) -> crate::domain::commands::audit_commands::ParsedLlmRequestWithError {
+    use crate::adapters::llm_request_parser::parse_llm_request;
     use crate::domain::commands::audit_commands::ParsedLlmRequestWithError;
-    use crate::domain::commands::llm_request_parser::{create_fallback_request, parse_llm_request};
 
     let headers_vec = headers
         .as_pairs()
@@ -176,12 +176,8 @@ pub fn parse_request_body(
         .collect::<Vec<_>>();
 
     match parse_llm_request(body, uri.as_ref(), &headers_vec) {
-        Ok(parsed) => ParsedLlmRequestWithError::new(parsed, None, uri.clone()),
-        Err(e) => ParsedLlmRequestWithError::new(
-            create_fallback_request(&e),
-            Some(e.to_string()),
-            uri.clone(),
-        ),
+        Ok(parsed) => ParsedLlmRequestWithError::new(Some(parsed), None, uri.clone()),
+        Err(e) => ParsedLlmRequestWithError::new(None, Some(e.to_string()), uri.clone()),
     }
 }
 
@@ -232,5 +228,20 @@ mod tests {
 
         let result = convert_audit_event(&proxy_event);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_request_body_returns_none_for_invalid_json() {
+        let uri = audit_types::RequestUri::try_new("/v1/chat/completions".to_string()).unwrap();
+        let headers = audit_types::HttpHeaders::new();
+        let result = parse_request_body(b"{ invalid json }", &uri, &headers);
+        assert!(result.parsed.is_none());
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn llm_request_parser_imports_from_adapter_module() {
+        // Verify the parser is accessible from the adapter module
+        let _ = crate::adapters::llm_request_parser::parse_llm_request;
     }
 }
