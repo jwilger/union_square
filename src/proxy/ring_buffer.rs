@@ -135,8 +135,15 @@ impl RingBuffer {
         // Ensure at least 1 slot
         slot_count_value = slot_count_value.max(1);
 
-        let slot_count =
-            SlotCount::try_new(slot_count_value).expect("calculated slot count should be valid");
+        let slot_count = match SlotCount::try_new(slot_count_value) {
+            Ok(count) => count,
+            // Guaranteed unreachable by construction: slot_count_value >= 1 and is a power of 2,
+            // which satisfies SlotCount's invariant (> 0 && is_power_of_two).
+            Err(_) => unreachable!(
+                "slot_count_value={} should be valid (>=1 and power of two)",
+                slot_count_value
+            ),
+        };
 
         let slots = (0..*slot_count.as_ref())
             .map(|_| Slot::new(config.slot_size))
