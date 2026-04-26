@@ -21,19 +21,25 @@
       "mode": "primary",
       "description": "Default development agent with full tool access",
       "permission": {
-        "edit": "ask",
+        "edit": "allow",
         "bash": {
           "*": "ask",
-          "cargo fmt": "allow",
-          "cargo clippy*": "allow",
-          "cargo test*": "allow",
-          "cargo nextest*": "allow",
-          "cargo check*": "allow",
+          "rtk *": "allow",
           "gh *": "allow",
+          "git *": "ask",
           "git status*": "allow",
-          "git log*": "allow",
           "git diff*": "allow",
-          "git branch*": "allow"
+          "git log*": "allow",
+          "git fetch*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git checkout*": "allow",
+          "git merge*": "allow",
+          "git remote*": "allow",
+          "git rev-parse*": "allow",
+          "git reset*": "deny",
+          "git clean*": "deny",
+          "git rebase*": "deny"
         },
         "task": {
           "*": "allow"
@@ -48,15 +54,7 @@
       "description": "Analysis and planning without making changes",
       "permission": {
         "edit": "deny",
-        "bash": {
-          "*": "ask",
-          "cargo check*": "allow",
-          "gh *": "allow",
-          "git status*": "allow",
-          "git log*": "allow",
-          "git diff*": "allow",
-          "git branch*": "allow"
-        },
+        "bash": "ask",
         "task": {
           "*": "allow"
         },
