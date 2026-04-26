@@ -4,4 +4,5 @@
 //! and the functional core (domain). They parse structural data into semantic
 //! domain facts and handle conversion errors explicitly.
 
+pub mod llm_request_parser;
 pub mod proxy_audit;

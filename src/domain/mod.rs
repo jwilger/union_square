@@ -11,6 +11,7 @@ pub mod identifiers;
 pub mod llm;
 pub mod metrics;
 pub mod network_types;
+pub mod parsed_llm_request;
 pub mod session;
 pub mod streams;
 pub mod test_case;

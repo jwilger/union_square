@@ -11,14 +11,14 @@ use crate::domain::{
     audit_types, events::DomainEvent, llm, metrics::Timestamp, session::SessionId,
 };
 
-use super::llm_request_parser::ParsedLlmRequest;
+use crate::domain::parsed_llm_request::ParsedLlmRequest;
 
 use std::fmt;
 
 /// Wrapper for parsed LLM request that includes any parsing error
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedLlmRequestWithError {
-    pub parsed: ParsedLlmRequest,
+    pub parsed: Option<ParsedLlmRequest>,
     pub error: Option<String>,
     pub raw_uri: audit_types::RequestUri,
 }
@@ -26,7 +26,7 @@ pub struct ParsedLlmRequestWithError {
 impl ParsedLlmRequestWithError {
     /// Create a new parsed request with error information
     pub const fn new(
-        parsed: ParsedLlmRequest,
+        parsed: Option<ParsedLlmRequest>,
         error: Option<String>,
         raw_uri: audit_types::RequestUri,
     ) -> Self {
@@ -515,16 +515,26 @@ impl CommandLogic for RecordAuditEvent {
             RequestReceived { .. } => {
                 if !state.is_request_received() {
                     if let Some(parsed_request) = &self.parsed_request {
-                        // Emit the request received event with parsed data
-                        let event = transformers::request_received_to_domain(
-                            self.session_stream.clone(),
-                            self.request_id.clone(),
-                            self.session_id.clone(),
-                            self.timestamp,
-                            &parsed_request.parsed,
-                        )?;
+                        if let Some(parsed) = &parsed_request.parsed {
+                            // Emit the request received event with parsed data
+                            let event = transformers::request_received_to_domain(
+                                self.session_stream.clone(),
+                                self.request_id.clone(),
+                                self.session_id.clone(),
+                                self.timestamp,
+                                parsed,
+                            )?;
 
-                        events.push(event);
+                            events.push(event);
+                        } else {
+                            // Body present but parsing failed — defer so forwarding can proceed
+                            events.push(DomainEvent::LlmRequestDeferred {
+                                stream_id: self.session_stream.clone(),
+                                request_id: self.request_id.clone(),
+                                session_id: self.session_id.clone(),
+                                received_at: self.timestamp,
+                            });
+                        }
 
                         // If there was a parsing error, emit an error event
                         if let Some(error_msg) = &parsed_request.error {
@@ -711,17 +721,26 @@ impl CommandLogic for ProcessRequestBody {
             .parsed_request
             .as_ref()
             .ok_or_else(|| CommandError::ValidationError("Missing parsed request".to_string()))?;
-        let parsed = &parsed_request.parsed;
 
-        events.push(DomainEvent::LlmRequestReceived {
-            stream_id: self.session_stream.clone(),
-            request_id: self.request_id.clone(),
-            session_id: self.session_id.clone(),
-            model_version: parsed.model_version.clone(),
-            prompt: parsed.prompt.clone(),
-            parameters: parsed.parameters.clone(),
-            received_at: self.timestamp,
-        });
+        if let Some(parsed) = &parsed_request.parsed {
+            events.push(DomainEvent::LlmRequestReceived {
+                stream_id: self.session_stream.clone(),
+                request_id: self.request_id.clone(),
+                session_id: self.session_id.clone(),
+                model_version: parsed.model_version.clone(),
+                prompt: parsed.prompt.clone(),
+                parameters: parsed.parameters.clone(),
+                received_at: self.timestamp,
+            });
+        } else {
+            // Parsing failed — defer so forwarding can proceed
+            events.push(DomainEvent::LlmRequestDeferred {
+                stream_id: self.session_stream.clone(),
+                request_id: self.request_id.clone(),
+                session_id: self.session_id.clone(),
+                received_at: self.timestamp,
+            });
+        }
 
         // If there was a parsing error, emit an error event
         if let Some(ref error_msg) = parsed_request.error {
@@ -929,15 +948,9 @@ mod tests {
         assert!(command_with_body.parsed_request.is_some());
         let parsed_with_error = command_with_body.parsed_request.unwrap();
         assert!(parsed_with_error.error.is_none()); // No error expected
-        assert_eq!(
-            parsed_with_error.parsed.model_version.model_id.as_ref(),
-            "gpt-4"
-        );
-        assert!(parsed_with_error
-            .parsed
-            .prompt
-            .as_ref()
-            .contains("user: Hello, world!"));
+        let parsed = parsed_with_error.parsed.as_ref().unwrap();
+        assert_eq!(parsed.model_version.model_id.as_ref(), "gpt-4");
+        assert!(parsed.prompt.as_ref().contains("user: Hello, world!"));
     }
 
     #[tokio::test]
