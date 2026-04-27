@@ -42,7 +42,7 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # EventCore will be used for event sourcing and CQRS patterns
-eventcore = "0.7.1"
+eventcore = "0.8.0"
 eventcore-types = "0.7.1"
 eventcore-postgres = "0.7.1"
 eventcore-macros = "0.7.1"

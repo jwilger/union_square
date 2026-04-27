@@ -1456,13 +1456,13 @@ dependencies = [
 
 [[package]]
 name = "eventcore"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9b521d68deebc3c82ae1e0294481155def39b881f44cefddef508c78c99b6a"
+checksum = "eb1cfc2078e253b95464216920ae0aeb19feaccc4209d2acef496a6d561902a9"
 dependencies = [
  "chrono",
- "eventcore-macros",
- "eventcore-types",
+ "eventcore-macros 0.8.0",
+ "eventcore-types 0.8.0",
  "rand 0.10.1",
  "serde",
  "serde_json",
@@ -1484,12 +1484,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "eventcore-macros"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e978d52d561f06dcc555d30b2e11c547b6a2736390df11bc003c52ebc554f0f5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "eventcore-memory"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5eef64e328ab7017f43f63dee033d67b30ecd08e91df1980081bc47c48efa511"
 dependencies = [
- "eventcore-types",
+ "eventcore-types 0.7.1",
  "serde_json",
  "thiserror",
  "tracing",
@@ -1502,7 +1513,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36c2a4ed257eb8b2f8f86908a5aec91b48b850d2118ce975014358e846f90193"
 dependencies = [
- "eventcore-types",
+ "eventcore-types 0.7.1",
  "nutype",
  "serde_json",
  "sqlx",
@@ -1517,6 +1528,19 @@ name = "eventcore-types"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3fedc2331d579937970e466778c61775a4f0e44fe8c7425eb9e164ca59456f2"
+dependencies = [
+ "nutype",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "eventcore-types"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54fc5483f43dde05424b3dc4bd04d0866b9e013db97adeace8fe0f2f75add106"
 dependencies = [
  "nutype",
  "serde",
@@ -4471,10 +4495,10 @@ dependencies = [
  "derive_more",
  "dhat",
  "eventcore",
- "eventcore-macros",
+ "eventcore-macros 0.7.1",
  "eventcore-memory",
  "eventcore-postgres",
- "eventcore-types",
+ "eventcore-types 0.7.1",
  "futures-core",
  "futures-util",
  "http 1.4.0",
