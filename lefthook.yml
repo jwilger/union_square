@@ -25,7 +25,10 @@ pre-commit:
 
     ast-grep:
       run: just ast-grep
-      glob: "*.rs"
+      glob:
+        - "*.rs"
+        - "sgconfig.yml"
+        - ".opencode/rules/ast-grep/**"
 
     # Lefthook must not mutate files after staging (non-deterministic).
     # Trailing whitespace is handled by editor/IDE configuration and cargo fmt.
@@ -33,7 +36,7 @@ pre-commit:
 
     check-merge-conflict:
       run: |
-        CONFLICT_FILES=$(git diff --cached --name-only | xargs grep -l "<<<<<<< HEAD" 2>/dev/null || true)
+        CONFLICT_FILES=$(git diff --cached --name-only -z | xargs -0 grep -lE "^(<<<<<<<|=======|>>>>>>>)" 2>/dev/null || true)
         if [ -n "$CONFLICT_FILES" ]; then
           echo "Merge conflict markers found in:"
           echo "$CONFLICT_FILES"
@@ -69,4 +72,7 @@ pre-push:
 
     ast-grep:
       run: just ast-grep
-      glob: "*.rs"
+      glob:
+        - "*.rs"
+        - "sgconfig.yml"
+        - ".opencode/rules/ast-grep/**"

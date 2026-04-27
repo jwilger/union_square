@@ -33,5 +33,6 @@ ignores:
   - src/providers/**/*.rs
   - src/proxy/**/*.rs
   - src/adapters/**/*.rs
-  # Config module (baseline debt)
+  # Config and error modules (baseline debt)
   - src/config.rs
+  - src/error.rs

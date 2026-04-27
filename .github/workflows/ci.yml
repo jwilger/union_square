@@ -27,27 +27,31 @@ jobs:
     - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
       id: filter
       with:
-        filters: |
-          rust:
-            - 'src/**'
-            - 'tests/**'
-            - 'benches/**'
-            - 'Cargo.toml'
-            - 'Cargo.lock'
-            - 'rust-toolchain.toml'
-            - '.cargo/**'
-            - 'scripts/**'
-            - 'Dockerfile'
-            - '.github/workflows/ci.yml'
-            - 'Justfile'
-            - 'lefthook.yml'
-            - 'sgconfig.yml'
-          deps:
-            - 'Cargo.toml'
-            - 'Cargo.lock'
-            - '.github/workflows/ci.yml'
-          workflows:
-            - '.github/workflows/**'
+         filters: |
+           rust:
+             - 'src/**'
+             - 'tests/**'
+             - 'benches/**'
+             - 'Cargo.toml'
+             - 'Cargo.lock'
+             - 'rust-toolchain.toml'
+             - '.cargo/**'
+             - 'scripts/**'
+             - 'Dockerfile'
+             - '.github/workflows/ci.yml'
+             - 'Justfile'
+             - 'lefthook.yml'
+             - 'sgconfig.yml'
+             - '.opencode/rules/ast-grep/**'
+             - '.opencode/rules/ast-grep-tests/**'
+           deps:
+             - 'Cargo.toml'
+             - 'Cargo.lock'
+             - '.github/workflows/ci.yml'
+             - 'deny.toml'
+           workflows:
+             - '.github/workflows/**'
+             - '.zizmor.toml'
 
   test:
     name: Test Suite
@@ -138,11 +142,11 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
-    - name: Install cargo-deny
-      run: cargo install cargo-deny --locked
+    - name: Install just
+      run: cargo install just --locked
 
     - name: Run cargo-deny
-      run: cargo deny check licenses bans sources
+      run: just cargo-deny
 
   architecture-lint:
     name: Architecture Lint
@@ -464,21 +468,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-    - name: Install zizmor
-      run: cargo install zizmor --locked
-
-    - name: Run zizmor
-      # Baseline debt: existing workflows have template-injection and permission findings.
-      # --no-exit-codes reports findings without failing the build until baseline is clean.
-      run: zizmor --no-exit-codes .github/workflows/
-
-    - name: Install actionlint
+    - name: Install just, zizmor, and actionlint
       run: |
+        cargo install just --locked
+        cargo install zizmor --locked
         curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz -C /tmp
         sudo mv /tmp/actionlint /usr/local/bin/
 
+    - name: Run zizmor
+      run: just zizmor
+
     - name: Run actionlint
-      run: actionlint .github/workflows/*.yml
+      run: just actionlint
 
   ci-success:
     name: CI Success

@@ -10,8 +10,8 @@ default:
 
 # ─── Core CI Contract ────────────────────────────────────────────────────────
 
-# Run the complete local CI contract (format, lint, check, test, security, architecture)
-ci: lint test type-check architecture-lint security-lint
+# Run the complete local CI contract (format, lint, check, test, doctests, security, architecture)
+ci: lint test doctest type-check architecture-lint security-lint cargo-audit clippy-architecture
 
 # ─── Lint ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +38,7 @@ clippy-architecture:
         -D clippy::panic \
         -D clippy::todo \
         -D clippy::unimplemented \
+        -D clippy::unreachable \
         -D clippy::print_stdout \
         -D clippy::print_stderr \
         -D clippy::dbg_macro
