@@ -85,11 +85,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Install just, cargo-nextest, and ast-grep
+    - name: Install just, cargo-nextest, ast-grep, and cargo-deny
       run: |
         cargo install just --locked
         cargo install cargo-nextest --locked
         cargo install ast-grep --locked
+        cargo install cargo-deny --locked
 
     - name: Run local CI contract
       run: just ci
@@ -365,10 +366,10 @@ jobs:
 
         if [ "$REGRESSION_FOUND" = true ]; then
           echo "Performance regression detected!"
-          echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+          echo "REGRESSION_DETECTED=true" >> "$GITHUB_OUTPUT"
         else
           echo "No significant regression detected"
-          echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+          echo "REGRESSION_DETECTED=false" >> "$GITHUB_OUTPUT"
         fi
 
         echo '```' > benchmark_report.md
