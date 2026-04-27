@@ -251,7 +251,6 @@ pub enum AuditEventKind {
     ResponseReceived,
     ResponseReturned,
     Error,
-    Unknown,
 }
 
 impl From<&AuditEventType> for AuditEventKind {

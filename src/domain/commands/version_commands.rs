@@ -50,6 +50,12 @@ impl VersionState {
     }
 }
 
+/// Build a canonical stream ID for a model version.
+fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
+    StreamId::try_new(format!("version:{}", model_version.to_version_string()))
+        .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
+}
+
 /// Command to record the usage of a model version
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
 pub struct RecordVersionUsage {
@@ -61,17 +67,12 @@ pub struct RecordVersionUsage {
 
 impl RecordVersionUsage {
     pub fn new(session_id: SessionId, model_version: ModelVersion) -> Result<Self, CommandError> {
-        let version_stream = Self::version_stream_id(&model_version)?;
+        let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             session_id,
             model_version,
         })
-    }
-
-    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
-        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
@@ -131,8 +132,8 @@ impl RecordVersionChange {
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
     ) -> Result<Self, CommandError> {
-        let from_stream = Self::version_stream_id(&from_version)?;
-        let to_stream = Self::version_stream_id(&to_version)?;
+        let from_stream = version_stream_id(&from_version)?;
+        let to_stream = version_stream_id(&to_version)?;
         Ok(Self {
             from_stream,
             to_stream,
@@ -141,11 +142,6 @@ impl RecordVersionChange {
             to_version,
             reason,
         })
-    }
-
-    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
-        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
@@ -202,17 +198,12 @@ impl DeactivateVersion {
         model_version: ModelVersion,
         reason: Option<ChangeReason>,
     ) -> Result<Self, CommandError> {
-        let version_stream = Self::version_stream_id(&model_version)?;
+        let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             model_version,
             reason,
         })
-    }
-
-    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
-        StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
