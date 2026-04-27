@@ -1,6 +1,6 @@
 [package]
 name = "union_square"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["John Wilger <john@johnwilger.com>"]
 description = "A proxy/wire-tap service for making LLM calls and recording everything that happens in a session for later analysis and test-case extraction"
