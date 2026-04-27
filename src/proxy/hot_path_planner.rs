@@ -50,19 +50,25 @@ pub fn plan_request_audit(
     headers: Vec<(String, String)>,
     body_size: BodySize,
 ) -> PlannedRequestAudit {
-    match (method, uri) {
-        (Ok(method), Ok(uri)) => PlannedRequestAudit::Received {
+    let headers_result = Headers::from_vec(headers).map_err(|e| e.to_string());
+
+    match (method, uri, headers_result) {
+        (Ok(method), Ok(uri), Ok(headers)) => PlannedRequestAudit::Received {
             method,
             uri,
-            headers: Headers::from_vec(headers).unwrap_or_default(),
+            headers,
             body_size,
         },
-        (Err(method_err), _) => PlannedRequestAudit::ParseFailed {
+        (Err(method_err), _, _) => PlannedRequestAudit::ParseFailed {
             error: method_err,
             phase: ErrorPhase::RequestParsing,
         },
-        (_, Err(uri_err)) => PlannedRequestAudit::ParseFailed {
+        (_, Err(uri_err), _) => PlannedRequestAudit::ParseFailed {
             error: uri_err,
+            phase: ErrorPhase::RequestParsing,
+        },
+        (_, _, Err(headers_err)) => PlannedRequestAudit::ParseFailed {
+            error: headers_err,
             phase: ErrorPhase::RequestParsing,
         },
     }
@@ -78,15 +84,21 @@ pub fn plan_response_audit(
     body_size: BodySize,
     duration_ms: DurationMillis,
 ) -> PlannedResponseAudit {
-    match status {
-        Ok(status) => PlannedResponseAudit::Received {
+    let headers_result = Headers::from_vec(headers).map_err(|e| e.to_string());
+
+    match (status, headers_result) {
+        (Ok(status), Ok(headers)) => PlannedResponseAudit::Received {
             status,
-            headers: Headers::from_vec(headers).unwrap_or_default(),
+            headers,
             body_size,
             duration_ms,
         },
-        Err(invalid_status) => PlannedResponseAudit::ParseFailed {
+        (Err(invalid_status), _) => PlannedResponseAudit::ParseFailed {
             error: format!("Invalid HTTP status code '{invalid_status}' received from upstream"),
+            phase: ErrorPhase::ResponseReceiving,
+        },
+        (_, Err(headers_err)) => PlannedResponseAudit::ParseFailed {
+            error: headers_err,
             phase: ErrorPhase::ResponseReceiving,
         },
     }
@@ -204,6 +216,52 @@ mod tests {
                 } if error.contains("999")
             ),
             "Expected ParseFailed for invalid status, got {:?}",
+            planned
+        );
+    }
+
+    #[test]
+    fn plan_request_audit_with_invalid_header_name() {
+        let method: Result<HttpMethod, String> =
+            Ok(HttpMethod::try_new("POST".to_string()).unwrap());
+        let uri: Result<RequestUri, String> =
+            Ok(RequestUri::try_new("/v1/chat".to_string()).unwrap());
+        // Empty header name should fail HeaderName validation
+        let headers = vec![("".to_string(), "value".to_string())];
+
+        let planned = plan_request_audit(method, uri, headers, BodySize::from(0));
+
+        assert!(
+            matches!(
+                planned,
+                PlannedRequestAudit::ParseFailed {
+                    ref error,
+                    phase: ErrorPhase::RequestParsing
+                } if error.contains("Invalid header")
+            ),
+            "Expected ParseFailed for invalid header, got {:?}",
+            planned
+        );
+    }
+
+    #[test]
+    fn plan_response_audit_with_invalid_header_name() {
+        let status: Result<HttpStatusCode, u16> = Ok(HttpStatusCode::try_new(200).unwrap());
+        // Empty header name should fail HeaderName validation
+        let headers = vec![("".to_string(), "value".to_string())];
+
+        let planned =
+            plan_response_audit(status, headers, BodySize::from(0), DurationMillis::from(0));
+
+        assert!(
+            matches!(
+                planned,
+                PlannedResponseAudit::ParseFailed {
+                    ref error,
+                    phase: ErrorPhase::ResponseReceiving
+                } if error.contains("Invalid header")
+            ),
+            "Expected ParseFailed for invalid header, got {:?}",
             planned
         );
     }

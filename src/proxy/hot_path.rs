@@ -101,14 +101,6 @@ impl StreamingHotPathService {
         let method_result = parse_http_method(&parts.method);
         let uri_result = parse_request_uri(&parts.uri);
 
-        // --- Pure planning: decide what audit facts to record ---
-        let request_audit_plan =
-            plan_request_audit(method_result, uri_result, headers_vec, BodySize::from(0));
-
-        // --- Imperative effect: fire-and-forget audit write ---
-        self.audit_recorder
-            .record_request_audit(request_id, request_audit_plan);
-
         // Apply request size limit by collecting the body first
         // TODO: This is a temporary implementation for MVP - we should implement true streaming size limits
         //       See issue #126 and ADR-0017 for details on the planned enhancement
@@ -126,8 +118,23 @@ impl StreamingHotPathService {
                 }
             })?;
 
+        let body_bytes_buf = body_bytes.to_bytes();
+        let body_len = body_bytes_buf.len();
+
+        // --- Pure planning: decide what audit facts to record ---
+        let request_audit_plan = plan_request_audit(
+            method_result,
+            uri_result,
+            headers_vec,
+            BodySize::from(body_len),
+        );
+
+        // --- Imperative effect: fire-and-forget audit write ---
+        self.audit_recorder
+            .record_request_audit(request_id, request_audit_plan);
+
         // Create outgoing request with the collected body
-        let outgoing_request = Request::from_parts(parts, Body::from(body_bytes.to_bytes()));
+        let outgoing_request = Request::from_parts(parts, Body::from(body_bytes_buf));
 
         // Forward the request with timeout
         let response_future = self.client.request(outgoing_request);
