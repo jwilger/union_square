@@ -101,6 +101,7 @@ mod audit_recorder;
 mod error_response;
 mod headers;
 mod hot_path;
+mod hot_path_planner;
 mod http_types;
 mod middleware;
 mod middleware_stack;
