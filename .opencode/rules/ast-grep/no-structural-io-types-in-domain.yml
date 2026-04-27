@@ -1,0 +1,20 @@
+id: no-structural-io-types-in-domain
+language: rust
+severity: error
+message: "Domain-facing APIs MUST NOT expose serde_json::Value, raw bytes, URI strings, or header tuples as domain facts. Parse into semantic types at the boundary."
+rule:
+  any:
+    - pattern: "$FN($$$, $ARG: serde_json::Value, $$$)"
+    - pattern: "$FN($$$, $ARG: serde_json::Map<$$$>, $$$)"
+    - pattern: "$FN($$$, $ARG: http::HeaderMap, $$$)"
+    - pattern: "$FN($$$, $ARG: axum::http::HeaderMap, $$$)"
+    - pattern: "$FN($$$, $ARG: http::uri::Uri, $$$)"
+    - pattern: "$FN($$$, $ARG: hyper::Body, $$$)"
+    - pattern: "$FN($$$, $ARG: bytes::Bytes, $$$)"
+  not:
+    inside:
+      stopBy: end
+      kind: mod_item
+      regex: "mod (test.*|benchmarks|.*_test.*)"
+files:
+  - src/domain/**/*.rs

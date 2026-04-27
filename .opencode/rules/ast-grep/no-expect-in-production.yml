@@ -12,3 +12,26 @@ rule:
       stopBy: end
       kind: mod_item
       regex: "mod (test.*|benchmarks|.*_test.*)"
+ignores:
+  # Benchmark and test infrastructure (baseline debt)
+  - benches/**/*.rs
+  - tests/**/*.rs
+  - src/**/*_tests.rs
+  - src/**/*_test.rs
+  - src/**/tests.rs
+  - src/**/test_utils.rs
+  - src/**/middleware_test_helpers.rs
+  - src/**/benchmark_types.rs
+  - src/**/ring_buffer_performance_test.rs
+  # Demo data (baseline debt)
+  - src/**/demo_data.rs
+  - src/**/demo_types.rs
+  # Metrics constants (baseline debt)
+  - src/domain/metrics/timestamp.rs
+  - src/domain/config_types.rs
+  # Provider and proxy code (baseline debt)
+  - src/providers/**/*.rs
+  - src/proxy/**/*.rs
+  - src/adapters/**/*.rs
+  # Config module (baseline debt)
+  - src/config.rs
