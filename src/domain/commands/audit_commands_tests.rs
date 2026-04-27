@@ -238,7 +238,7 @@ mod event_store_failures {
         let audit_event = create_test_audit_event(request_received_event());
         let command = convert_audit_event(&audit_event).unwrap();
 
-        let result = service.execute_command_memory(command).await;
+        let result = service.execute_command(command).await;
         assert!(result.is_ok());
     }
 }
