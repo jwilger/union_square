@@ -102,7 +102,7 @@ pub struct RingBufferStats {
 /// through atomic state coordination. All unsafe operations are documented and bounded.
 pub struct RingBuffer {
     slots: Vec<Slot>,
-    slot_count: SlotCount,
+    slot_count: usize,
     slot_size: SlotSize,
     write_position: AtomicU64,
     read_position: AtomicU64,
@@ -133,19 +133,9 @@ impl RingBuffer {
         }
 
         // Ensure at least 1 slot
-        slot_count_value = slot_count_value.max(1);
+        let slot_count = slot_count_value.max(1);
 
-        let slot_count = match SlotCount::try_new(slot_count_value) {
-            Ok(count) => count,
-            // Guaranteed unreachable by construction: slot_count_value >= 1 and is a power of 2,
-            // which satisfies SlotCount's invariant (> 0 && is_power_of_two).
-            Err(_) => unreachable!(
-                "slot_count_value={} should be valid (>=1 and power of two)",
-                slot_count_value
-            ),
-        };
-
-        let slots = (0..*slot_count.as_ref())
+        let slots = (0..slot_count)
             .map(|_| Slot::new(config.slot_size))
             .collect();
 
@@ -181,7 +171,7 @@ impl RingBuffer {
     pub fn write(&self, request_id: RequestId, data: &[u8]) -> Result<(), u64> {
         // Get next write position
         let position = self.write_position.fetch_add(1, Ordering::Relaxed);
-        let slot_index = (position & (*self.slot_count.as_ref() as u64 - 1)) as usize;
+        let slot_index = (position & (self.slot_count as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Try to claim the slot
@@ -259,7 +249,7 @@ impl RingBuffer {
     /// would violate safety invariants and could cause data corruption.
     pub fn read(&self) -> Option<(RequestId, Vec<u8>)> {
         let read_pos = self.read_position.load(Ordering::Relaxed);
-        let slot_index = (read_pos & (*self.slot_count.as_ref() as u64 - 1)) as usize;
+        let slot_index = (read_pos & (self.slot_count as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Check if slot is ready for reading

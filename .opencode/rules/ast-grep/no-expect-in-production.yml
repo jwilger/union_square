@@ -2,6 +2,9 @@ id: no-expect-in-production
 language: rust
 severity: error
 message: "expect() is forbidden in production code. Use ? or match instead."
+# Note: tree-sitter parses #[cfg(test)] as an attribute_item sibling of mod_item,
+# not as a child, so has: kind: attribute_item inside mod_item does not match.
+# The regex-based module-name exclusion is the most precise filter achievable.
 rule:
   pattern: $X.expect($MSG)
   not:

@@ -2,6 +2,9 @@ id: no-panic-macro-production
 language: rust
 severity: error
 message: "panic! is forbidden in production code. Use Result or Option instead."
+# Note: tree-sitter parses #[cfg(test)] as an attribute_item sibling of mod_item,
+# not as a child, so has: kind: attribute_item inside mod_item does not match.
+# The regex-based module-name exclusion is the most precise filter achievable.
 rule:
   pattern: panic!($$$)
   not:
