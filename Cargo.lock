@@ -1461,7 +1461,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e9b521d68deebc3c82ae1e0294481155def39b881f44cefddef508c78c99b6a"
 dependencies = [
  "chrono",
- "eventcore-macros",
+ "eventcore-macros 0.7.1",
  "eventcore-types",
  "rand 0.10.1",
  "serde",
@@ -1477,6 +1477,17 @@ name = "eventcore-macros"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "954abdc71257c39038b3af73c39fb60c64f32f581a3a363c9e87c95ea87436b5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "eventcore-macros"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e978d52d561f06dcc555d30b2e11c547b6a2736390df11bc003c52ebc554f0f5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4471,7 +4482,7 @@ dependencies = [
  "derive_more",
  "dhat",
  "eventcore",
- "eventcore-macros",
+ "eventcore-macros 0.8.0",
  "eventcore-memory",
  "eventcore-postgres",
  "eventcore-types",
