@@ -78,12 +78,12 @@ pub struct Completed;
 /// Test case represents a reusable test scenario
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TestCase<State> {
-    pub id: TestCaseId,
-    pub name: TestCaseName,
-    pub description: TestCaseDescription,
-    pub expected_behavior: ExpectedBehavior,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    id: TestCaseId,
+    name: TestCaseName,
+    description: TestCaseDescription,
+    expected_behavior: ExpectedBehavior,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     #[serde(skip)]
     _state: PhantomData<State>,
 }
@@ -91,10 +91,54 @@ pub struct TestCase<State> {
 /// Expected behavior for a test case
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExpectedBehavior {
-    pub prompt_template: PromptTemplate,
-    pub expected_patterns: Vec<Pattern>,
-    pub forbidden_patterns: Vec<Pattern>,
-    pub metadata_assertions: MetadataAssertions,
+    prompt_template: PromptTemplate,
+    expected_patterns: Vec<Pattern>,
+    forbidden_patterns: Vec<Pattern>,
+    metadata_assertions: MetadataAssertions,
+}
+
+impl ExpectedBehavior {
+    pub fn new(prompt_template: PromptTemplate) -> Self {
+        Self {
+            prompt_template,
+            expected_patterns: Vec::new(),
+            forbidden_patterns: Vec::new(),
+            metadata_assertions: MetadataAssertions::new(serde_json::Value::Object(
+                serde_json::Map::new(),
+            )),
+        }
+    }
+
+    pub fn with_expected_pattern(mut self, pattern: Pattern) -> Self {
+        self.expected_patterns.push(pattern);
+        self
+    }
+
+    pub fn with_forbidden_pattern(mut self, pattern: Pattern) -> Self {
+        self.forbidden_patterns.push(pattern);
+        self
+    }
+
+    pub fn with_metadata_assertions(mut self, assertions: MetadataAssertions) -> Self {
+        self.metadata_assertions = assertions;
+        self
+    }
+
+    pub fn prompt_template(&self) -> &PromptTemplate {
+        &self.prompt_template
+    }
+
+    pub fn expected_patterns(&self) -> &[Pattern] {
+        &self.expected_patterns
+    }
+
+    pub fn forbidden_patterns(&self) -> &[Pattern] {
+        &self.forbidden_patterns
+    }
+
+    pub fn metadata_assertions(&self) -> &MetadataAssertions {
+        &self.metadata_assertions
+    }
 }
 
 /// Validation error for test cases
@@ -110,42 +154,34 @@ pub enum ValidationError {
 
 impl TestCase<Draft> {
     /// Create a new test case in draft state
-    pub fn new(name: TestCaseName, description: TestCaseDescription) -> Self {
-        let now = Utc::now();
+    pub fn new(name: TestCaseName, description: TestCaseDescription, created_at: DateTime<Utc>) -> Self {
         Self {
             id: TestCaseId::generate(),
             name,
             description,
-            expected_behavior: ExpectedBehavior {
-                // Use a placeholder prompt template - will be replaced before finalize
-                prompt_template: PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string())
-                    .unwrap(),
-                expected_patterns: Vec::new(),
-                forbidden_patterns: Vec::new(),
-                metadata_assertions: MetadataAssertions::new(serde_json::Value::Object(
-                    serde_json::Map::new(),
-                )),
-            },
-            created_at: now,
-            updated_at: now,
+            expected_behavior: ExpectedBehavior::new(
+                PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string()).unwrap(),
+            ),
+            created_at,
+            updated_at: created_at,
             _state: PhantomData,
         }
     }
 
     /// Update the expected behavior
-    pub fn with_expected_behavior(mut self, behavior: ExpectedBehavior) -> Self {
+    pub fn with_expected_behavior(mut self, behavior: ExpectedBehavior, updated_at: DateTime<Utc>) -> Self {
         self.expected_behavior = behavior;
-        self.updated_at = Utc::now();
+        self.updated_at = updated_at;
         self
     }
 
     /// Finalize the test case, moving it to Ready state
-    pub fn finalize(self) -> Result<TestCase<Ready>, ValidationError> {
+    pub fn finalize(self, at: DateTime<Utc>) -> Result<TestCase<Ready>, ValidationError> {
         // Validate the test case - check if still placeholder
-        if self.expected_behavior.prompt_template.as_ref() == PLACEHOLDER_PROMPT_TEMPLATE {
+        if self.expected_behavior.prompt_template().as_ref() == PLACEHOLDER_PROMPT_TEMPLATE {
             return Err(ValidationError::EmptyPromptTemplate);
         }
-        if self.expected_behavior.expected_patterns.is_empty() {
+        if self.expected_behavior.expected_patterns().is_empty() {
             return Err(ValidationError::NoExpectedPatterns);
         }
 
@@ -155,37 +191,77 @@ impl TestCase<Draft> {
             description: self.description,
             expected_behavior: self.expected_behavior,
             created_at: self.created_at,
-            updated_at: Utc::now(),
+            updated_at: at,
             _state: PhantomData,
         })
+    }
+
+    pub fn id(&self) -> &TestCaseId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &TestCaseName {
+        &self.name
+    }
+
+    pub fn description(&self) -> &TestCaseDescription {
+        &self.description
+    }
+
+    pub fn expected_behavior(&self) -> &ExpectedBehavior {
+        &self.expected_behavior
+    }
+
+    pub fn created_at(&self) -> &DateTime<Utc> {
+        &self.created_at
+    }
+
+    pub fn updated_at(&self) -> &DateTime<Utc> {
+        &self.updated_at
     }
 }
 
 impl TestCase<Ready> {
     /// Execute the test case, moving it to Running state
-    pub fn execute(self) -> TestCase<Running> {
+    pub fn execute(self, at: DateTime<Utc>) -> TestCase<Running> {
         TestCase {
             id: self.id,
             name: self.name,
             description: self.description,
             expected_behavior: self.expected_behavior,
             created_at: self.created_at,
-            updated_at: Utc::now(),
+            updated_at: at,
             _state: PhantomData,
         }
+    }
+
+    pub fn id(&self) -> &TestCaseId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &TestCaseName {
+        &self.name
+    }
+
+    pub fn description(&self) -> &TestCaseDescription {
+        &self.description
+    }
+
+    pub fn expected_behavior(&self) -> &ExpectedBehavior {
+        &self.expected_behavior
     }
 }
 
 impl TestCase<Running> {
     /// Complete the test case execution
-    pub fn complete(self, result: TestResult) -> (TestCase<Completed>, TestRun) {
+    pub fn complete(self, result: TestResult, at: DateTime<Utc>) -> (TestCase<Completed>, TestRun) {
         let test_case = TestCase {
             id: self.id,
             name: self.name,
             description: self.description,
             expected_behavior: self.expected_behavior,
             created_at: self.created_at,
-            updated_at: Utc::now(),
+            updated_at: at,
             _state: PhantomData,
         };
 
@@ -194,7 +270,7 @@ impl TestCase<Running> {
             test_case_id: test_case.id.clone(),
             session_id: result.session_id,
             started_at: result.started_at,
-            completed_at: Utc::now(),
+            completed_at: at,
             status: result.status,
             actual_response: result.actual_response,
             assertions_passed: result.assertions_passed,
@@ -203,6 +279,24 @@ impl TestCase<Running> {
         };
 
         (test_case, test_run)
+    }
+
+    pub fn id(&self) -> &TestCaseId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &TestCaseName {
+        &self.name
+    }
+}
+
+impl TestCase<Completed> {
+    pub fn id(&self) -> &TestCaseId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &TestCaseName {
+        &self.name
     }
 }
 
@@ -221,16 +315,16 @@ pub struct TestResult {
 /// Test run represents a single execution of a test case
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TestRun {
-    pub id: TestRunId,
-    pub test_case_id: TestCaseId,
-    pub session_id: crate::domain::SessionId,
-    pub started_at: DateTime<Utc>,
-    pub completed_at: DateTime<Utc>,
-    pub status: TestRunStatus,
-    pub actual_response: ResponseText,
-    pub assertions_passed: Vec<AssertionDescription>,
-    pub assertions_failed: Vec<AssertionDescription>,
-    pub error_message: Option<ErrorMessage>,
+    id: TestRunId,
+    test_case_id: TestCaseId,
+    session_id: crate::domain::SessionId,
+    started_at: DateTime<Utc>,
+    completed_at: DateTime<Utc>,
+    status: TestRunStatus,
+    actual_response: ResponseText,
+    assertions_passed: Vec<AssertionDescription>,
+    assertions_failed: Vec<AssertionDescription>,
+    error_message: Option<ErrorMessage>,
 }
 
 /// Status of a test run
@@ -270,6 +364,46 @@ impl TestRun {
             self.duration().num_milliseconds()
         )
     }
+
+    pub fn id(&self) -> &TestRunId {
+        &self.id
+    }
+
+    pub fn test_case_id(&self) -> &TestCaseId {
+        &self.test_case_id
+    }
+
+    pub fn session_id(&self) -> &crate::domain::SessionId {
+        &self.session_id
+    }
+
+    pub fn started_at(&self) -> &DateTime<Utc> {
+        &self.started_at
+    }
+
+    pub fn completed_at(&self) -> &DateTime<Utc> {
+        &self.completed_at
+    }
+
+    pub fn status(&self) -> &TestRunStatus {
+        &self.status
+    }
+
+    pub fn actual_response(&self) -> &ResponseText {
+        &self.actual_response
+    }
+
+    pub fn assertions_passed(&self) -> &[AssertionDescription] {
+        &self.assertions_passed
+    }
+
+    pub fn assertions_failed(&self) -> &[AssertionDescription] {
+        &self.assertions_failed
+    }
+
+    pub fn error_message(&self) -> Option<&ErrorMessage> {
+        self.error_message.as_ref()
+    }
 }
 
 #[cfg(test)]
@@ -300,31 +434,32 @@ mod tests {
 
     #[test]
     fn test_test_case_state_transitions() {
+        let now = Utc::now();
         // Create draft
         let name = TestCaseName::try_new("Test LLM Response".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Test description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description);
+        let draft = TestCase::<Draft>::new(name, description, now);
 
         // Update expected behavior
-        let behavior = ExpectedBehavior {
-            prompt_template: PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap(),
-            expected_patterns: vec![Pattern::try_new("greeting".to_string()).unwrap()],
-            forbidden_patterns: vec![Pattern::try_new("error".to_string()).unwrap()],
-            metadata_assertions: MetadataAssertions::new(serde_json::json!({"min_tokens": 10})),
-        };
-        let draft = draft.with_expected_behavior(behavior);
+        let behavior = ExpectedBehavior::new(
+            PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap(),
+        )
+        .with_expected_pattern(Pattern::try_new("greeting".to_string()).unwrap())
+        .with_forbidden_pattern(Pattern::try_new("error".to_string()).unwrap())
+        .with_metadata_assertions(MetadataAssertions::new(serde_json::json!({"min_tokens": 10})));
+        let draft = draft.with_expected_behavior(behavior, now);
 
         // Finalize to ready
-        let ready = draft.finalize().unwrap();
-        assert_eq!(ready.name.as_ref(), "Test LLM Response");
+        let ready = draft.finalize(now).unwrap();
+        assert_eq!(ready.name().as_ref(), "Test LLM Response");
 
         // Execute
-        let running = ready.execute();
+        let running = ready.execute(now);
 
         // Complete
         let result = TestResult {
             session_id: crate::domain::SessionId::generate(),
-            started_at: Utc::now(),
+            started_at: now,
             status: TestRunStatus::Passed,
             actual_response: ResponseText::try_new("Hello! Nice to meet you.".to_string()).unwrap(),
             assertions_passed: vec![
@@ -333,33 +468,31 @@ mod tests {
             assertions_failed: vec![],
             error_message: None,
         };
-        let (_completed, test_run) = running.complete(result);
+        let (_completed, test_run) = running.complete(result, now);
 
-        assert_eq!(test_run.status, TestRunStatus::Passed);
+        assert_eq!(test_run.status(), &TestRunStatus::Passed);
         assert!(test_run.is_passed());
-        assert_eq!(test_run.assertions_passed.len(), 1);
-        assert_eq!(test_run.assertions_failed.len(), 0);
+        assert_eq!(test_run.assertions_passed().len(), 1);
+        assert_eq!(test_run.assertions_failed().len(), 0);
     }
 
     #[test]
     fn test_validation_errors() {
+        let now = Utc::now();
         let name = TestCaseName::try_new("Test".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description);
+        let draft = TestCase::<Draft>::new(name, description, now);
 
         // Empty prompt template
-        let result = draft.clone().finalize();
+        let result = draft.clone().finalize(now);
         assert!(matches!(result, Err(ValidationError::EmptyPromptTemplate)));
 
         // No expected patterns
-        let behavior = ExpectedBehavior {
-            prompt_template: PromptTemplate::try_new("Hello".to_string()).unwrap(),
-            expected_patterns: vec![],
-            forbidden_patterns: vec![],
-            metadata_assertions: MetadataAssertions::new(serde_json::Value::Null),
-        };
-        let draft = draft.with_expected_behavior(behavior);
-        let result = draft.finalize();
+        let behavior = ExpectedBehavior::new(
+            PromptTemplate::try_new("Hello".to_string()).unwrap(),
+        );
+        let draft = draft.with_expected_behavior(behavior, now);
+        let result = draft.finalize(now);
         assert!(matches!(result, Err(ValidationError::NoExpectedPatterns)));
     }
 
@@ -445,9 +578,10 @@ mod tests {
             expected_count in 0..10usize,
             forbidden_count in 0..10usize
         ) {
+            let now = Utc::now();
             let name = TestCaseName::try_new("Test".to_string()).unwrap();
             let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-            let draft = TestCase::<Draft>::new(name, description);
+            let draft = TestCase::<Draft>::new(name, description, now);
 
             let prompt_template = if prompt.is_empty() {
                 // Keep placeholder for empty prompts
@@ -456,15 +590,16 @@ mod tests {
                 PromptTemplate::try_new(prompt.clone()).unwrap()
             };
 
-            let behavior = ExpectedBehavior {
-                prompt_template,
-                expected_patterns: (0..expected_count).map(|i| Pattern::try_new(format!("Pattern {i}")).unwrap()).collect(),
-                forbidden_patterns: (0..forbidden_count).map(|i| Pattern::try_new(format!("Forbidden {i}")).unwrap()).collect(),
-                metadata_assertions: MetadataAssertions::new(serde_json::json!({})),
-            };
+            let mut behavior = ExpectedBehavior::new(prompt_template);
+            for i in 0..expected_count {
+                behavior = behavior.with_expected_pattern(Pattern::try_new(format!("Pattern {i}")).unwrap());
+            }
+            for i in 0..forbidden_count {
+                behavior = behavior.with_forbidden_pattern(Pattern::try_new(format!("Forbidden {i}")).unwrap());
+            }
 
-            let draft = draft.with_expected_behavior(behavior);
-            let result = draft.finalize();
+            let draft = draft.with_expected_behavior(behavior, now);
+            let result = draft.finalize(now);
 
             if prompt.is_empty() || prompt == PLACEHOLDER_PROMPT_TEMPLATE {
                 assert!(matches!(result, Err(ValidationError::EmptyPromptTemplate)));

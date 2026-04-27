@@ -27,19 +27,31 @@ impl VersionState {
     /// Apply an event to update the state
     pub fn apply(&mut self, event: &DomainEvent) {
         match event {
-            DomainEvent::VersionFirstSeen { model_version, .. } => {
-                let tracked = TrackedVersion::new(model_version.clone());
+            DomainEvent::VersionFirstSeen {
+                model_version,
+                first_seen_at,
+                ..
+            } => {
+                let tracked =
+                    TrackedVersion::new(model_version.clone(), first_seen_at.into_datetime());
                 self.tracked_versions.insert(model_version.clone(), tracked);
             }
-            DomainEvent::VersionUsageRecorded { model_version, .. } => {
-                // Find and update the tracked version
-                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
-                    tracked.record_usage();
+            DomainEvent::VersionUsageRecorded {
+                model_version,
+                recorded_at,
+                ..
+            } => {
+                // Remove, update, and re-insert since TrackedVersion uses consuming transitions
+                if let Some(tracked) = self.tracked_versions.remove(model_version) {
+                    let updated = tracked.record_usage(recorded_at.into_datetime());
+                    self.tracked_versions.insert(model_version.clone(), updated);
                 }
             }
             DomainEvent::VersionDeactivated { model_version, .. } => {
-                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
-                    tracked.deactivate();
+                // Remove, update, and re-insert since TrackedVersion uses consuming transitions
+                if let Some(tracked) = self.tracked_versions.remove(model_version) {
+                    let updated = tracked.deactivate();
+                    self.tracked_versions.insert(model_version.clone(), updated);
                 }
             }
             // VersionChanged events record transitions between versions but don't
@@ -227,7 +239,7 @@ impl CommandLogic for DeactivateVersion {
         let version_exists = state
             .tracked_versions
             .get(&self.model_version)
-            .map(|v| v.is_active)
+            .map(|v| v.is_active())
             .unwrap_or(false);
 
         if !version_exists {

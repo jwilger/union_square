@@ -46,13 +46,20 @@ impl DisplayName {
     }
 }
 
+/// Lifecycle status of a user account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UserStatus {
+    Active,
+    Inactive,
+}
+
 /// User represents a user of the Union Square system
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct User {
-    pub id: UserId,
-    pub email: EmailAddress,
-    pub display_name: DisplayName,
-    pub is_active: bool,
+    id: UserId,
+    email: EmailAddress,
+    display_name: DisplayName,
+    status: UserStatus,
 }
 
 impl User {
@@ -61,16 +68,44 @@ impl User {
             id: UserId::generate(),
             email,
             display_name,
-            is_active: true,
+            status: UserStatus::Active,
         }
     }
 
-    pub fn deactivate(&mut self) {
-        self.is_active = false;
+    /// Consuming transition: deactivate the user.
+    pub fn deactivate(self) -> Self {
+        Self {
+            status: UserStatus::Inactive,
+            ..self
+        }
     }
 
-    pub fn activate(&mut self) {
-        self.is_active = true;
+    /// Consuming transition: activate the user.
+    pub fn activate(self) -> Self {
+        Self {
+            status: UserStatus::Active,
+            ..self
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        matches!(self.status, UserStatus::Active)
+    }
+
+    pub fn id(&self) -> &UserId {
+        &self.id
+    }
+
+    pub fn email(&self) -> &EmailAddress {
+        &self.email
+    }
+
+    pub fn display_name(&self) -> &DisplayName {
+        &self.display_name
+    }
+
+    pub fn status(&self) -> &UserStatus {
+        &self.status
     }
 }
 
@@ -107,9 +142,9 @@ mod tests {
         let name = DisplayName::parse("Test User".to_string()).unwrap();
 
         let user = User::new(email, name);
-        assert!(user.is_active);
-        assert_eq!(user.email.into_inner(), "test@example.com");
-        assert_eq!(user.display_name.into_inner(), "Test User");
+        assert!(user.is_active());
+        assert_eq!(user.email().clone().into_inner(), "test@example.com");
+        assert_eq!(user.display_name().clone().into_inner(), "Test User");
     }
 
     #[test]
@@ -117,14 +152,14 @@ mod tests {
         let email = EmailAddress::parse("test@example.com".to_string()).unwrap();
         let name = DisplayName::parse("Test User".to_string()).unwrap();
 
-        let mut user = User::new(email, name);
-        assert!(user.is_active);
+        let user = User::new(email, name);
+        assert!(user.is_active());
 
-        user.deactivate();
-        assert!(!user.is_active);
+        let user = user.deactivate();
+        assert!(!user.is_active());
 
-        user.activate();
-        assert!(user.is_active);
+        let user = user.activate();
+        assert!(user.is_active());
     }
 
     // Property-based tests
@@ -181,9 +216,9 @@ mod tests {
                 let deserialized: User = serde_json::from_str(&json).unwrap();
 
                 // IDs will be different, but other fields should match
-                assert_eq!(user.email, deserialized.email);
-                assert_eq!(user.display_name, deserialized.display_name);
-                assert_eq!(user.is_active, deserialized.is_active);
+                assert_eq!(user.email(), deserialized.email());
+                assert_eq!(user.display_name(), deserialized.display_name());
+                assert_eq!(user.is_active(), deserialized.is_active());
             }
         }
     }
