@@ -30,11 +30,18 @@
 //! - Captures request/response chunks asynchronously via channels
 //! - Writes audit events to ring buffer without blocking hot path
 //! - Handles connection errors and timeouts gracefully
+//!
+//! ## Pure Planning / Imperative Execution Split
+//!
+//! Boundary parsing and audit fact planning are pure functions in
+//! `hot_path_planner`. This module (the imperative shell) calls those
+//! planners and then interprets the planned effects.
 
 use crate::proxy::audit_recorder::{
     extract_headers_vec, parse_http_method, parse_http_status, parse_request_uri, AuditRecorder,
     RingBufferAuditRecorder,
 };
+use crate::proxy::hot_path_planner::{plan_request_audit, plan_response_audit};
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
 use crate::proxy::url_resolver::UrlResolver;
@@ -89,18 +96,10 @@ impl StreamingHotPathService {
         let resolved_uri = UrlResolver::resolve_target_uri(&target_url, &parts.uri)?;
         parts.uri = resolved_uri;
 
-        // Record request metadata using shared audit recorder
+        // --- Boundary conversion (structural -> semantic) ---
         let headers_vec = extract_headers_vec(&parts.headers);
         let method_result = parse_http_method(&parts.method);
         let uri_result = parse_request_uri(&parts.uri);
-
-        self.audit_recorder.record_request_event(
-            request_id,
-            method_result,
-            uri_result,
-            headers_vec,
-            BodySize::from(0), // We don't know the size in streaming mode
-        );
 
         // Apply request size limit by collecting the body first
         // TODO: This is a temporary implementation for MVP - we should implement true streaming size limits
@@ -119,8 +118,23 @@ impl StreamingHotPathService {
                 }
             })?;
 
+        let body_bytes_buf = body_bytes.to_bytes();
+        let body_len = body_bytes_buf.len();
+
+        // --- Pure planning: decide what audit facts to record ---
+        let request_audit_plan = plan_request_audit(
+            method_result,
+            uri_result,
+            headers_vec,
+            BodySize::from(body_len),
+        );
+
+        // --- Imperative effect: fire-and-forget audit write ---
+        self.audit_recorder
+            .record_request_audit(request_id, request_audit_plan);
+
         // Create outgoing request with the collected body
-        let outgoing_request = Request::from_parts(parts, Body::from(body_bytes.to_bytes()));
+        let outgoing_request = Request::from_parts(parts, Body::from(body_bytes_buf));
 
         // Forward the request with timeout
         let response_future = self.client.request(outgoing_request);
@@ -136,17 +150,21 @@ impl StreamingHotPathService {
         // Extract response parts
         let (response_parts, response_body) = response.into_parts();
 
-        // Record response metadata using shared audit recorder
+        // --- Boundary conversion (structural -> semantic) ---
         let headers_vec = extract_headers_vec(&response_parts.headers);
         let status_result = parse_http_status(response_parts.status);
 
-        self.audit_recorder.record_response_event(
-            request_id,
+        // --- Pure planning: decide what audit facts to record ---
+        let response_audit_plan = plan_response_audit(
             status_result,
             headers_vec,
             BodySize::from(0), // We don't know the size in streaming mode
             DurationMillis::from(duration_ms),
         );
+
+        // --- Imperative effect: fire-and-forget audit write ---
+        self.audit_recorder
+            .record_response_audit(request_id, response_audit_plan);
 
         // For MVP, return the streaming response as-is
         // TODO: Add chunked capture to ring buffer while streaming
