@@ -60,18 +60,18 @@ pub struct RecordVersionUsage {
 }
 
 impl RecordVersionUsage {
-    pub fn new(session_id: SessionId, model_version: ModelVersion) -> Self {
-        let version_stream = Self::version_stream_id(&model_version);
-        Self {
+    pub fn new(session_id: SessionId, model_version: ModelVersion) -> Result<Self, CommandError> {
+        let version_stream = Self::version_stream_id(&model_version)?;
+        Ok(Self {
             version_stream,
             session_id,
             model_version,
-        }
+        })
     }
 
-    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
         StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .expect("Valid stream ID")
+            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
@@ -130,22 +130,22 @@ impl RecordVersionChange {
         from_version: ModelVersion,
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
-    ) -> Self {
-        let from_stream = Self::version_stream_id(&from_version);
-        let to_stream = Self::version_stream_id(&to_version);
-        Self {
+    ) -> Result<Self, CommandError> {
+        let from_stream = Self::version_stream_id(&from_version)?;
+        let to_stream = Self::version_stream_id(&to_version)?;
+        Ok(Self {
             from_stream,
             to_stream,
             session_id,
             from_version,
             to_version,
             reason,
-        }
+        })
     }
 
-    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
         StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .expect("Valid stream ID")
+            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
@@ -198,18 +198,21 @@ pub struct DeactivateVersion {
 }
 
 impl DeactivateVersion {
-    pub fn new(model_version: ModelVersion, reason: Option<ChangeReason>) -> Self {
-        let version_stream = Self::version_stream_id(&model_version);
-        Self {
+    pub fn new(
+        model_version: ModelVersion,
+        reason: Option<ChangeReason>,
+    ) -> Result<Self, CommandError> {
+        let version_stream = Self::version_stream_id(&model_version)?;
+        Ok(Self {
             version_stream,
             model_version,
             reason,
-        }
+        })
     }
 
-    fn version_stream_id(model_version: &ModelVersion) -> StreamId {
+    fn version_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
         StreamId::try_new(format!("version:{}", model_version.to_version_string()))
-            .expect("Valid stream ID")
+            .map_err(|e| CommandError::ValidationError(format!("Invalid version stream ID: {e}")))
     }
 }
 
@@ -266,7 +269,7 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
-        let command = RecordVersionUsage::new(session_id, model_version.clone());
+        let command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
@@ -298,12 +301,13 @@ mod tests {
 
         let store = InMemoryEventStore::new();
 
-        let first_command = RecordVersionUsage::new(session_id.clone(), model_version.clone());
+        let first_command =
+            RecordVersionUsage::new(session_id.clone(), model_version.clone()).unwrap();
         eventcore::execute(&store, first_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
 
-        let second_command = RecordVersionUsage::new(session_id, model_version.clone());
+        let second_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
         let result = eventcore::execute(&store, second_command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
@@ -336,7 +340,8 @@ mod tests {
             from_version.clone(),
             to_version.clone(),
             Some(ChangeReason::try_new("Performance upgrade".to_string()).unwrap()),
-        );
+        )
+        .unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
@@ -387,7 +392,7 @@ mod tests {
 
         let store = InMemoryEventStore::new();
 
-        let record_command = RecordVersionUsage::new(session_id, model_version.clone());
+        let record_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
         eventcore::execute(&store, record_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
@@ -395,7 +400,8 @@ mod tests {
         let deactivate_command = DeactivateVersion::new(
             model_version.clone(),
             Some(ChangeReason::try_new("Model deprecated".to_string()).unwrap()),
-        );
+        )
+        .unwrap();
         let result =
             eventcore::execute(&store, deactivate_command.clone(), RetryPolicy::default()).await;
         assert!(result.is_ok());
@@ -419,7 +425,7 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-nonexistent".to_string()).unwrap(),
         };
 
-        let command = DeactivateVersion::new(model_version, None);
+        let command = DeactivateVersion::new(model_version, None).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;
