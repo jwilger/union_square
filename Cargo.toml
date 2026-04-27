@@ -78,7 +78,7 @@ tokio-test = "0.4"
 tempfile = "3.27"
 rstest = "0.26"
 proptest = "1.11"
-eventcore-memory = "0.7.1"
+eventcore-memory = "0.8.0"
 criterion = { version = "0.8", features = ["async_tokio"] }
 mockito = "1.7"
 dhat = "0.3"
