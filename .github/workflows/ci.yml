@@ -85,13 +85,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Install just
-      uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1
-      with:
-        tool: just
-
-    - name: Install cargo-nextest
-      run: cargo install cargo-nextest --locked
+    - name: Install just and cargo-nextest
+      run: |
+        cargo install just --locked
+        cargo install cargo-nextest --locked
 
     - name: Run local CI contract
       run: just ci
@@ -161,9 +158,7 @@ jobs:
       uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Install just
-      uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1
-      with:
-        tool: just
+      run: cargo install just --locked
 
     - name: Run ast-grep architecture checks
       run: just ast-grep
