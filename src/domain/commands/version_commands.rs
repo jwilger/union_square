@@ -142,6 +142,7 @@ pub struct RecordVersionChange {
     pub to_version: ModelVersion,
     pub reason: Option<ChangeReason>,
     pub timestamp: Timestamp,
+    pub change_id: VersionChangeId,
 }
 
 impl RecordVersionChange {
@@ -151,6 +152,7 @@ impl RecordVersionChange {
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
         timestamp: Timestamp,
+        change_id: VersionChangeId,
     ) -> Result<Self, CommandError> {
         let from_stream = version_stream_id(&from_version)?;
         let to_stream = version_stream_id(&to_version)?;
@@ -162,6 +164,7 @@ impl RecordVersionChange {
             to_version,
             reason,
             timestamp,
+            change_id,
         })
     }
 }
@@ -178,11 +181,10 @@ impl CommandLogic for RecordVersionChange {
     fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
         let change_type = self.from_version.compare(&self.to_version);
-        let change_id = VersionChangeId::generate();
 
         events.push(DomainEvent::VersionChanged {
             stream_id: self.from_stream.clone(),
-            change_id: change_id.clone(),
+            change_id: self.change_id.clone(),
             session_id: self.session_id.clone(),
             from_version: self.from_version.clone(),
             to_version: self.to_version.clone(),
@@ -192,7 +194,7 @@ impl CommandLogic for RecordVersionChange {
         });
         events.push(DomainEvent::VersionChanged {
             stream_id: self.to_stream.clone(),
-            change_id,
+            change_id: self.change_id.clone(),
             session_id: self.session_id.clone(),
             from_version: self.from_version.clone(),
             to_version: self.to_version.clone(),
@@ -359,6 +361,7 @@ mod tests {
             to_version.clone(),
             Some(ChangeReason::try_new("Performance upgrade".to_string()).unwrap()),
             Timestamp::now(),
+            VersionChangeId::generate(),
         )
         .unwrap();
         let store = InMemoryEventStore::new();

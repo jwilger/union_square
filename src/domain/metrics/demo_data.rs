@@ -54,8 +54,9 @@ impl FScoreDemoDataGenerator {
                 } else {
                     day_start - Hours::try_new(hours_offset).unwrap().to_duration()
                 };
-                let timestamp = Timestamp::try_new(datetime)
-                    .expect("demo datetime derived from valid reference time");
+                let Ok(timestamp) = Timestamp::try_new(datetime) else {
+                    continue;
+                };
 
                 // Generate realistic F-score trends (slightly declining over time for demo)
                 let precision_decline_rate = DailyTrendRate::try_new(0.001).unwrap();
@@ -203,8 +204,9 @@ impl FScoreDemoDataGenerator {
                 } else {
                     day_start - Hours::try_new(hours_offset).unwrap().to_duration()
                 };
-                let timestamp = Timestamp::try_new(datetime)
-                    .expect("demo datetime derived from valid reference time");
+                let Ok(timestamp) = Timestamp::try_new(datetime) else {
+                    continue;
+                };
 
                 // Application-specific trends
                 let precision_trend = if application_id.as_ref()

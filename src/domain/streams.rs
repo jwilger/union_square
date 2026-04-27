@@ -271,6 +271,7 @@ mod tests {
             to_version,
             Some(ChangeReason::try_new("provider migration".to_string()).unwrap()),
             Timestamp::now(),
+            crate::domain::version::VersionChangeId::generate(),
         )
         .unwrap();
 

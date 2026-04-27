@@ -40,7 +40,7 @@ impl Timestamp {
     /// Check if this timestamp is recent relative to `reference` (within last 24 hours)
     pub fn is_recent(&self, reference: DateTime<Utc>) -> bool {
         let age = reference.signed_duration_since(self.into_inner());
-        age <= Hours::one_day().to_duration()
+        age >= chrono::Duration::zero() && age <= Hours::one_day().to_duration()
     }
 
     /// Check if this timestamp is very old relative to `reference` (older than 1 year)
@@ -52,6 +52,10 @@ impl Timestamp {
     /// Get age category for this timestamp relative to `reference`
     pub fn age_category(&self, reference: DateTime<Utc>) -> TimestampAge {
         let age = reference.signed_duration_since(self.into_inner());
+
+        if age < chrono::Duration::zero() {
+            return TimestampAge::Future;
+        }
 
         match age {
             d if d <= Hours::one().to_duration() => TimestampAge::VeryRecent,
@@ -68,6 +72,8 @@ impl Timestamp {
 /// Age category for timestamps
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimestampAge {
+    /// After the reference time
+    Future,
     /// Within the last hour
     VeryRecent,
     /// Within the last 24 hours

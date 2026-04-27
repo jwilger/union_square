@@ -103,9 +103,7 @@ impl ExpectedBehavior {
             prompt_template,
             expected_patterns: Vec::new(),
             forbidden_patterns: Vec::new(),
-            metadata_assertions: MetadataAssertions::new(serde_json::Value::Object(
-                serde_json::Map::new(),
-            )),
+            metadata_assertions: MetadataAssertions::new_empty(),
         }
     }
 

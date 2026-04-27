@@ -43,7 +43,7 @@ impl TrackedVersion {
             version,
             first_seen,
             last_seen: first_seen,
-            request_count: RequestCount::new(1),
+            request_count: RequestCount::new(0),
             status: VersionStatus::Active,
         }
     }
@@ -51,7 +51,7 @@ impl TrackedVersion {
     /// Consuming transition: record usage at the given time.
     pub fn record_usage(self, at: DateTime<Utc>) -> Self {
         Self {
-            last_seen: at,
+            last_seen: self.last_seen.max(at),
             request_count: self.request_count.increment(),
             ..self
         }
@@ -127,7 +127,6 @@ impl ModelVersion {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersionTestConfig {
     target_version: Option<ModelVersion>,
-    compare_mode: bool,
     baseline_version: Option<ModelVersion>,
     mode: TestExecutionMode,
 }
@@ -139,11 +138,6 @@ impl VersionTestConfig {
 
     pub fn with_target_version(mut self, version: ModelVersion) -> Self {
         self.target_version = Some(version);
-        self
-    }
-
-    pub fn with_compare_mode(mut self, enabled: bool) -> Self {
-        self.compare_mode = enabled;
         self
     }
 
@@ -162,7 +156,7 @@ impl VersionTestConfig {
     }
 
     pub fn compare_mode(&self) -> bool {
-        self.compare_mode
+        matches!(self.mode, TestExecutionMode::Comparison)
     }
 
     pub fn baseline_version(&self) -> Option<&ModelVersion> {
@@ -191,7 +185,6 @@ impl Default for VersionTestConfig {
     fn default() -> Self {
         Self {
             target_version: None,
-            compare_mode: false,
             baseline_version: None,
             mode: TestExecutionMode::Original,
         }
@@ -332,11 +325,11 @@ mod tests {
         };
 
         let tracked = TrackedVersion::new(version, now);
-        assert_eq!(tracked.request_count(), RequestCount::new(1));
+        assert_eq!(tracked.request_count(), RequestCount::new(0));
         assert!(tracked.is_active());
 
         let tracked = tracked.record_usage(now);
-        assert_eq!(tracked.request_count(), RequestCount::new(2));
+        assert_eq!(tracked.request_count(), RequestCount::new(1));
 
         let tracked = tracked.deactivate();
         assert!(!tracked.is_active());
