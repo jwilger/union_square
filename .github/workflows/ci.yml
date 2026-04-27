@@ -474,7 +474,7 @@ jobs:
         sudo mv /tmp/actionlint /usr/local/bin/
 
     - name: Run actionlint
-      run: actionlint .github/workflows/
+      run: actionlint .github/workflows/*.yml
 
   ci-success:
     name: CI Success
