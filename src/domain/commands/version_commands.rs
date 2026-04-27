@@ -27,19 +27,31 @@ impl VersionState {
     /// Apply an event to update the state
     pub fn apply(&mut self, event: &DomainEvent) {
         match event {
-            DomainEvent::VersionFirstSeen { model_version, .. } => {
-                let tracked = TrackedVersion::new(model_version.clone());
+            DomainEvent::VersionFirstSeen {
+                model_version,
+                first_seen_at,
+                ..
+            } => {
+                let tracked =
+                    TrackedVersion::new(model_version.clone(), first_seen_at.into_datetime());
                 self.tracked_versions.insert(model_version.clone(), tracked);
             }
-            DomainEvent::VersionUsageRecorded { model_version, .. } => {
-                // Find and update the tracked version
-                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
-                    tracked.record_usage();
+            DomainEvent::VersionUsageRecorded {
+                model_version,
+                recorded_at,
+                ..
+            } => {
+                // Remove, update, and re-insert since TrackedVersion uses consuming transitions
+                if let Some(tracked) = self.tracked_versions.remove(model_version) {
+                    let updated = tracked.record_usage(recorded_at.into_datetime());
+                    self.tracked_versions.insert(model_version.clone(), updated);
                 }
             }
             DomainEvent::VersionDeactivated { model_version, .. } => {
-                if let Some(tracked) = self.tracked_versions.get_mut(model_version) {
-                    tracked.deactivate();
+                // Remove, update, and re-insert since TrackedVersion uses consuming transitions
+                if let Some(tracked) = self.tracked_versions.remove(model_version) {
+                    let updated = tracked.deactivate();
+                    self.tracked_versions.insert(model_version.clone(), updated);
                 }
             }
             // VersionChanged events record transitions between versions but don't
@@ -63,15 +75,21 @@ pub struct RecordVersionUsage {
     version_stream: StreamId,
     pub session_id: SessionId,
     pub model_version: ModelVersion,
+    pub timestamp: Timestamp,
 }
 
 impl RecordVersionUsage {
-    pub fn new(session_id: SessionId, model_version: ModelVersion) -> Result<Self, CommandError> {
+    pub fn new(
+        session_id: SessionId,
+        model_version: ModelVersion,
+        timestamp: Timestamp,
+    ) -> Result<Self, CommandError> {
         let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             session_id,
             model_version,
+            timestamp,
         })
     }
 }
@@ -96,7 +114,7 @@ impl CommandLogic for RecordVersionUsage {
                 stream_id: self.version_stream.clone(),
                 model_version: self.model_version.clone(),
                 session_id: self.session_id.clone(),
-                first_seen_at: Timestamp::now(),
+                first_seen_at: self.timestamp,
             });
         }
 
@@ -105,7 +123,7 @@ impl CommandLogic for RecordVersionUsage {
             stream_id: self.version_stream.clone(),
             model_version: self.model_version.clone(),
             session_id: self.session_id.clone(),
-            recorded_at: Timestamp::now(),
+            recorded_at: self.timestamp,
         });
 
         Ok(events.into())
@@ -123,6 +141,8 @@ pub struct RecordVersionChange {
     pub from_version: ModelVersion,
     pub to_version: ModelVersion,
     pub reason: Option<ChangeReason>,
+    pub timestamp: Timestamp,
+    pub change_id: VersionChangeId,
 }
 
 impl RecordVersionChange {
@@ -131,6 +151,8 @@ impl RecordVersionChange {
         from_version: ModelVersion,
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
+        timestamp: Timestamp,
+        change_id: VersionChangeId,
     ) -> Result<Self, CommandError> {
         let from_stream = version_stream_id(&from_version)?;
         let to_stream = version_stream_id(&to_version)?;
@@ -141,6 +163,8 @@ impl RecordVersionChange {
             from_version,
             to_version,
             reason,
+            timestamp,
+            change_id,
         })
     }
 }
@@ -157,27 +181,26 @@ impl CommandLogic for RecordVersionChange {
     fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
         let change_type = self.from_version.compare(&self.to_version);
-        let change_id = VersionChangeId::generate();
 
         events.push(DomainEvent::VersionChanged {
             stream_id: self.from_stream.clone(),
-            change_id: change_id.clone(),
+            change_id: self.change_id.clone(),
             session_id: self.session_id.clone(),
             from_version: self.from_version.clone(),
             to_version: self.to_version.clone(),
             change_type,
             reason: self.reason.clone(),
-            changed_at: Timestamp::now(),
+            changed_at: self.timestamp,
         });
         events.push(DomainEvent::VersionChanged {
             stream_id: self.to_stream.clone(),
-            change_id,
+            change_id: self.change_id.clone(),
             session_id: self.session_id.clone(),
             from_version: self.from_version.clone(),
             to_version: self.to_version.clone(),
             change_type: self.from_version.compare(&self.to_version),
             reason: self.reason.clone(),
-            changed_at: Timestamp::now(),
+            changed_at: self.timestamp,
         });
 
         Ok(events.into())
@@ -191,18 +214,21 @@ pub struct DeactivateVersion {
     version_stream: StreamId,
     pub model_version: ModelVersion,
     pub reason: Option<ChangeReason>,
+    pub timestamp: Timestamp,
 }
 
 impl DeactivateVersion {
     pub fn new(
         model_version: ModelVersion,
         reason: Option<ChangeReason>,
+        timestamp: Timestamp,
     ) -> Result<Self, CommandError> {
         let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             model_version,
             reason,
+            timestamp,
         })
     }
 }
@@ -221,7 +247,7 @@ impl CommandLogic for DeactivateVersion {
         let version_exists = state
             .tracked_versions
             .get(&self.model_version)
-            .map(|v| v.is_active)
+            .map(|v| v.is_active())
             .unwrap_or(false);
 
         if !version_exists {
@@ -237,7 +263,7 @@ impl CommandLogic for DeactivateVersion {
             stream_id: self.version_stream.clone(),
             model_version: self.model_version.clone(),
             reason: self.reason.clone(),
-            deactivated_at: Timestamp::now(),
+            deactivated_at: self.timestamp,
         }];
 
         Ok(events.into())
@@ -260,7 +286,8 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
-        let command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
@@ -293,12 +320,14 @@ mod tests {
         let store = InMemoryEventStore::new();
 
         let first_command =
-            RecordVersionUsage::new(session_id.clone(), model_version.clone()).unwrap();
+            RecordVersionUsage::new(session_id.clone(), model_version.clone(), Timestamp::now())
+                .unwrap();
         eventcore::execute(&store, first_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
 
-        let second_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let second_command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         let result = eventcore::execute(&store, second_command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
@@ -331,6 +360,8 @@ mod tests {
             from_version.clone(),
             to_version.clone(),
             Some(ChangeReason::try_new("Performance upgrade".to_string()).unwrap()),
+            Timestamp::now(),
+            VersionChangeId::generate(),
         )
         .unwrap();
         let store = InMemoryEventStore::new();
@@ -383,7 +414,8 @@ mod tests {
 
         let store = InMemoryEventStore::new();
 
-        let record_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let record_command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         eventcore::execute(&store, record_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
@@ -391,6 +423,7 @@ mod tests {
         let deactivate_command = DeactivateVersion::new(
             model_version.clone(),
             Some(ChangeReason::try_new("Model deprecated".to_string()).unwrap()),
+            Timestamp::now(),
         )
         .unwrap();
         let result =
@@ -416,7 +449,7 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-nonexistent".to_string()).unwrap(),
         };
 
-        let command = DeactivateVersion::new(model_version, None).unwrap();
+        let command = DeactivateVersion::new(model_version, None, Timestamp::now()).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;

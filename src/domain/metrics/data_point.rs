@@ -7,6 +7,7 @@ use crate::domain::metrics::{
     timestamp::{Timestamp, TimestampAge},
     MetricsError,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Time-series data point for F-score tracking
@@ -68,14 +69,14 @@ impl FScoreDataPoint {
         PerformanceAssessment::from_components(self.f_score, self.precision, self.recall)
     }
 
-    /// Check if this data point is recent
-    pub fn is_recent(&self) -> bool {
-        self.timestamp.is_recent()
+    /// Check if this data point is recent relative to `reference`
+    pub fn is_recent(&self, reference: DateTime<Utc>) -> bool {
+        self.timestamp.is_recent(reference)
     }
 
-    /// Get the age category of this data point
-    pub fn age_category(&self) -> TimestampAge {
-        self.timestamp.age_category()
+    /// Get the age category of this data point relative to `reference`
+    pub fn age_category(&self, reference: DateTime<Utc>) -> TimestampAge {
+        self.timestamp.age_category(reference)
     }
 
     /// Get the timestamp
@@ -135,7 +136,7 @@ mod tests {
         assert!((data_point.f_score().into_inner() - expected_f_score).abs() < 1e-10);
 
         // Test new methods
-        assert!(data_point.is_recent());
+        assert!(data_point.is_recent(Utc::now()));
         let assessment = data_point.performance_assessment();
         assert_eq!(assessment.f_score_level(), PerformanceLevel::Good);
     }

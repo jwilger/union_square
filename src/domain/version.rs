@@ -20,35 +20,73 @@ impl VersionChangeId {
     }
 }
 
+/// Lifecycle status of a tracked version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VersionStatus {
+    Active,
+    Deactivated,
+}
+
 /// Represents a tracked version with additional metadata
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrackedVersion {
-    pub version: ModelVersion,
-    pub first_seen: DateTime<Utc>,
-    pub last_seen: DateTime<Utc>,
-    pub request_count: RequestCount,
-    pub is_active: bool,
+    version: ModelVersion,
+    first_seen: DateTime<Utc>,
+    last_seen: DateTime<Utc>,
+    request_count: RequestCount,
+    status: VersionStatus,
 }
 
 impl TrackedVersion {
-    pub fn new(version: ModelVersion) -> Self {
-        let now = Utc::now();
+    pub fn new(version: ModelVersion, first_seen: DateTime<Utc>) -> Self {
         Self {
             version,
-            first_seen: now,
-            last_seen: now,
-            request_count: RequestCount::new(1),
-            is_active: true,
+            first_seen,
+            last_seen: first_seen,
+            request_count: RequestCount::new(0),
+            status: VersionStatus::Active,
         }
     }
 
-    pub fn record_usage(&mut self) {
-        self.last_seen = Utc::now();
-        self.request_count = self.request_count.increment();
+    /// Consuming transition: record usage at the given time.
+    pub fn record_usage(self, at: DateTime<Utc>) -> Self {
+        Self {
+            last_seen: self.last_seen.max(at),
+            request_count: self.request_count.increment(),
+            ..self
+        }
     }
 
-    pub fn deactivate(&mut self) {
-        self.is_active = false;
+    /// Consuming transition: deactivate the version.
+    pub fn deactivate(self) -> Self {
+        Self {
+            status: VersionStatus::Deactivated,
+            ..self
+        }
+    }
+
+    pub fn version(&self) -> &ModelVersion {
+        &self.version
+    }
+
+    pub fn first_seen(&self) -> &DateTime<Utc> {
+        &self.first_seen
+    }
+
+    pub fn last_seen(&self) -> &DateTime<Utc> {
+        &self.last_seen
+    }
+
+    pub fn request_count(&self) -> RequestCount {
+        self.request_count
+    }
+
+    pub fn status(&self) -> &VersionStatus {
+        &self.status
+    }
+
+    pub fn is_active(&self) -> bool {
+        matches!(self.status, VersionStatus::Active)
     }
 }
 
@@ -88,14 +126,46 @@ impl ModelVersion {
 /// Configuration for version-aware test execution
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersionTestConfig {
-    /// Version to use for replay (if different from original)
-    pub target_version: Option<ModelVersion>,
-    /// Whether to compare results between versions
-    pub compare_mode: bool,
-    /// Original version for comparison
-    pub baseline_version: Option<ModelVersion>,
-    /// Test execution mode
-    pub mode: TestExecutionMode,
+    target_version: Option<ModelVersion>,
+    baseline_version: Option<ModelVersion>,
+    mode: TestExecutionMode,
+}
+
+impl VersionTestConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_target_version(mut self, version: ModelVersion) -> Self {
+        self.target_version = Some(version);
+        self
+    }
+
+    pub fn with_baseline_version(mut self, version: ModelVersion) -> Self {
+        self.baseline_version = Some(version);
+        self
+    }
+
+    pub fn with_mode(mut self, mode: TestExecutionMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub fn target_version(&self) -> Option<&ModelVersion> {
+        self.target_version.as_ref()
+    }
+
+    pub fn compare_mode(&self) -> bool {
+        matches!(self.mode, TestExecutionMode::Comparison)
+    }
+
+    pub fn baseline_version(&self) -> Option<&ModelVersion> {
+        self.baseline_version.as_ref()
+    }
+
+    pub fn mode(&self) -> &TestExecutionMode {
+        &self.mode
+    }
 }
 
 /// How to execute version-aware tests
@@ -115,7 +185,6 @@ impl Default for VersionTestConfig {
     fn default() -> Self {
         Self {
             target_version: None,
-            compare_mode: false,
             baseline_version: None,
             mode: TestExecutionMode::Original,
         }
@@ -125,13 +194,13 @@ impl Default for VersionTestConfig {
 /// Version change event for tracking in the system
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersionChangeEvent {
-    pub id: VersionChangeId,
-    pub session_id: crate::domain::SessionId,
-    pub from_version: ModelVersion,
-    pub to_version: ModelVersion,
-    pub change_type: VersionComparison,
-    pub occurred_at: DateTime<Utc>,
-    pub reason: Option<ChangeReason>,
+    id: VersionChangeId,
+    session_id: crate::domain::SessionId,
+    from_version: ModelVersion,
+    to_version: ModelVersion,
+    change_type: VersionComparison,
+    occurred_at: DateTime<Utc>,
+    reason: Option<ChangeReason>,
 }
 
 impl VersionChangeEvent {
@@ -140,6 +209,7 @@ impl VersionChangeEvent {
         from_version: ModelVersion,
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
+        occurred_at: DateTime<Utc>,
     ) -> Self {
         let change_type = from_version.compare(&to_version);
         Self {
@@ -148,9 +218,37 @@ impl VersionChangeEvent {
             from_version,
             to_version,
             change_type,
-            occurred_at: Utc::now(),
+            occurred_at,
             reason,
         }
+    }
+
+    pub fn id(&self) -> &VersionChangeId {
+        &self.id
+    }
+
+    pub fn session_id(&self) -> &crate::domain::SessionId {
+        &self.session_id
+    }
+
+    pub fn from_version(&self) -> &ModelVersion {
+        &self.from_version
+    }
+
+    pub fn to_version(&self) -> &ModelVersion {
+        &self.to_version
+    }
+
+    pub fn change_type(&self) -> &VersionComparison {
+        &self.change_type
+    }
+
+    pub fn occurred_at(&self) -> &DateTime<Utc> {
+        &self.occurred_at
+    }
+
+    pub fn reason(&self) -> Option<&ChangeReason> {
+        self.reason.as_ref()
     }
 }
 
@@ -220,20 +318,21 @@ mod tests {
 
     #[test]
     fn test_tracked_version_usage() {
+        let now = Utc::now();
         let version = ModelVersion {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new("gpt-4-turbo-2024-01".to_string()).unwrap(),
         };
 
-        let mut tracked = TrackedVersion::new(version);
-        assert_eq!(tracked.request_count, RequestCount::new(1));
-        assert!(tracked.is_active);
+        let tracked = TrackedVersion::new(version, now);
+        assert_eq!(tracked.request_count(), RequestCount::new(0));
+        assert!(tracked.is_active());
 
-        tracked.record_usage();
-        assert_eq!(tracked.request_count, RequestCount::new(2));
+        let tracked = tracked.record_usage(now);
+        assert_eq!(tracked.request_count(), RequestCount::new(1));
 
-        tracked.deactivate();
-        assert!(!tracked.is_active);
+        let tracked = tracked.deactivate();
+        assert!(!tracked.is_active());
     }
 
     #[test]
@@ -258,6 +357,7 @@ mod tests {
 
     #[test]
     fn test_version_change_event_creation() {
+        let now = Utc::now();
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
@@ -274,13 +374,14 @@ mod tests {
             v1.clone(),
             v2.clone(),
             Some(ChangeReason::try_new("Upgrade for better performance".to_string()).unwrap()),
+            now,
         );
 
-        assert_eq!(event.from_version, v1);
-        assert_eq!(event.to_version, v2);
+        assert_eq!(event.from_version(), &v1);
+        assert_eq!(event.to_version(), &v2);
         assert_eq!(
-            event.change_type,
-            VersionComparison::Changed {
+            event.change_type(),
+            &VersionComparison::Changed {
                 from_provider: LlmProvider::OpenAI,
                 from_model_id: ModelId::try_new("gpt-3.5-turbo".to_string()).unwrap(),
                 to_provider: LlmProvider::OpenAI,
@@ -288,7 +389,7 @@ mod tests {
             }
         );
         assert_eq!(
-            event.reason.as_ref().map(|r| r.as_ref()),
+            event.reason().map(|r| r.as_ref()),
             Some("Upgrade for better performance")
         );
     }
@@ -296,10 +397,10 @@ mod tests {
     #[test]
     fn test_version_test_config_default() {
         let config = VersionTestConfig::default();
-        assert_eq!(config.mode, TestExecutionMode::Original);
-        assert!(!config.compare_mode);
-        assert!(config.target_version.is_none());
-        assert!(config.baseline_version.is_none());
+        assert_eq!(config.mode(), &TestExecutionMode::Original);
+        assert!(!config.compare_mode());
+        assert!(config.target_version().is_none());
+        assert!(config.baseline_version().is_none());
     }
 
     // New comprehensive tests for type-safe VersionComparison
@@ -497,6 +598,7 @@ mod tests {
     #[test]
     fn test_version_change_event_with_type_safe_comparison() {
         // Test that VersionChangeEvent correctly uses the type-safe comparison
+        let now = Utc::now();
         let session_id = SessionId::generate();
         let v1 = ModelVersion {
             provider: LlmProvider::OpenAI,
@@ -512,10 +614,11 @@ mod tests {
             v1.clone(),
             v2.clone(),
             Some(ChangeReason::try_new("Upgrade".to_string()).unwrap()),
+            now,
         );
 
         // The change_type should use the type-safe comparison
-        match &event.change_type {
+        match event.change_type() {
             VersionComparison::Changed {
                 from_model_id,
                 to_model_id,
