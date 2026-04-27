@@ -123,22 +123,22 @@ mod stream_ids {
     /// Stream ID prefix for application metrics
     const APPLICATION_STREAM_PREFIX: &str = "metrics:app:";
 
-    pub fn model_stream_id(model_version: &ModelVersion) -> StreamId {
+    pub fn model_stream_id(model_version: &ModelVersion) -> Result<StreamId, CommandError> {
         StreamId::try_new(format!(
             "{}{}",
             MODEL_STREAM_PREFIX,
             model_version.to_version_string()
         ))
-        .expect("Valid stream ID")
+        .map_err(|e| CommandError::ValidationError(format!("Invalid model stream ID: {e}")))
     }
 
-    pub fn application_stream_id(application_id: &ApplicationId) -> StreamId {
+    pub fn application_stream_id(application_id: &ApplicationId) -> Result<StreamId, CommandError> {
         StreamId::try_new(format!(
             "{}{}",
             APPLICATION_STREAM_PREFIX,
             application_id.as_ref()
         ))
-        .expect("Valid stream ID")
+        .map_err(|e| CommandError::ValidationError(format!("Invalid application stream ID: {e}")))
     }
 }
 
@@ -198,9 +198,9 @@ trait FScoreCommand {
     fn recall(&self) -> Recall;
 
     /// Calculate F-score from precision and recall
-    fn calculate_f_score(&self) -> FScore {
+    fn calculate_f_score(&self) -> Result<FScore, CommandError> {
         FScore::from_precision_recall(self.precision(), self.recall())
-            .expect("F-score calculation should succeed with valid precision and recall")
+            .map_err(|e| CommandError::ValidationError(format!("F-score calculation failed: {e}")))
     }
 }
 
@@ -211,16 +211,16 @@ impl RecordModelFScore {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
-    ) -> Self {
-        let model_stream = stream_ids::model_stream_id(&model_version);
-        Self {
+    ) -> Result<Self, CommandError> {
+        let model_stream = stream_ids::model_stream_id(&model_version)?;
+        Ok(Self {
             model_stream,
             session_id,
             model_version,
             precision,
             recall,
             sample_count,
-        }
+        })
     }
 }
 
@@ -246,7 +246,7 @@ impl CommandLogic for RecordModelFScore {
     fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
-        let f_score = self.calculate_f_score();
+        let f_score = self.calculate_f_score()?;
 
         events.push(event_builders::build_f_score_calculated_event(
             self.model_stream.clone(),
@@ -285,10 +285,10 @@ impl RecordApplicationFScore {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
-    ) -> Self {
-        let application_stream = stream_ids::application_stream_id(&application_id);
-        let model_stream = stream_ids::model_stream_id(&model_version);
-        Self {
+    ) -> Result<Self, CommandError> {
+        let application_stream = stream_ids::application_stream_id(&application_id)?;
+        let model_stream = stream_ids::model_stream_id(&model_version)?;
+        Ok(Self {
             application_stream,
             model_stream,
             session_id,
@@ -297,7 +297,7 @@ impl RecordApplicationFScore {
             precision,
             recall,
             sample_count,
-        }
+        })
     }
 }
 
@@ -323,7 +323,7 @@ impl CommandLogic for RecordApplicationFScore {
     fn handle(&self, _state: Self::State) -> Result<NewEvents<Self::Event>, CommandError> {
         let mut events = Vec::new();
 
-        let f_score = self.calculate_f_score();
+        let f_score = self.calculate_f_score()?;
 
         // Emit to application stream
         events.push(event_builders::build_application_f_score_calculated_event(
@@ -380,7 +380,8 @@ mod tests {
             precision,
             recall,
             SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap(),
-        );
+        )
+        .unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
@@ -437,7 +438,8 @@ mod tests {
             precision,
             recall,
             SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
-        );
+        )
+        .unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
