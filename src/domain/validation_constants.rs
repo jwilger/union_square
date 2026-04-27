@@ -22,9 +22,6 @@ pub mod display_name {
 pub mod test_case {
     /// Maximum test case name length
     pub const MAX_NAME_LENGTH: usize = 200;
-
-    /// Placeholder template for draft test cases
-    pub const PLACEHOLDER_PROMPT_TEMPLATE: &str = "PLACEHOLDER";
 }
 
 /// User agent validation constants

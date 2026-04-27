@@ -343,6 +343,13 @@ pub struct LlmParameters(serde_json::Value);
 #[nutype(derive(Debug, Clone, PartialEq, Serialize, Deserialize))]
 pub struct MetadataAssertions(serde_json::Value);
 
+impl MetadataAssertions {
+    /// Create an empty metadata assertions container.
+    pub fn new_empty() -> Self {
+        Self::new(serde_json::Value::Object(Default::default()))
+    }
+}
+
 /// Domain validation errors
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DomainError {
