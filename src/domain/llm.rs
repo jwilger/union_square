@@ -175,14 +175,13 @@ impl LlmRequest {
 
     /// Consuming transition: start the request.
     pub fn start(self) -> Result<Self, RequestTransitionError> {
-        let from = self.status.clone();
-        match self.status {
+        match &self.status {
             RequestStatus::Pending => Ok(Self {
                 status: RequestStatus::InProgress,
                 ..self
             }),
             _ => Err(RequestTransitionError {
-                from,
+                from: self.status.clone(),
                 to: RequestStatus::InProgress,
             }),
         }
@@ -190,14 +189,13 @@ impl LlmRequest {
 
     /// Consuming transition: complete the request.
     pub fn complete(self) -> Result<Self, RequestTransitionError> {
-        let from = self.status.clone();
-        match self.status {
+        match &self.status {
             RequestStatus::InProgress => Ok(Self {
                 status: RequestStatus::Completed,
                 ..self
             }),
             _ => Err(RequestTransitionError {
-                from,
+                from: self.status.clone(),
                 to: RequestStatus::Completed,
             }),
         }
@@ -205,14 +203,13 @@ impl LlmRequest {
 
     /// Consuming transition: mark the request as failed.
     pub fn fail(self) -> Result<Self, RequestTransitionError> {
-        let from = self.status.clone();
-        match self.status {
+        match &self.status {
             RequestStatus::Pending | RequestStatus::InProgress => Ok(Self {
                 status: RequestStatus::Failed,
                 ..self
             }),
             _ => Err(RequestTransitionError {
-                from,
+                from: self.status.clone(),
                 to: RequestStatus::Failed,
             }),
         }
@@ -220,14 +217,13 @@ impl LlmRequest {
 
     /// Consuming transition: cancel the request.
     pub fn cancel(self) -> Result<Self, RequestTransitionError> {
-        let from = self.status.clone();
-        match self.status {
+        match &self.status {
             RequestStatus::Pending | RequestStatus::InProgress => Ok(Self {
                 status: RequestStatus::Cancelled,
                 ..self
             }),
             _ => Err(RequestTransitionError {
-                from,
+                from: self.status.clone(),
                 to: RequestStatus::Cancelled,
             }),
         }
