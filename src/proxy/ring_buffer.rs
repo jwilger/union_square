@@ -102,7 +102,7 @@ pub struct RingBufferStats {
 /// through atomic state coordination. All unsafe operations are documented and bounded.
 pub struct RingBuffer {
     slots: Vec<Slot>,
-    slot_count: SlotCount,
+    slot_count: usize,
     slot_size: SlotSize,
     write_position: AtomicU64,
     read_position: AtomicU64,
@@ -133,12 +133,9 @@ impl RingBuffer {
         }
 
         // Ensure at least 1 slot
-        slot_count_value = slot_count_value.max(1);
+        let slot_count = slot_count_value.max(1);
 
-        let slot_count =
-            SlotCount::try_new(slot_count_value).expect("calculated slot count should be valid");
-
-        let slots = (0..*slot_count.as_ref())
+        let slots = (0..slot_count)
             .map(|_| Slot::new(config.slot_size))
             .collect();
 
@@ -174,7 +171,7 @@ impl RingBuffer {
     pub fn write(&self, request_id: RequestId, data: &[u8]) -> Result<(), u64> {
         // Get next write position
         let position = self.write_position.fetch_add(1, Ordering::Relaxed);
-        let slot_index = (position & (*self.slot_count.as_ref() as u64 - 1)) as usize;
+        let slot_index = (position & (self.slot_count as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Try to claim the slot
@@ -202,6 +199,9 @@ impl RingBuffer {
                     "State should be Writing after successful CAS"
                 );
 
+                // Capture timestamp before entering unsafe block
+                let timestamp_value = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
+
                 // Copy data (with truncation if needed)
                 let copy_size = data.len().min(*self.slot_size.as_ref());
 
@@ -214,8 +214,6 @@ impl RingBuffer {
                     let data_ref = &mut *slot.data.get();
                     data_ref[..copy_size].copy_from_slice(&data[..copy_size]);
 
-                    let timestamp_value =
-                        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
                     *slot.timestamp.get() = TimestampNanos::from(timestamp_value);
 
                     (*slot.request_id.get()).copy_from_slice(request_id.as_ref().as_bytes());
@@ -251,7 +249,7 @@ impl RingBuffer {
     /// would violate safety invariants and could cause data corruption.
     pub fn read(&self) -> Option<(RequestId, Vec<u8>)> {
         let read_pos = self.read_position.load(Ordering::Relaxed);
-        let slot_index = (read_pos & (*self.slot_count.as_ref() as u64 - 1)) as usize;
+        let slot_index = (read_pos & (self.slot_count as u64 - 1)) as usize;
         let slot = &self.slots[slot_index];
 
         // Check if slot is ready for reading
@@ -287,10 +285,15 @@ impl RingBuffer {
                 let (request_id, data) = unsafe {
                     let request_id_bytes = *slot.request_id.get();
                     let uuid = Uuid::from_bytes(request_id_bytes);
-                    // SAFETY: The UUID is guaranteed to be valid v7 because write() only
-                    // stores UUIDs created via RequestId::new() which ensures v7 format
-                    let request_id =
-                        RequestId::try_new(uuid).expect("Ring buffer only stores valid v7 UUIDs");
+                    let request_id = match RequestId::try_new(uuid) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            // Invalid UUID in slot — mark empty and skip
+                            slot.state.store(SlotState::Empty as u8, Ordering::Release);
+                            self.read_position.store(read_pos + 1, Ordering::Relaxed);
+                            return None;
+                        }
+                    };
 
                     let data_ref = &*slot.data.get();
                     let data = data_ref[..size].to_vec();
@@ -461,6 +464,65 @@ mod tests {
 
         // Reading from empty buffer should return None
         assert!(buffer.read().is_none());
+    }
+
+    #[test]
+    fn test_fifo_ordering() {
+        let config = RingBufferConfig {
+            buffer_size: BufferSize::try_new(1024 * 1024).expect("valid size"),
+            slot_size: SlotSize::try_new(1024).expect("valid size"),
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let request_ids: Vec<_> = (0..5).map(|_| RequestId::new()).collect();
+
+        // Write events in order
+        for (i, id) in request_ids.iter().enumerate() {
+            let data = format!("event {i}").into_bytes();
+            assert!(buffer.write(*id, &data).is_ok());
+        }
+
+        // Read events back and verify FIFO ordering
+        for (i, expected_id) in request_ids.iter().enumerate() {
+            let (read_id, read_data) = buffer.read().expect("Should read event");
+            assert_eq!(read_id, *expected_id);
+            assert_eq!(String::from_utf8(read_data).unwrap(), format!("event {i}"));
+        }
+
+        // Buffer should be empty now
+        assert!(buffer.read().is_none());
+    }
+
+    #[test]
+    fn test_fail_when_busy_semantics() {
+        let config = RingBufferConfig {
+            buffer_size: BufferSize::try_new(256).expect("valid size"), // Very small buffer
+            slot_size: SlotSize::try_new(64).expect("valid size"),
+        };
+
+        let buffer = RingBuffer::new(&config);
+        let capacity = 256 / 64; // 4 slots
+
+        // Fill the buffer without reading
+        for i in 0..capacity {
+            let id = RequestId::new();
+            let data = format!("event {i}");
+            assert!(buffer.write(id, data.as_bytes()).is_ok());
+        }
+
+        // Next write should fail with overflow (fail-when-busy)
+        let id = RequestId::new();
+        let result = buffer.write(id, b"overflow event");
+        assert!(result.is_err());
+
+        // Drain all slots
+        for _ in 0..capacity {
+            assert!(buffer.read().is_some());
+        }
+
+        // Now write should succeed again
+        let id = RequestId::new();
+        assert!(buffer.write(id, b"after drain").is_ok());
     }
 
     #[test]
