@@ -85,12 +85,15 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Install just, cargo-nextest, ast-grep, and cargo-deny
+    - name: Install just, cargo-nextest, ast-grep, cargo-deny, zizmor, and actionlint
       run: |
         cargo install just --locked
         cargo install cargo-nextest --locked
         cargo install ast-grep --locked
         cargo install cargo-deny --locked
+        cargo install zizmor --locked
+        curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz -C /tmp
+        sudo mv /tmp/actionlint /usr/local/bin/
 
     - name: Run local CI contract
       run: just ci
