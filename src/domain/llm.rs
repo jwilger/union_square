@@ -156,6 +156,7 @@ impl ResponseMetadata {
 
 impl LlmRequest {
     pub fn new(
+        request_id: RequestId,
         session_id: crate::domain::SessionId,
         model_version: ModelVersion,
         prompt: Prompt,
@@ -163,7 +164,7 @@ impl LlmRequest {
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
-            id: RequestId::generate(),
+            id: request_id,
             session_id,
             model_version,
             prompt,
@@ -314,6 +315,7 @@ mod tests {
         };
 
         let request = LlmRequest::new(
+            RequestId::generate(),
             session_id,
             model_version,
             Prompt::try_new(prompts::SIMPLE_PROMPT.to_string()).unwrap(),
@@ -335,6 +337,7 @@ mod tests {
         };
 
         let request = LlmRequest::new(
+            RequestId::generate(),
             session_id,
             model_version,
             Prompt::try_new(prompts::SIMPLE_PROMPT.to_string()).unwrap(),
@@ -361,6 +364,7 @@ mod tests {
         };
 
         let request = LlmRequest::new(
+            RequestId::generate(),
             session_id,
             model_version,
             Prompt::try_new(prompts::SIMPLE_PROMPT.to_string()).unwrap(),
@@ -467,6 +471,7 @@ mod tests {
                 return Ok(()); // Skip empty prompts as they're invalid
             } else {
                 LlmRequest::new(
+                    RequestId::generate(),
                     session_id,
                     model_version,
                     Prompt::try_new(prompt).unwrap(),
