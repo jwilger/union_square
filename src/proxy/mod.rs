@@ -98,6 +98,7 @@ pub mod storage {
 // Internal modules (not part of public API)
 mod audit_path;
 mod audit_recorder;
+mod audit_steps;
 mod error_response;
 mod headers;
 mod hot_path;
