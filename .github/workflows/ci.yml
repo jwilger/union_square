@@ -19,9 +19,10 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       deps: ${{ steps.filter.outputs.deps }}
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
       id: filter
@@ -38,10 +39,15 @@ jobs:
             - 'scripts/**'
             - 'Dockerfile'
             - '.github/workflows/ci.yml'
+            - 'Justfile'
+            - 'lefthook.yml'
+            - 'sgconfig.yml'
           deps:
             - 'Cargo.toml'
             - 'Cargo.lock'
             - '.github/workflows/ci.yml'
+          workflows:
+            - '.github/workflows/**'
 
   test:
     name: Test Suite
@@ -65,41 +71,32 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
       with:
         components: rustfmt, clippy
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
       with:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
 
+    - name: Install just
+      uses: taiki-e/install-action@f1390fd0c8205f9bee20e1c73289be18a9d94f61
+      with:
+        tool: just
+
     - name: Install cargo-nextest
       run: cargo install cargo-nextest --locked
 
-    - name: Check formatting
-      run: cargo fmt --all -- --check
-
-    - name: Run clippy
-      run: cargo clippy --workspace --all-targets -- -D warnings
-
-    - name: Run tests with nextest
-      run: cargo nextest run --workspace
+    - name: Run local CI contract
+      run: just ci
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
-
-    - name: Run doctests
-      run: cargo test --doc
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
-
-    - name: Type check
-      run: cargo check --all-targets
 
   security:
     name: Security Audit
@@ -109,19 +106,77 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Install cargo-audit
       run: cargo install cargo-audit --locked
 
     - name: Run security audit
       run: cargo audit
+
+  cargo-deny:
+    name: Cargo Deny
+    needs: changes
+    if: needs.changes.outputs.deps == 'true' || needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+
+    - name: Install cargo-deny
+      run: cargo install cargo-deny --locked
+
+    - name: Run cargo-deny
+      run: cargo deny check licenses bans sources
+
+  architecture-lint:
+    name: Architecture Lint
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+
+    - name: Install just
+      uses: taiki-e/install-action@f1390fd0c8205f9bee20e1c73289be18a9d94f61
+      with:
+        tool: just
+
+    - name: Run ast-grep architecture checks
+      run: just ast-grep
+
+    - name: Run ast-grep rule tests
+      run: just ast-grep-test
+
+    - name: Run clippy architecture denies
+      # Baseline debt: existing code has unwrap/expect violations.
+      # This job reports new violations without blocking merge.
+      # Remove continue-on-error once baseline is clean.
+      continue-on-error: true
+      run: just clippy-architecture
 
   coverage:
     name: Code Coverage
@@ -145,15 +200,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
       with:
         components: llvm-tools-preview
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
@@ -164,7 +219,7 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
       with:
         file: lcov.info
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -178,13 +233,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Build debug
       run: cargo build --workspace
@@ -203,13 +258,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Build
       run: cargo build --workspace
@@ -222,13 +277,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Run performance validation tests
       run: cargo test --test benchmark_validation
@@ -260,7 +315,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       with:
         fetch-depth: 0
 
@@ -328,7 +383,7 @@ jobs:
 
     - name: Post benchmark results to PR
       if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
@@ -362,7 +417,7 @@ jobs:
             comment += '✅ **No significant performance regressions detected.**\n';
           }
 
-          comment += '\n<sub>All latency requirements (<' + process.env.MAX_LATENCY_MS + 'ms) are enforced by the test suite.</sub>';
+          comment += '\n<sub>All latency requirements (&lt;' + process.env.MAX_LATENCY_MS + 'ms) are enforced by the test suite.</sub>';
 
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
@@ -397,9 +452,33 @@ jobs:
         echo "Performance regression detected! See PR comment for details."
         exit 1
 
+  gh-actions-security:
+    name: GitHub Actions Security
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+    - name: Install zizmor
+      run: cargo install zizmor --locked
+
+    - name: Run zizmor
+      run: zizmor .github/workflows/
+
+    - name: Install actionlint
+      run: |
+        curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz -C /tmp
+        sudo mv /tmp/actionlint /usr/local/bin/
+
+    - name: Run actionlint
+      run: actionlint .github/workflows/
+
   ci-success:
     name: CI Success
-    needs: [changes, test, security, coverage, build, cross-platform, performance-check, performance-benchmarks]
+    needs: [changes, test, security, cargo-deny, architecture-lint, coverage, build, cross-platform, performance-check, performance-benchmarks, gh-actions-security]
     if: always()
     runs-on: ubuntu-latest
     steps:

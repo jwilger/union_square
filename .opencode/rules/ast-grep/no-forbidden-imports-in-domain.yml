@@ -1,0 +1,11 @@
+id: no-forbidden-imports-in-domain
+language: rust
+severity: error
+message: "Domain code MUST NOT import HTTP framework, database, async runtime, or IO-boundary types. Move this to an adapter or application module."
+rule:
+  pattern: use $CRATE::$$$
+constraints:
+  CRATE:
+    regex: "^(axum|tokio|sqlx|hyper|tower|aws_sdk|reqwest|actix)"
+files:
+  - src/domain/**/*.rs

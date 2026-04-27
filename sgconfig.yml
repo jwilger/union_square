@@ -1,7 +1,7 @@
 ruleDirs:
   - .opencode/rules/ast-grep
 testConfigs:
-  - testDir: .opencode/rules/ast-grep/rule-tests
+  - testDir: .opencode/rules/ast-grep-tests
 ignores:
   - "**/*_tests.rs"
   - "**/*_test.rs"

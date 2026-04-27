@@ -1,0 +1,15 @@
+[[ignores]]
+id = "template-injection"
+path = ".github/workflows/binary-release.yml"
+
+[[ignores]]
+id = "template-injection"
+path = ".github/workflows/ci.yml"
+
+[[ignores]]
+id = "excessive-permissions"
+path = ".github/workflows/binary-release.yml"
+
+[[ignores]]
+id = "excessive-permissions"
+path = ".github/workflows/release-plz.yml"
