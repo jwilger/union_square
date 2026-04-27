@@ -16,7 +16,12 @@ use crate::domain::{
     version::{VersionChangeId, VersionComparison},
 };
 
-/// All domain events in the Union Square system
+/// All domain events in the Union Square system.
+///
+/// Every variant carries `stream_id` because the EventCore `Event` trait
+/// requires it for stream routing. The stream ID is infrastructure metadata,
+/// not part of the semantic domain fact, and is justified by the EventCore
+/// contract. All other fields are past-tense semantic facts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum DomainEvent {
@@ -91,19 +96,23 @@ pub enum DomainEvent {
         occurred_at: Timestamp,
     },
     InvalidStateTransition {
+        /// EventCore requires stream_id on the Event trait; it is infrastructure
+        /// metadata, not part of the domain fact.
         stream_id: StreamId,
         request_id: RequestId,
         session_id: SessionId,
-        from_state: String,
-        event_type: String,
+        from_state: crate::domain::audit_types::LifecyclePhase,
+        attempted_transition: crate::domain::audit_types::AuditEventKind,
         reason: ErrorMessage,
         occurred_at: Timestamp,
     },
     AuditEventProcessingFailed {
+        /// EventCore requires stream_id on the Event trait; it is infrastructure
+        /// metadata, not part of the domain fact.
         stream_id: StreamId,
         request_id: RequestId,
         session_id: SessionId,
-        event_type: String,
+        event_kind: crate::domain::audit_types::AuditEventKind,
         error_message: ErrorMessage,
         occurred_at: Timestamp,
     },

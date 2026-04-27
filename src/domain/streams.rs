@@ -270,7 +270,8 @@ mod tests {
             from_version,
             to_version,
             Some(ChangeReason::try_new("provider migration".to_string()).unwrap()),
-        );
+        )
+        .unwrap();
 
         assert_eq!(version_change.stream_declarations().len(), 2);
 
@@ -280,7 +281,8 @@ mod tests {
             Precision::try_new(0.9).unwrap(),
             Recall::try_new(0.8).unwrap(),
             SampleCount::try_new(test_data::numeric::BATCH_SIZE_100 as u64).unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(model_score.stream_declarations().len(), 1);
 
         let application_score = RecordApplicationFScore::new(
@@ -290,7 +292,8 @@ mod tests {
             Precision::try_new(0.9).unwrap(),
             Recall::try_new(0.8).unwrap(),
             SampleCount::try_new(test_data::numeric::BATCH_SIZE_100 as u64).unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(application_score.stream_declarations().len(), 2);
     }
 

@@ -241,6 +241,45 @@ pub enum ErrorPhase {
     AuditRecording,
 }
 
+/// Kind of audit event, without payload data.
+///
+/// Used in error events to record what kind of transition was attempted.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AuditEventKind {
+    RequestReceived,
+    RequestForwarded,
+    ResponseReceived,
+    ResponseReturned,
+    Error,
+}
+
+impl From<&AuditEventType> for AuditEventKind {
+    fn from(event_type: &AuditEventType) -> Self {
+        match event_type {
+            AuditEventType::RequestReceived { .. } => Self::RequestReceived,
+            AuditEventType::RequestForwarded { .. } => Self::RequestForwarded,
+            AuditEventType::ResponseReceived { .. } => Self::ResponseReceived,
+            AuditEventType::ResponseReturned { .. } => Self::ResponseReturned,
+            AuditEventType::Error { .. } => Self::Error,
+        }
+    }
+}
+
+/// Lifecycle phase of a request, without associated data.
+///
+/// Used in error events to record the state a request was in when an
+/// invalid transition was attempted.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum LifecyclePhase {
+    NotStarted,
+    Deferred,
+    Received,
+    Forwarded,
+    ResponseReceived,
+    Completed,
+    Failed,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
