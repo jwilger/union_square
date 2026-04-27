@@ -111,6 +111,7 @@ pub struct RecordModelFScore {
     pub precision: Precision,
     pub recall: Recall,
     pub sample_count: SampleCount,
+    pub timestamp: Timestamp,
 }
 
 /// Stream ID utilities for metrics commands
@@ -146,6 +147,7 @@ mod stream_ids {
 mod event_builders {
     use super::*;
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_f_score_calculated_event(
         stream_id: StreamId,
         session_id: SessionId,
@@ -154,6 +156,7 @@ mod event_builders {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
+        calculated_at: Timestamp,
     ) -> DomainEvent {
         DomainEvent::FScoreCalculated {
             stream_id,
@@ -163,7 +166,7 @@ mod event_builders {
             precision: Some(precision),
             recall: Some(recall),
             sample_count,
-            calculated_at: Timestamp::now(),
+            calculated_at,
         }
     }
 
@@ -177,6 +180,7 @@ mod event_builders {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
+        calculated_at: Timestamp,
     ) -> DomainEvent {
         DomainEvent::ApplicationFScoreCalculated {
             stream_id,
@@ -187,7 +191,7 @@ mod event_builders {
             precision: Some(precision),
             recall: Some(recall),
             sample_count,
-            calculated_at: Timestamp::now(),
+            calculated_at,
         }
     }
 }
@@ -211,6 +215,7 @@ impl RecordModelFScore {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
+        timestamp: Timestamp,
     ) -> Result<Self, CommandError> {
         let model_stream = stream_ids::model_stream_id(&model_version)?;
         Ok(Self {
@@ -220,6 +225,7 @@ impl RecordModelFScore {
             precision,
             recall,
             sample_count,
+            timestamp,
         })
     }
 }
@@ -256,6 +262,7 @@ impl CommandLogic for RecordModelFScore {
             self.precision,
             self.recall,
             self.sample_count,
+            self.timestamp,
         ));
 
         Ok(events.into())
@@ -275,6 +282,7 @@ pub struct RecordApplicationFScore {
     pub precision: Precision,
     pub recall: Recall,
     pub sample_count: SampleCount,
+    pub timestamp: Timestamp,
 }
 
 impl RecordApplicationFScore {
@@ -285,6 +293,7 @@ impl RecordApplicationFScore {
         precision: Precision,
         recall: Recall,
         sample_count: SampleCount,
+        timestamp: Timestamp,
     ) -> Result<Self, CommandError> {
         let application_stream = stream_ids::application_stream_id(&application_id)?;
         let model_stream = stream_ids::model_stream_id(&model_version)?;
@@ -297,6 +306,7 @@ impl RecordApplicationFScore {
             precision,
             recall,
             sample_count,
+            timestamp,
         })
     }
 }
@@ -335,6 +345,7 @@ impl CommandLogic for RecordApplicationFScore {
             self.precision,
             self.recall,
             self.sample_count,
+            self.timestamp,
         ));
 
         // Also emit to model stream for cross-application analysis
@@ -346,6 +357,7 @@ impl CommandLogic for RecordApplicationFScore {
             self.precision,
             self.recall,
             self.sample_count,
+            self.timestamp,
         ));
 
         Ok(events.into())
@@ -380,6 +392,7 @@ mod tests {
             precision,
             recall,
             SampleCount::try_new(numeric::BATCH_SIZE_100 as u64).unwrap(),
+            Timestamp::now(),
         )
         .unwrap();
         let store = InMemoryEventStore::new();
@@ -438,6 +451,7 @@ mod tests {
             precision,
             recall,
             SampleCount::try_new(f_scores::MEDIUM_SAMPLE).unwrap(),
+            Timestamp::now(),
         )
         .unwrap();
         let store = InMemoryEventStore::new();

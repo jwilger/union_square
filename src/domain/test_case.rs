@@ -154,7 +154,11 @@ pub enum ValidationError {
 
 impl TestCase<Draft> {
     /// Create a new test case in draft state
-    pub fn new(name: TestCaseName, description: TestCaseDescription, created_at: DateTime<Utc>) -> Self {
+    pub fn new(
+        name: TestCaseName,
+        description: TestCaseDescription,
+        created_at: DateTime<Utc>,
+    ) -> Self {
         Self {
             id: TestCaseId::generate(),
             name,
@@ -169,7 +173,11 @@ impl TestCase<Draft> {
     }
 
     /// Update the expected behavior
-    pub fn with_expected_behavior(mut self, behavior: ExpectedBehavior, updated_at: DateTime<Utc>) -> Self {
+    pub fn with_expected_behavior(
+        mut self,
+        behavior: ExpectedBehavior,
+        updated_at: DateTime<Utc>,
+    ) -> Self {
         self.expected_behavior = behavior;
         self.updated_at = updated_at;
         self
@@ -441,12 +449,13 @@ mod tests {
         let draft = TestCase::<Draft>::new(name, description, now);
 
         // Update expected behavior
-        let behavior = ExpectedBehavior::new(
-            PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap(),
-        )
-        .with_expected_pattern(Pattern::try_new("greeting".to_string()).unwrap())
-        .with_forbidden_pattern(Pattern::try_new("error".to_string()).unwrap())
-        .with_metadata_assertions(MetadataAssertions::new(serde_json::json!({"min_tokens": 10})));
+        let behavior =
+            ExpectedBehavior::new(PromptTemplate::try_new("Hello, {name}!".to_string()).unwrap())
+                .with_expected_pattern(Pattern::try_new("greeting".to_string()).unwrap())
+                .with_forbidden_pattern(Pattern::try_new("error".to_string()).unwrap())
+                .with_metadata_assertions(MetadataAssertions::new(
+                    serde_json::json!({"min_tokens": 10}),
+                ));
         let draft = draft.with_expected_behavior(behavior, now);
 
         // Finalize to ready
@@ -488,9 +497,7 @@ mod tests {
         assert!(matches!(result, Err(ValidationError::EmptyPromptTemplate)));
 
         // No expected patterns
-        let behavior = ExpectedBehavior::new(
-            PromptTemplate::try_new("Hello".to_string()).unwrap(),
-        );
+        let behavior = ExpectedBehavior::new(PromptTemplate::try_new("Hello".to_string()).unwrap());
         let draft = draft.with_expected_behavior(behavior, now);
         let result = draft.finalize(now);
         assert!(matches!(result, Err(ValidationError::NoExpectedPatterns)));

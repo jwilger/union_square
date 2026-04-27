@@ -163,7 +163,7 @@ mod tests {
     use crate::domain::commands::version_commands::RecordVersionChange;
     use crate::domain::identifiers::{AnalysisId, ExtractionId};
     use crate::domain::llm::{LlmProvider, ModelVersion};
-    use crate::domain::metrics::{Precision, Recall, SampleCount};
+    use crate::domain::metrics::{Precision, Recall, SampleCount, Timestamp};
     use crate::domain::session::{ApplicationId, SessionId};
     use crate::domain::test_data;
     use crate::domain::types::{ChangeReason, ModelId};
@@ -270,6 +270,7 @@ mod tests {
             from_version,
             to_version,
             Some(ChangeReason::try_new("provider migration".to_string()).unwrap()),
+            Timestamp::now(),
         )
         .unwrap();
 
@@ -281,6 +282,7 @@ mod tests {
             Precision::try_new(0.9).unwrap(),
             Recall::try_new(0.8).unwrap(),
             SampleCount::try_new(test_data::numeric::BATCH_SIZE_100 as u64).unwrap(),
+            Timestamp::now(),
         )
         .unwrap();
         assert_eq!(model_score.stream_declarations().len(), 1);
@@ -292,6 +294,7 @@ mod tests {
             Precision::try_new(0.9).unwrap(),
             Recall::try_new(0.8).unwrap(),
             SampleCount::try_new(test_data::numeric::BATCH_SIZE_100 as u64).unwrap(),
+            Timestamp::now(),
         )
         .unwrap();
         assert_eq!(application_score.stream_declarations().len(), 2);

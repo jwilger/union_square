@@ -157,10 +157,7 @@ impl Default for SessionMetadata {
 }
 
 impl Session {
-    pub fn new(
-        user_id: Option<crate::domain::UserId>,
-        created_at: DateTime<Utc>,
-    ) -> Self {
+    pub fn new(user_id: Option<crate::domain::UserId>, created_at: DateTime<Utc>) -> Self {
         Self {
             id: SessionId::generate(),
             user_id,

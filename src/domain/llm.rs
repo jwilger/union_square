@@ -390,7 +390,10 @@ mod tests {
             now,
         );
 
-        assert_eq!(response.response_text().as_ref(), responses::SIMPLE_RESPONSE);
+        assert_eq!(
+            response.response_text().as_ref(),
+            responses::SIMPLE_RESPONSE
+        );
         assert_eq!(
             response.metadata().tokens_used(),
             Some(TokenCount::try_new(numeric::TOKENS_150).unwrap())

@@ -20,7 +20,9 @@ use crate::domain::metrics::durations::{Days, EpochSeconds, Hours, Minutes};
 pub struct Timestamp(DateTime<Utc>);
 
 impl Timestamp {
-    /// Current timestamp
+    /// Current timestamp.
+    /// Only available in tests; production code should inject timestamps from the shell.
+    #[cfg(test)]
     pub fn now() -> Self {
         Self::try_new(Utc::now()).expect("Current time should always be valid")
     }
@@ -35,24 +37,21 @@ impl Timestamp {
         self.into_inner()
     }
 
-    /// Check if this timestamp is recent (within last 24 hours)
-    pub fn is_recent(&self) -> bool {
-        let now = Utc::now();
-        let age = now.signed_duration_since(self.into_inner());
+    /// Check if this timestamp is recent relative to `reference` (within last 24 hours)
+    pub fn is_recent(&self, reference: DateTime<Utc>) -> bool {
+        let age = reference.signed_duration_since(self.into_inner());
         age <= Hours::one_day().to_duration()
     }
 
-    /// Check if this timestamp is very old (older than 1 year)
-    pub fn is_very_old(&self) -> bool {
-        let now = Utc::now();
-        let age = now.signed_duration_since(self.into_inner());
+    /// Check if this timestamp is very old relative to `reference` (older than 1 year)
+    pub fn is_very_old(&self, reference: DateTime<Utc>) -> bool {
+        let age = reference.signed_duration_since(self.into_inner());
         age >= Days::one_year().to_duration()
     }
 
-    /// Get age category for this timestamp
-    pub fn age_category(&self) -> TimestampAge {
-        let now = Utc::now();
-        let age = now.signed_duration_since(self.into_inner());
+    /// Get age category for this timestamp relative to `reference`
+    pub fn age_category(&self, reference: DateTime<Utc>) -> TimestampAge {
+        let age = reference.signed_duration_since(self.into_inner());
 
         match age {
             d if d <= Hours::one().to_duration() => TimestampAge::VeryRecent,
@@ -133,13 +132,13 @@ mod tests {
 
         let very_recent =
             Timestamp::try_new(now - Minutes::try_new(30).unwrap().to_duration()).unwrap();
-        assert_eq!(very_recent.age_category(), TimestampAge::VeryRecent);
+        assert_eq!(very_recent.age_category(now), TimestampAge::VeryRecent);
 
         let recent = Timestamp::try_new(now - Hours::try_new(12).unwrap().to_duration()).unwrap();
-        assert_eq!(recent.age_category(), TimestampAge::Recent);
+        assert_eq!(recent.age_category(now), TimestampAge::Recent);
 
         let this_week = Timestamp::try_new(now - Days::try_new(3).unwrap().to_duration()).unwrap();
-        assert_eq!(this_week.age_category(), TimestampAge::ThisWeek);
+        assert_eq!(this_week.age_category(now), TimestampAge::ThisWeek);
     }
 
     #[test]

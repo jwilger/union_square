@@ -75,15 +75,21 @@ pub struct RecordVersionUsage {
     version_stream: StreamId,
     pub session_id: SessionId,
     pub model_version: ModelVersion,
+    pub timestamp: Timestamp,
 }
 
 impl RecordVersionUsage {
-    pub fn new(session_id: SessionId, model_version: ModelVersion) -> Result<Self, CommandError> {
+    pub fn new(
+        session_id: SessionId,
+        model_version: ModelVersion,
+        timestamp: Timestamp,
+    ) -> Result<Self, CommandError> {
         let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             session_id,
             model_version,
+            timestamp,
         })
     }
 }
@@ -108,7 +114,7 @@ impl CommandLogic for RecordVersionUsage {
                 stream_id: self.version_stream.clone(),
                 model_version: self.model_version.clone(),
                 session_id: self.session_id.clone(),
-                first_seen_at: Timestamp::now(),
+                first_seen_at: self.timestamp,
             });
         }
 
@@ -117,7 +123,7 @@ impl CommandLogic for RecordVersionUsage {
             stream_id: self.version_stream.clone(),
             model_version: self.model_version.clone(),
             session_id: self.session_id.clone(),
-            recorded_at: Timestamp::now(),
+            recorded_at: self.timestamp,
         });
 
         Ok(events.into())
@@ -135,6 +141,7 @@ pub struct RecordVersionChange {
     pub from_version: ModelVersion,
     pub to_version: ModelVersion,
     pub reason: Option<ChangeReason>,
+    pub timestamp: Timestamp,
 }
 
 impl RecordVersionChange {
@@ -143,6 +150,7 @@ impl RecordVersionChange {
         from_version: ModelVersion,
         to_version: ModelVersion,
         reason: Option<ChangeReason>,
+        timestamp: Timestamp,
     ) -> Result<Self, CommandError> {
         let from_stream = version_stream_id(&from_version)?;
         let to_stream = version_stream_id(&to_version)?;
@@ -153,6 +161,7 @@ impl RecordVersionChange {
             from_version,
             to_version,
             reason,
+            timestamp,
         })
     }
 }
@@ -179,7 +188,7 @@ impl CommandLogic for RecordVersionChange {
             to_version: self.to_version.clone(),
             change_type,
             reason: self.reason.clone(),
-            changed_at: Timestamp::now(),
+            changed_at: self.timestamp,
         });
         events.push(DomainEvent::VersionChanged {
             stream_id: self.to_stream.clone(),
@@ -189,7 +198,7 @@ impl CommandLogic for RecordVersionChange {
             to_version: self.to_version.clone(),
             change_type: self.from_version.compare(&self.to_version),
             reason: self.reason.clone(),
-            changed_at: Timestamp::now(),
+            changed_at: self.timestamp,
         });
 
         Ok(events.into())
@@ -203,18 +212,21 @@ pub struct DeactivateVersion {
     version_stream: StreamId,
     pub model_version: ModelVersion,
     pub reason: Option<ChangeReason>,
+    pub timestamp: Timestamp,
 }
 
 impl DeactivateVersion {
     pub fn new(
         model_version: ModelVersion,
         reason: Option<ChangeReason>,
+        timestamp: Timestamp,
     ) -> Result<Self, CommandError> {
         let version_stream = version_stream_id(&model_version)?;
         Ok(Self {
             version_stream,
             model_version,
             reason,
+            timestamp,
         })
     }
 }
@@ -249,7 +261,7 @@ impl CommandLogic for DeactivateVersion {
             stream_id: self.version_stream.clone(),
             model_version: self.model_version.clone(),
             reason: self.reason.clone(),
-            deactivated_at: Timestamp::now(),
+            deactivated_at: self.timestamp,
         }];
 
         Ok(events.into())
@@ -272,7 +284,8 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-turbo".to_string()).unwrap(),
         };
 
-        let command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command.clone(), RetryPolicy::default()).await;
@@ -305,12 +318,14 @@ mod tests {
         let store = InMemoryEventStore::new();
 
         let first_command =
-            RecordVersionUsage::new(session_id.clone(), model_version.clone()).unwrap();
+            RecordVersionUsage::new(session_id.clone(), model_version.clone(), Timestamp::now())
+                .unwrap();
         eventcore::execute(&store, first_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
 
-        let second_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let second_command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         let result = eventcore::execute(&store, second_command, RetryPolicy::default()).await;
         assert!(result.is_ok());
 
@@ -343,6 +358,7 @@ mod tests {
             from_version.clone(),
             to_version.clone(),
             Some(ChangeReason::try_new("Performance upgrade".to_string()).unwrap()),
+            Timestamp::now(),
         )
         .unwrap();
         let store = InMemoryEventStore::new();
@@ -395,7 +411,8 @@ mod tests {
 
         let store = InMemoryEventStore::new();
 
-        let record_command = RecordVersionUsage::new(session_id, model_version.clone()).unwrap();
+        let record_command =
+            RecordVersionUsage::new(session_id, model_version.clone(), Timestamp::now()).unwrap();
         eventcore::execute(&store, record_command.clone(), RetryPolicy::default())
             .await
             .unwrap();
@@ -403,6 +420,7 @@ mod tests {
         let deactivate_command = DeactivateVersion::new(
             model_version.clone(),
             Some(ChangeReason::try_new("Model deprecated".to_string()).unwrap()),
+            Timestamp::now(),
         )
         .unwrap();
         let result =
@@ -428,7 +446,7 @@ mod tests {
             model_id: ModelId::try_new("gpt-4-nonexistent".to_string()).unwrap(),
         };
 
-        let command = DeactivateVersion::new(model_version, None).unwrap();
+        let command = DeactivateVersion::new(model_version, None, Timestamp::now()).unwrap();
         let store = InMemoryEventStore::new();
 
         let result = eventcore::execute(&store, command, RetryPolicy::default()).await;

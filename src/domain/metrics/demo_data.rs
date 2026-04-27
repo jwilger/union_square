@@ -23,7 +23,7 @@ use crate::domain::{
     test_data::{self, f_scores},
     types::ModelId,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 /// Demo F-score data generator for MVP visualization
 pub struct FScoreDemoDataGenerator;
@@ -33,9 +33,10 @@ impl FScoreDemoDataGenerator {
     pub fn generate_model_timeseries(
         _model_version: &ModelVersion,
         time_period: TimePeriod,
+        reference_time: DateTime<Utc>,
     ) -> Vec<FScoreDataPoint> {
         let mut data_points = Vec::new();
-        let now = Utc::now();
+        let now = reference_time;
         let days_back = time_period.days_back().into_inner();
         let points_per_day = time_period.points_per_day().into_inner();
 
@@ -51,9 +52,10 @@ impl FScoreDemoDataGenerator {
                 let datetime = if hours_offset == 0 {
                     day_start
                 } else {
-                    day_start + Hours::try_new(hours_offset).unwrap().to_duration()
+                    day_start - Hours::try_new(hours_offset).unwrap().to_duration()
                 };
-                let timestamp = Timestamp::try_new(datetime).unwrap_or_else(|_| Timestamp::now());
+                let timestamp = Timestamp::try_new(datetime)
+                    .expect("demo datetime derived from valid reference time");
 
                 // Generate realistic F-score trends (slightly declining over time for demo)
                 let precision_decline_rate = DailyTrendRate::try_new(0.001).unwrap();
@@ -112,7 +114,9 @@ impl FScoreDemoDataGenerator {
     }
 
     /// Generate demo F-score data for different model providers
-    pub fn generate_provider_comparison_data() -> Vec<(ModelVersion, Vec<FScoreDataPoint>)> {
+    pub fn generate_provider_comparison_data(
+        reference_time: DateTime<Utc>,
+    ) -> Vec<(ModelVersion, Vec<FScoreDataPoint>)> {
         let providers_and_models = vec![
             (LlmProvider::OpenAI, test_data::model_ids::GPT_4_TURBO),
             (LlmProvider::OpenAI, test_data::model_ids::GPT_35_TURBO),
@@ -129,15 +133,20 @@ impl FScoreDemoDataGenerator {
             .map(|(provider, model_id_str)| {
                 let model_id = ModelId::try_new(model_id_str.to_string()).unwrap();
                 let model_version = ModelVersion { provider, model_id };
-                let data =
-                    Self::generate_model_timeseries(&model_version, TimePeriod::demo_period());
+                let data = Self::generate_model_timeseries(
+                    &model_version,
+                    TimePeriod::demo_period(),
+                    reference_time,
+                );
                 (model_version, data)
             })
             .collect()
     }
 
     /// Generate demo application-specific F-score data
-    pub fn generate_application_data() -> Vec<(ApplicationId, Vec<FScoreDataPoint>)> {
+    pub fn generate_application_data(
+        reference_time: DateTime<Utc>,
+    ) -> Vec<(ApplicationId, Vec<FScoreDataPoint>)> {
         let applications = vec![
             test_data::application_ids::MY_APP,
             test_data::application_ids::MY_APPLICATION,
@@ -151,6 +160,7 @@ impl FScoreDemoDataGenerator {
                 let data = Self::generate_application_timeseries(
                     &app_id,
                     TimePeriod::new(DaysBack::two_weeks(), PointsPerDay::four_hourly()),
+                    reference_time,
                 );
                 (app_id, data)
             })
@@ -161,9 +171,10 @@ impl FScoreDemoDataGenerator {
     pub fn generate_application_timeseries(
         application_id: &ApplicationId,
         time_period: TimePeriod,
+        reference_time: DateTime<Utc>,
     ) -> Vec<FScoreDataPoint> {
         let mut data_points = Vec::new();
-        let now = Utc::now();
+        let now = reference_time;
         let days_back = time_period.days_back().into_inner();
         let points_per_day = time_period.points_per_day().into_inner();
 
@@ -190,9 +201,10 @@ impl FScoreDemoDataGenerator {
                 let datetime = if hours_offset == 0 {
                     day_start
                 } else {
-                    day_start + Hours::try_new(hours_offset).unwrap().to_duration()
+                    day_start - Hours::try_new(hours_offset).unwrap().to_duration()
                 };
-                let timestamp = Timestamp::try_new(datetime).unwrap_or_else(|_| Timestamp::now());
+                let timestamp = Timestamp::try_new(datetime)
+                    .expect("demo datetime derived from valid reference time");
 
                 // Application-specific trends
                 let precision_trend = if application_id.as_ref()
@@ -248,8 +260,10 @@ impl FScoreDemoDataGenerator {
     }
 
     /// Generate demo data showing F-score performance ranges
-    pub fn generate_performance_categories() -> Vec<(PerformanceCategory, FScoreDataPoint)> {
-        let now = Timestamp::now();
+    pub fn generate_performance_categories(
+        reference_time: Timestamp,
+    ) -> Vec<(PerformanceCategory, FScoreDataPoint)> {
+        let now = reference_time;
 
         vec![
             (
@@ -315,13 +329,14 @@ impl FScoreDemoDataGenerator {
     }
 
     /// Generate summary statistics for demo dashboard
-    pub fn generate_summary_stats() -> DemoSummaryStats {
+    pub fn generate_summary_stats(reference_time: DateTime<Utc>) -> DemoSummaryStats {
         let overall_data = Self::generate_model_timeseries(
             &ModelVersion {
                 provider: LlmProvider::OpenAI,
                 model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
             },
             TimePeriod::recent_detailed(),
+            reference_time,
         );
 
         let current_f_score = overall_data
@@ -379,6 +394,7 @@ mod tests {
 
     #[test]
     fn test_model_timeseries_generation() {
+        let now = Utc::now();
         let model_version = ModelVersion {
             provider: LlmProvider::OpenAI,
             model_id: ModelId::try_new(test_data::model_ids::GPT_4_TURBO.to_string()).unwrap(),
@@ -387,6 +403,7 @@ mod tests {
         let data = FScoreDemoDataGenerator::generate_model_timeseries(
             &model_version,
             TimePeriod::new(DaysBack::week(), PointsPerDay::six_hourly()),
+            now,
         );
 
         assert_eq!(data.len(), 28); // 7 days * 4 points per day
@@ -406,7 +423,8 @@ mod tests {
 
     #[test]
     fn test_provider_comparison_data() {
-        let data = FScoreDemoDataGenerator::generate_provider_comparison_data();
+        let now = Utc::now();
+        let data = FScoreDemoDataGenerator::generate_provider_comparison_data(now);
 
         assert_eq!(data.len(), 5); // 5 different model versions
 
@@ -422,7 +440,8 @@ mod tests {
 
     #[test]
     fn test_application_data_generation() {
-        let data = FScoreDemoDataGenerator::generate_application_data();
+        let now = Utc::now();
+        let data = FScoreDemoDataGenerator::generate_application_data(now);
 
         assert_eq!(data.len(), 3); // 3 applications
 
@@ -434,7 +453,8 @@ mod tests {
 
     #[test]
     fn test_performance_categories() {
-        let categories = FScoreDemoDataGenerator::generate_performance_categories();
+        let now = Timestamp::now();
+        let categories = FScoreDemoDataGenerator::generate_performance_categories(now);
 
         assert_eq!(categories.len(), 4);
 
@@ -447,7 +467,8 @@ mod tests {
 
     #[test]
     fn test_summary_stats_generation() {
-        let stats = FScoreDemoDataGenerator::generate_summary_stats();
+        let now = Utc::now();
+        let stats = FScoreDemoDataGenerator::generate_summary_stats(now);
 
         assert!(stats.total_models_tracked.into_inner() > 0);
         assert!(stats.total_applications_tracked.into_inner() > 0);
