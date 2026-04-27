@@ -8,3 +8,4 @@ rule:
     inside:
       stopBy: end
       kind: mod_item
+      regex: "mod (test.*|benchmarks|.*_test.*)"
