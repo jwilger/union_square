@@ -350,6 +350,20 @@ impl RequestLifecycle {
     }
 }
 
+impl From<&RequestLifecycle> for audit_types::LifecyclePhase {
+    fn from(lifecycle: &RequestLifecycle) -> Self {
+        match lifecycle {
+            RequestLifecycle::NotStarted => Self::NotStarted,
+            RequestLifecycle::Deferred { .. } => Self::Deferred,
+            RequestLifecycle::Received { .. } => Self::Received,
+            RequestLifecycle::Forwarded { .. } => Self::Forwarded,
+            RequestLifecycle::ResponseReceived { .. } => Self::ResponseReceived,
+            RequestLifecycle::Completed { .. } => Self::Completed,
+            RequestLifecycle::Failed { .. } => Self::Failed,
+        }
+    }
+}
+
 /// Unified command to record audit events
 /// This single command handles all audit event types, simplifying the architecture
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
@@ -564,8 +578,8 @@ impl CommandLogic for RecordAuditEvent {
                         stream_id: self.request_stream.clone(),
                         request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
-                        from_state: state.to_string(),
-                        event_type: "RequestReceived".to_string(),
+                        from_state: audit_types::LifecyclePhase::from(&state.lifecycle),
+                        attempted_transition: audit_types::AuditEventKind::from(&self.audit_event),
                         reason: error_messages::static_error(
                             error_messages::REQUEST_ALREADY_RECEIVED,
                         )?,
@@ -582,8 +596,10 @@ impl CommandLogic for RecordAuditEvent {
                             stream_id: self.request_stream.clone(),
                             request_id: self.request_id.clone(),
                             session_id: self.session_id.clone(),
-                            from_state: state.to_string(),
-                            event_type: "RequestForwarded".to_string(),
+                            from_state: audit_types::LifecyclePhase::from(&state.lifecycle),
+                            attempted_transition: audit_types::AuditEventKind::from(
+                                &self.audit_event,
+                            ),
                             reason: error_messages::static_error(
                                 error_messages::CANNOT_FORWARD_UNRECEIVED,
                             )?,
@@ -604,8 +620,8 @@ impl CommandLogic for RecordAuditEvent {
                         stream_id: self.request_stream.clone(),
                         request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
-                        from_state: state.to_string(),
-                        event_type: "RequestForwarded".to_string(),
+                        from_state: audit_types::LifecyclePhase::from(&state.lifecycle),
+                        attempted_transition: audit_types::AuditEventKind::from(&self.audit_event),
                         reason: error_messages::static_error(
                             error_messages::REQUEST_ALREADY_FORWARDED,
                         )?,
@@ -629,8 +645,8 @@ impl CommandLogic for RecordAuditEvent {
                         stream_id: self.request_stream.clone(),
                         request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
-                        from_state: state.to_string(),
-                        event_type: "ResponseReceived".to_string(),
+                        from_state: audit_types::LifecyclePhase::from(&state.lifecycle),
+                        attempted_transition: audit_types::AuditEventKind::from(&self.audit_event),
                         reason: error_messages::static_error(
                             error_messages::CANNOT_RECEIVE_RESPONSE_UNFORWARDED,
                         )?,
@@ -642,8 +658,8 @@ impl CommandLogic for RecordAuditEvent {
                         stream_id: self.request_stream.clone(),
                         request_id: self.request_id.clone(),
                         session_id: self.session_id.clone(),
-                        from_state: state.to_string(),
-                        event_type: "ResponseReceived".to_string(),
+                        from_state: audit_types::LifecyclePhase::from(&state.lifecycle),
+                        attempted_transition: audit_types::AuditEventKind::from(&self.audit_event),
                         reason: error_messages::static_error(
                             error_messages::RESPONSE_ALREADY_RECEIVED,
                         )?,
@@ -659,16 +675,11 @@ impl CommandLogic for RecordAuditEvent {
                 // Other audit event types not yet handled
 
                 // Emit an error event for unhandled audit event types
-                let event_type_str = match &self.audit_event {
-                    Error { .. } => "Error",
-                    _ => "Unknown",
-                };
-
                 events.push(DomainEvent::AuditEventProcessingFailed {
                     stream_id: self.request_stream.clone(),
                     request_id: self.request_id.clone(),
                     session_id: self.session_id.clone(),
-                    event_type: event_type_str.to_string(),
+                    event_kind: audit_types::AuditEventKind::from(&self.audit_event),
                     error_message: error_messages::static_error(
                         error_messages::AUDIT_EVENT_NOT_IMPLEMENTED,
                     )?,
@@ -810,73 +821,92 @@ impl fmt::Display for RequestLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapters::proxy_audit::convert_audit_event;
     use crate::domain::streams::{request_stream, session_stream};
-    use chrono::Utc;
     use eventcore_types::EventStore;
 
     #[test]
-    fn test_audit_event_to_unified_command() {
-        let proxy_event = crate::proxy::types::AuditEvent {
-            request_id: crate::proxy::types::RequestId::new(),
-            session_id: crate::proxy::types::SessionId::new(),
-            timestamp: Utc::now(),
-            event_type: crate::proxy::types::AuditEventType::RequestReceived {
-                method: crate::proxy::types::HttpMethod::try_new("GET".to_string()).unwrap(),
-                uri: crate::proxy::types::RequestUri::try_new("/test".to_string()).unwrap(),
-                headers: crate::proxy::types::Headers::new(),
-                body_size: crate::proxy::types::BodySize::from(0),
+    fn test_audit_command_constructed_from_domain_types() {
+        let session_id = SessionId::generate();
+        let request_id = llm::RequestId::generate();
+
+        let command = RecordAuditEvent {
+            session_stream: session_stream(&session_id).unwrap(),
+            request_stream: request_stream(&request_id).unwrap(),
+            request_id: request_id.clone(),
+            session_id,
+            audit_event: audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("GET".to_string()).unwrap(),
+                uri: audit_types::RequestUri::try_new("/test".to_string()).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(0),
             },
+            timestamp: Timestamp::now(),
+            parsed_request: None,
         };
 
-        let command = convert_audit_event(&proxy_event);
-        assert!(command.is_ok());
-        let cmd = command.unwrap();
-        // Verify the audit event type was preserved
         assert!(matches!(
-            cmd.audit_event,
+            command.audit_event,
             audit_types::AuditEventType::RequestReceived { .. }
         ));
     }
 
     #[test]
-    fn test_unified_command_handles_all_event_types() {
-        // Test that the adapter can handle any audit event type
+    fn test_unified_command_handles_all_domain_event_types() {
+        let session_id = SessionId::generate();
+        let request_id = llm::RequestId::generate();
+
         let event_types = vec![
-            crate::proxy::types::AuditEventType::RequestReceived {
-                method: crate::proxy::types::HttpMethod::try_new("GET".to_string()).unwrap(),
-                uri: crate::proxy::types::RequestUri::try_new("/test".to_string()).unwrap(),
-                headers: crate::proxy::types::Headers::new(),
-                body_size: crate::proxy::types::BodySize::from(0),
+            audit_types::AuditEventType::RequestReceived {
+                method: audit_types::HttpMethod::try_new("GET".to_string()).unwrap(),
+                uri: audit_types::RequestUri::try_new("/test".to_string()).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(0),
             },
-            crate::proxy::types::AuditEventType::RequestForwarded {
-                target_url: crate::proxy::types::TargetUrl::try_new(
+            audit_types::AuditEventType::RequestForwarded {
+                target_url: audit_types::TargetUrl::try_new(
                     "https://api.openai.com/v1/chat/completions".to_string(),
                 )
                 .unwrap(),
-                start_time: Utc::now(),
+                start_time: Timestamp::now(),
             },
-            crate::proxy::types::AuditEventType::ResponseReceived {
-                status: crate::proxy::types::HttpStatusCode::try_new(200).unwrap(),
-                headers: crate::proxy::types::Headers::new(),
-                body_size: crate::proxy::types::BodySize::from(1024),
-                duration_ms: crate::proxy::types::DurationMillis::from(100),
+            audit_types::AuditEventType::ResponseReceived {
+                status: audit_types::HttpStatusCode::try_new(200).unwrap(),
+                headers: audit_types::HttpHeaders::new(),
+                body_size: audit_types::BodySize::from(1024),
+                duration_ms: audit_types::DurationMs::from(100),
             },
-            crate::proxy::types::AuditEventType::ResponseReturned {
-                duration_ms: crate::proxy::types::DurationMillis::from(200),
+            audit_types::AuditEventType::ResponseReturned {
+                duration_ms: audit_types::DurationMs::from(200),
             },
         ];
 
-        for event_type in event_types {
-            let proxy_event = crate::proxy::types::AuditEvent {
-                request_id: crate::proxy::types::RequestId::new(),
-                session_id: crate::proxy::types::SessionId::new(),
-                timestamp: Utc::now(),
-                event_type: event_type.clone(),
+        for audit_event in event_types {
+            let command = RecordAuditEvent {
+                session_stream: session_stream(&session_id).unwrap(),
+                request_stream: request_stream(&request_id).unwrap(),
+                request_id: request_id.clone(),
+                session_id: session_id.clone(),
+                audit_event: audit_event.clone(),
+                timestamp: Timestamp::now(),
+                parsed_request: None,
             };
 
-            let command = convert_audit_event(&proxy_event);
-            assert!(command.is_ok(), "Failed for event type: {event_type:?}");
+            assert!(
+                matches!(
+                    command.audit_event,
+                    audit_types::AuditEventType::RequestReceived { .. }
+                ) || matches!(
+                    command.audit_event,
+                    audit_types::AuditEventType::RequestForwarded { .. }
+                ) || matches!(
+                    command.audit_event,
+                    audit_types::AuditEventType::ResponseReceived { .. }
+                ) || matches!(
+                    command.audit_event,
+                    audit_types::AuditEventType::ResponseReturned { .. }
+                ),
+                "Failed for event type: {audit_event:?}"
+            );
         }
     }
 
@@ -1249,10 +1279,13 @@ mod tests {
         let events = stream_data;
 
         // Should have emitted an invalid state transition event
-        let has_invalid_transition = events.iter().any(|e| matches!(
-            e,
-            DomainEvent::InvalidStateTransition { event_type, .. } if event_type == "RequestForwarded"
-        ));
+        let has_invalid_transition = events.iter().any(|e| {
+            matches!(
+                e,
+                DomainEvent::InvalidStateTransition { attempted_transition, .. }
+                    if *attempted_transition == audit_types::AuditEventKind::RequestForwarded
+            )
+        });
 
         assert!(
             has_invalid_transition,
