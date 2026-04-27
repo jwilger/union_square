@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/jwilger/union_square/compare/v0.2.0...v0.2.1) - 2026-04-27
+
+### Added
+
+- *(audit)* refactor audit path on effects and wire production EventCore persistence ([#201](https://github.com/jwilger/union_square/pull/201))
+- define EventCore stream design patterns ([#194](https://github.com/jwilger/union_square/pull/194))
+- add opencode-native guardrails, agents, skills, and plugins ([#173](https://github.com/jwilger/union_square/pull/173))
+- add binary release infrastructure for cross-platform distribution ([#156](https://github.com/jwilger/union_square/pull/156))
+
+### Fixed
+
+- *(version)* replace primitive String with ModelId in VersionComparison ([#154](https://github.com/jwilger/union_square/pull/154))
+
+### Other
+
+- *(domain)* seal domain entities and encode lifecycle transitions as types ([#203](https://github.com/jwilger/union_square/pull/203))
+- *(domain)* replace domain events and commands with semantic-only types ([#202](https://github.com/jwilger/union_square/pull/202))
+- *(proxy)* split hot-path planning from execution ([#200](https://github.com/jwilger/union_square/pull/200))
+- *(proxy)* quarantine ring buffer as documented performance island ([#199](https://github.com/jwilger/union_square/pull/199))
+- remove stale emit! macro references from rules and agent docs ([#198](https://github.com/jwilger/union_square/pull/198))
+- *(adapter)* move LLM request parsing out of domain core ([#196](https://github.com/jwilger/union_square/pull/196))
+- introduce semantic IO boundary DTOs and conversion seams ([#195](https://github.com/jwilger/union_square/pull/195))
+- localized global dependencies in dev mode ([#193](https://github.com/jwilger/union_square/pull/193))
+- define performance-safe functional core architecture ([#192](https://github.com/jwilger/union_square/pull/192))
+- add path-based conditional execution and single required join job ([#179](https://github.com/jwilger/union_square/pull/179))
+- simplify CRITICAL REMINDER in CLAUDE.md ([#175](https://github.com/jwilger/union_square/pull/175))
+- update flake ([#172](https://github.com/jwilger/union_square/pull/172))
+- complete TDD adoption and implement remaining streaming tests ([#158](https://github.com/jwilger/union_square/pull/158))
+
 ## [0.2.0](https://github.com/jwilger/union_square/compare/v0.1.2...v0.2.0) - 2025-07-28
 
 ### Added
