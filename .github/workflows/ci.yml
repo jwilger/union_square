@@ -86,7 +86,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Install just
-      uses: taiki-e/install-action@f1390fd0c8205f9bee20e1c73289be18a9d94f61
+      uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1
       with:
         tool: just
 
@@ -161,7 +161,7 @@ jobs:
       uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
 
     - name: Install just
-      uses: taiki-e/install-action@f1390fd0c8205f9bee20e1c73289be18a9d94f61
+      uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1
       with:
         tool: just
 
