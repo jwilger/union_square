@@ -13,9 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use uuid::Uuid;
 
-/// Placeholder prompt template used in draft state before actual prompt is set
-const PLACEHOLDER_PROMPT_TEMPLATE: &str = "PLACEHOLDER";
-
 /// Unique identifier for a test case
 #[nutype(derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef))]
 pub struct TestCaseId(Uuid);
@@ -91,16 +88,26 @@ pub struct TestCase<State> {
 /// Expected behavior for a test case
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExpectedBehavior {
-    prompt_template: PromptTemplate,
+    prompt_template: Option<PromptTemplate>,
     expected_patterns: Vec<Pattern>,
     forbidden_patterns: Vec<Pattern>,
     metadata_assertions: MetadataAssertions,
 }
 
 impl ExpectedBehavior {
+    /// Create expected behavior with no prompt template (draft state only).
+    pub fn new_empty() -> Self {
+        Self {
+            prompt_template: None,
+            expected_patterns: Vec::new(),
+            forbidden_patterns: Vec::new(),
+            metadata_assertions: MetadataAssertions::new_empty(),
+        }
+    }
+
     pub fn new(prompt_template: PromptTemplate) -> Self {
         Self {
-            prompt_template,
+            prompt_template: Some(prompt_template),
             expected_patterns: Vec::new(),
             forbidden_patterns: Vec::new(),
             metadata_assertions: MetadataAssertions::new_empty(),
@@ -122,8 +129,8 @@ impl ExpectedBehavior {
         self
     }
 
-    pub fn prompt_template(&self) -> &PromptTemplate {
-        &self.prompt_template
+    pub fn prompt_template(&self) -> Option<&PromptTemplate> {
+        self.prompt_template.as_ref()
     }
 
     pub fn expected_patterns(&self) -> &[Pattern] {
@@ -156,18 +163,16 @@ impl TestCase<Draft> {
         name: TestCaseName,
         description: TestCaseDescription,
         created_at: DateTime<Utc>,
-    ) -> Result<Self, ValidationError> {
-        let placeholder = PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string())
-            .map_err(|_| ValidationError::EmptyPromptTemplate)?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             id: TestCaseId::generate(),
             name,
             description,
-            expected_behavior: ExpectedBehavior::new(placeholder),
+            expected_behavior: ExpectedBehavior::new_empty(),
             created_at,
             updated_at: created_at,
             _state: PhantomData,
-        })
+        }
     }
 
     /// Update the expected behavior
@@ -183,8 +188,8 @@ impl TestCase<Draft> {
 
     /// Finalize the test case, moving it to Ready state
     pub fn finalize(self, at: DateTime<Utc>) -> Result<TestCase<Ready>, ValidationError> {
-        // Validate the test case - check if still placeholder
-        if self.expected_behavior.prompt_template().as_ref() == PLACEHOLDER_PROMPT_TEMPLATE {
+        // Validate the test case - check if prompt template has been set
+        if self.expected_behavior.prompt_template().is_none() {
             return Err(ValidationError::EmptyPromptTemplate);
         }
         if self.expected_behavior.expected_patterns().is_empty() {
@@ -444,7 +449,7 @@ mod tests {
         // Create draft
         let name = TestCaseName::try_new("Test LLM Response".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Test description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description, now).unwrap();
+        let draft = TestCase::<Draft>::new(name, description, now);
 
         // Update expected behavior
         let behavior =
@@ -488,7 +493,7 @@ mod tests {
         let now = Utc::now();
         let name = TestCaseName::try_new("Test".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description, now).unwrap();
+        let draft = TestCase::<Draft>::new(name, description, now);
 
         // Empty prompt template
         let result = draft.clone().finalize(now);
@@ -586,16 +591,13 @@ mod tests {
             let now = Utc::now();
             let name = TestCaseName::try_new("Test".to_string()).unwrap();
             let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-            let draft = TestCase::<Draft>::new(name, description, now).unwrap();
+            let draft = TestCase::<Draft>::new(name, description, now);
 
-            let prompt_template = if prompt.is_empty() {
-                // Keep placeholder for empty prompts
-                PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string()).unwrap()
+            let mut behavior = if prompt.is_empty() {
+                ExpectedBehavior::new_empty()
             } else {
-                PromptTemplate::try_new(prompt.clone()).unwrap()
+                ExpectedBehavior::new(PromptTemplate::try_new(prompt.clone()).unwrap())
             };
-
-            let mut behavior = ExpectedBehavior::new(prompt_template);
             for i in 0..expected_count {
                 behavior = behavior.with_expected_pattern(Pattern::try_new(format!("Pattern {i}")).unwrap());
             }
@@ -606,7 +608,7 @@ mod tests {
             let draft = draft.with_expected_behavior(behavior, now);
             let result = draft.finalize(now);
 
-            if prompt.is_empty() || prompt == PLACEHOLDER_PROMPT_TEMPLATE {
+            if prompt.is_empty() {
                 assert!(matches!(result, Err(ValidationError::EmptyPromptTemplate)));
             } else if expected_count == 0 {
                 assert!(matches!(result, Err(ValidationError::NoExpectedPatterns)));
