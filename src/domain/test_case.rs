@@ -156,18 +156,18 @@ impl TestCase<Draft> {
         name: TestCaseName,
         description: TestCaseDescription,
         created_at: DateTime<Utc>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ValidationError> {
+        let placeholder = PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string())
+            .map_err(|_| ValidationError::EmptyPromptTemplate)?;
+        Ok(Self {
             id: TestCaseId::generate(),
             name,
             description,
-            expected_behavior: ExpectedBehavior::new(
-                PromptTemplate::try_new(PLACEHOLDER_PROMPT_TEMPLATE.to_string()).unwrap(),
-            ),
+            expected_behavior: ExpectedBehavior::new(placeholder),
             created_at,
             updated_at: created_at,
             _state: PhantomData,
-        }
+        })
     }
 
     /// Update the expected behavior
@@ -444,7 +444,7 @@ mod tests {
         // Create draft
         let name = TestCaseName::try_new("Test LLM Response".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Test description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description, now);
+        let draft = TestCase::<Draft>::new(name, description, now).unwrap();
 
         // Update expected behavior
         let behavior =
@@ -488,7 +488,7 @@ mod tests {
         let now = Utc::now();
         let name = TestCaseName::try_new("Test".to_string()).unwrap();
         let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-        let draft = TestCase::<Draft>::new(name, description, now);
+        let draft = TestCase::<Draft>::new(name, description, now).unwrap();
 
         // Empty prompt template
         let result = draft.clone().finalize(now);
@@ -586,7 +586,7 @@ mod tests {
             let now = Utc::now();
             let name = TestCaseName::try_new("Test".to_string()).unwrap();
             let description = TestCaseDescription::try_new("Description".to_string()).unwrap();
-            let draft = TestCase::<Draft>::new(name, description, now);
+            let draft = TestCase::<Draft>::new(name, description, now).unwrap();
 
             let prompt_template = if prompt.is_empty() {
                 // Keep placeholder for empty prompts
