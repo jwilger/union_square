@@ -1,5 +1,6 @@
 //! Shared audit recording functionality for streaming implementations
 
+use crate::proxy::hot_path_planner::{PlannedRequestAudit, PlannedResponseAudit};
 use crate::proxy::ring_buffer::RingBuffer;
 use crate::proxy::types::*;
 use bytes::Bytes;
@@ -11,25 +12,11 @@ pub const CAPTURE_CHUNK_SIZE: usize = BYTES_16KB;
 
 /// Trait for common audit recording operations
 pub trait AuditRecorder {
-    /// Record a request received event
-    fn record_request_event(
-        &self,
-        request_id: RequestId,
-        method: Result<HttpMethod, String>,
-        uri: Result<RequestUri, String>,
-        headers: Vec<(String, String)>,
-        body_size: BodySize,
-    );
+    /// Record a planned request audit event
+    fn record_request_audit(&self, request_id: RequestId, planned: PlannedRequestAudit);
 
-    /// Record a response received event
-    fn record_response_event(
-        &self,
-        request_id: RequestId,
-        status: Result<HttpStatusCode, u16>,
-        headers: Vec<(String, String)>,
-        body_size: BodySize,
-        duration_ms: DurationMillis,
-    );
+    /// Record a planned response audit event
+    fn record_response_audit(&self, request_id: RequestId, planned: PlannedResponseAudit);
 
     /// Record an error event
     fn record_error_event(&self, request_id: RequestId, error: String, phase: ErrorPhase);
@@ -56,55 +43,43 @@ impl RingBufferAuditRecorder {
 }
 
 impl AuditRecorder for RingBufferAuditRecorder {
-    fn record_request_event(
-        &self,
-        request_id: RequestId,
-        method: Result<HttpMethod, String>,
-        uri: Result<RequestUri, String>,
-        headers: Vec<(String, String)>,
-        body_size: BodySize,
-    ) {
-        let event_type = match (method, uri) {
-            (Ok(method), Ok(uri)) => AuditEventType::RequestReceived {
+    fn record_request_audit(&self, request_id: RequestId, planned: PlannedRequestAudit) {
+        let event_type = match planned {
+            PlannedRequestAudit::Received {
                 method,
                 uri,
-                headers: Headers::from_vec(headers).unwrap_or_default(),
+                headers,
+                body_size,
+            } => AuditEventType::RequestReceived {
+                method,
+                uri,
+                headers,
                 body_size,
             },
-            (Err(method_err), _) => AuditEventType::Error {
-                error: method_err,
-                phase: ErrorPhase::RequestParsing,
-            },
-            (_, Err(uri_err)) => AuditEventType::Error {
-                error: uri_err,
-                phase: ErrorPhase::RequestParsing,
-            },
+            PlannedRequestAudit::ParseFailed { error, phase } => {
+                AuditEventType::Error { error, phase }
+            }
         };
 
         self.write_audit_event(request_id, event_type);
     }
 
-    fn record_response_event(
-        &self,
-        request_id: RequestId,
-        status: Result<HttpStatusCode, u16>,
-        headers: Vec<(String, String)>,
-        body_size: BodySize,
-        duration_ms: DurationMillis,
-    ) {
-        let event_type = match status {
-            Ok(status) => AuditEventType::ResponseReceived {
+    fn record_response_audit(&self, request_id: RequestId, planned: PlannedResponseAudit) {
+        let event_type = match planned {
+            PlannedResponseAudit::Received {
                 status,
-                headers: Headers::from_vec(headers).unwrap_or_default(),
+                headers,
+                body_size,
+                duration_ms,
+            } => AuditEventType::ResponseReceived {
+                status,
+                headers,
                 body_size,
                 duration_ms,
             },
-            Err(invalid_status) => AuditEventType::Error {
-                error: format!(
-                    "Invalid HTTP status code '{invalid_status}' received from upstream"
-                ),
-                phase: ErrorPhase::ResponseReceiving,
-            },
+            PlannedResponseAudit::ParseFailed { error, phase } => {
+                AuditEventType::Error { error, phase }
+            }
         };
 
         self.write_audit_event(request_id, event_type);
