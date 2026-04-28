@@ -35,6 +35,18 @@ Use this pattern for:
 
 This pattern MUST NOT be used inside measured hot-path forwarding or streaming loops unless benchmarks show the overhead is acceptable.
 
+The reusable application-layer primitive lives in `src/application/trampoline.rs`.
+Workflows MAY expose semantic effect enums and observation enums, then run them
+through a shell-owned interpreter. `src/application/session_analysis.rs` is the
+canonical small example: the workflow requests session-fact loading, analysis
+request persistence, and telemetry as effects, while the interpreter remains
+responsible for IO.
+
+Ring-buffer internals, per-chunk streaming loops, and hot-path forwarding MUST
+continue to use their documented performance-island APIs by default. Route those
+paths through the trampoline only after benchmark evidence is added to the
+relevant performance-island documentation.
+
 ## Enforcement
 
 - Architecture review against `docs/architecture/ARCHITECTURE.md`.
