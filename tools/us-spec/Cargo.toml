@@ -7,3 +7,7 @@ publish = false
 [[bin]]
 name = "us-spec"
 path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
