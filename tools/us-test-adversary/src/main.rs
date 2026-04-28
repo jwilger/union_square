@@ -113,16 +113,23 @@ fn validate_trace(root: &Path, trace: &str) -> Result<(), String> {
         .map_or(test_ref, |(path, _test_name)| path);
     reject_escaping_path(test_path)?;
     let full_path = root.join(test_path);
+
+    if !is_rust_test_path(test_path) {
+        fs::metadata(&full_path).map_err(|error| {
+            format!(
+                "failed to read traced test {}: {error}",
+                full_path.display()
+            )
+        })?;
+        return Ok(());
+    }
+
     let test_text = fs::read_to_string(&full_path).map_err(|error| {
         format!(
             "failed to read traced test {}: {error}",
             full_path.display()
         )
     })?;
-
-    if !is_rust_test_path(test_path) {
-        return Ok(());
-    }
 
     if !contains_test_function(&test_text)? {
         return Err(format!(
@@ -293,6 +300,20 @@ mod tests {
     fn non_rust_trace_targets_must_exist_but_do_not_parse_as_rust() {
         validate_trace(Path::new("."), "example:fixtures/non-rust/test-hooks.sh")
             .expect("non-Rust trace target should be accepted after existence check");
+    }
+
+    #[test]
+    fn non_utf8_trace_targets_do_not_parse_as_rust() {
+        let root =
+            std::env::temp_dir().join(format!("us-test-adversary-non-utf8-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("temp fixture directory should be created");
+        std::fs::write(root.join("trace.bin"), [0xff, 0xfe])
+            .expect("binary fixture should be written");
+
+        validate_trace(&root, "example:trace.bin")
+            .expect("non-Rust binary trace should only require existence");
+
+        std::fs::remove_dir_all(root).expect("temp fixture directory should be removed");
     }
 
     #[test]
