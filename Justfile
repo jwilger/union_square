@@ -44,6 +44,9 @@ test *ARGS:
 test-doc:
     cargo test --doc
 
+test-hooks:
+    .codex/hooks/test-hooks.sh
+
 coverage:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 

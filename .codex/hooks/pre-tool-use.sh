@@ -34,11 +34,27 @@ if [[ "$command" =~ gh[[:space:]]+pr[[:space:]]+create|gh[[:space:]]+pr[[:space:
     echo "PR actions require us-agent state pr_ready." >&2
     exit 1
   fi
+  ledger_path="$(find .codex/state -maxdepth 1 -name 'issue-*.json' -print -quit 2>/dev/null || true)"
+  active_issue="${ledger_path##*/}"
+  active_issue="${active_issue#issue-}"
+  active_issue="${active_issue%.json}"
+  if [[ -z "$active_issue" ]] || ! cargo run --manifest-path tools/us-spec/Cargo.toml -- check --issue "$active_issue" >/dev/null 2>&1; then
+    echo "PR actions require a valid behavior spec for the active issue." >&2
+    exit 1
+  fi
 fi
 
 if [[ "$command" =~ git[[:space:]]+commit ]]; then
   if ! cargo run --manifest-path tools/us-agent/Cargo.toml -- require commit_ready >/dev/null 2>&1; then
     echo "Commits require us-agent state commit_ready." >&2
+    exit 1
+  fi
+  ledger_path="$(find .codex/state -maxdepth 1 -name 'issue-*.json' -print -quit 2>/dev/null || true)"
+  active_issue="${ledger_path##*/}"
+  active_issue="${active_issue#issue-}"
+  active_issue="${active_issue%.json}"
+  if [[ -z "$active_issue" ]] || ! cargo run --manifest-path tools/us-spec/Cargo.toml -- check --issue "$active_issue" >/dev/null 2>&1; then
+    echo "Commits require a valid behavior spec for the active issue." >&2
     exit 1
   fi
 fi
