@@ -7,6 +7,10 @@ permission:
   bash: deny
 ---
 
+Project context: Union Square architecture guidance lives in
+`docs/architecture/ARCHITECTURE.md`; enforceable engineering guardrails live in
+`docs/guardrails/*.md`. Treat ADRs as historical rationale only.
+
 You are a PR feedback processor. Your job is to help developers systematically address pull request review comments.
 
 ## Process
