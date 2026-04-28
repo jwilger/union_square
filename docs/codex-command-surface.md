@@ -33,5 +33,9 @@ Local services:
 
 - `just db-up`
 
+`just db-up` starts PostgreSQL on host port `55432` and test PostgreSQL on
+host port `55433` by default. Override with `POSTGRES_PORT` and
+`POSTGRES_TEST_PORT` when a local workflow needs different ports.
+
 CI uses the same command surface where practical. Add new repeated commands here
 first, then call them from hooks, CI, or agent instructions.

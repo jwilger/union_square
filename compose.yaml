@@ -5,7 +5,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: union_square
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d union_square"]
       interval: 10s
@@ -18,7 +18,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: union_square_test
     ports:
-      - "5433:5432"
+      - "${POSTGRES_TEST_PORT:-55433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d union_square_test"]
       interval: 10s
