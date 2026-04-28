@@ -1,0 +1,18 @@
+issue: 215
+goal: ""
+examples:
+  - id: missing-result
+    name: invalid example lacks an observable result
+    given:
+      - a malformed behavior spec
+    when:
+      - the agent validates it
+    then: []
+acceptance_criteria:
+  - validator rejects malformed specs
+non_goals:
+  - none
+architecture_impacts:
+  - none
+test_trace_ids:
+  - unknown-example:tools/us-spec/src/main.rs::missing_test

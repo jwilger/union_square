@@ -19,8 +19,16 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 - Rust 1.75+ (check with `rustc --version`)
 - PostgreSQL 14+
+- Just command runner
+- GitHub CLI (`gh`) for issue branches and PR workflow
 - Docker and Docker Compose (for PostgreSQL databases)
 - Nix (optional, for development environment)
+
+Codex issue branches should use `gh issue develop <issue-number>` unless a
+documented repository-specific GitHub CLI extension is available. GitHub issue
+relationships created during planning may require GitHub's relationship UI or a
+local `gh issue-ext` extension; the standard branch workflow does not require
+that extension.
 
 ### Initial Setup
 
@@ -29,10 +37,10 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 nix develop
 
 # Start databases
-docker-compose up -d
+just db-up
 
 # Run tests to verify setup
-cargo test --workspace
+just test
 ```
 
 ## Commit Guidelines
@@ -125,9 +133,9 @@ git verify-commit <commit-hash>
 1. **Create a feature branch** from `main`
 2. **Make your changes** following our coding standards
 3. **Write tests** for new functionality
-4. **Run the test suite**: `cargo test --workspace`
-5. **Run linting**: `cargo clippy --workspace --all-targets -- -D warnings`
-6. **Format code**: `cargo fmt`
+4. **Run the test suite**: `just test`
+5. **Run linting**: `just clippy`
+6. **Format code**: `just fmt`
 7. **Commit your changes** with descriptive messages
 8. **Push to your fork** and create a pull request
 
@@ -137,19 +145,19 @@ git verify-commit <commit-hash>
 
 ```bash
 # Run all tests
-cargo test --workspace
+just test
 
 # Run specific test
-cargo test test_name
+just test -- test_name
 
 # Run tests with output
-cargo test -- --nocapture
+just test -- --nocapture
 
 # Run tests with nextest (recommended)
-cargo nextest run --workspace
+just test
 
 # Run integration tests only
-cargo test --test '*' --workspace
+just test -- --test '*' --workspace
 ```
 
 ### Writing Tests

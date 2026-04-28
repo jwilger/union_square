@@ -1,0 +1,19 @@
+issue: 219
+goal: Reject weak tests before PR readiness.
+examples:
+  - id: weak-test
+    name: traced test has no assertion
+    given:
+      - a traced Rust test exists
+    when:
+      - the adversary gate evaluates it
+    then:
+      - the gate rejects the test
+acceptance_criteria:
+  - weak traced tests fail
+non_goals:
+  - mutation testing
+architecture_impacts:
+  - none
+test_trace_ids:
+  - weak-test:tests/weak_test.rs::weak_test_has_no_assertion
