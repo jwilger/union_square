@@ -9,8 +9,8 @@ license: MIT
 Use this skill when addressing PR review comments.
 
 Rules:
-- Classify every comment before editing.
-- Follow `docs/guardrails/review-feedback-protocol.md`.
-- Add or update tests for behavior-changing feedback.
-- Re-run the relevant `just` recipes and update `us-agent` evidence.
-- Reply with what changed or why the suggestion was not taken.
+- Every comment MUST be classified before editing.
+- Review handling MUST follow `docs/guardrails/review-feedback-protocol.md`.
+- Behavior-changing feedback MUST add or update tests.
+- Relevant `just` recipes MUST be re-run and `us-agent` evidence MUST be updated.
+- Replies MUST state what changed or why the suggestion was not taken.

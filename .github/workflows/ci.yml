@@ -46,6 +46,7 @@ jobs:
           harness:
             - 'AGENTS.md'
             - 'Justfile'
+            - '.github/workflows/ci.yml'
             - '.agents/**'
             - '.codex/**'
             - 'docs/codex-migration.md'

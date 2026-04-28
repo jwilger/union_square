@@ -3,6 +3,7 @@ use std::{
     path::{Component, Path},
     process,
 };
+use syn::{visit::Visit, Item};
 
 const GREEN_OR_LATER_STATES: &[&str] = &[
     "green_observed",
@@ -14,7 +15,15 @@ const GREEN_OR_LATER_STATES: &[&str] = &[
     "pr_ready",
 ];
 
-const ASSERTION_MARKERS: &[&str] = &["assert!", "assert_eq!", "assert_ne!", "matches!"];
+const ASSERTION_MACROS: &[&str] = &[
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
+    "matches",
+];
 
 fn main() {
     if let Err(error) = run() {
@@ -111,20 +120,78 @@ fn validate_trace(root: &Path, trace: &str) -> Result<(), String> {
         )
     })?;
 
-    if !test_text.contains("#[test]") && !test_text.contains("#[tokio::test]") {
+    if !contains_test_function(&test_text)? {
         return Err(format!(
             "traced file `{test_path}` does not contain a Rust test"
         ));
     }
-    if !ASSERTION_MARKERS
-        .iter()
-        .any(|marker| test_text.contains(marker))
-    {
+    if !contains_test_assertion(&test_text)? {
         return Err(format!(
             "traced test `{test_path}` has no assertion marker; weak tests are not accepted"
         ));
     }
     Ok(())
+}
+
+fn contains_test_function(test_text: &str) -> Result<bool, String> {
+    let parsed = syn::parse_file(test_text)
+        .map_err(|error| format!("failed to parse traced Rust test: {error}"))?;
+    Ok(parsed.items.iter().any(is_test_function))
+}
+
+fn contains_test_assertion(test_text: &str) -> Result<bool, String> {
+    let parsed = syn::parse_file(test_text)
+        .map_err(|error| format!("failed to parse traced Rust test: {error}"))?;
+    for item in &parsed.items {
+        if let Item::Fn(function) = item {
+            if is_test_function(item) {
+                let mut visitor = AssertionVisitor::Searching;
+                visitor.visit_block(&function.block);
+                if visitor.found() {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn is_test_function(item: &Item) -> bool {
+    let Item::Fn(function) = item else {
+        return false;
+    };
+    function.attrs.iter().any(|attribute| {
+        attribute
+            .path()
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "test")
+    })
+}
+
+enum AssertionVisitor {
+    Searching,
+    Found,
+}
+
+impl AssertionVisitor {
+    fn found(&self) -> bool {
+        matches!(self, Self::Found)
+    }
+}
+
+impl<'ast> Visit<'ast> for AssertionVisitor {
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if node
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| ASSERTION_MACROS.contains(&segment.ident.to_string().as_str()))
+        {
+            *self = Self::Found;
+        }
+        syn::visit::visit_macro(self, node);
+    }
 }
 
 fn reject_escaping_path(test_path: &str) -> Result<(), String> {
@@ -166,7 +233,10 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_trace_entries, run_adversary_check, validate_issue_id, validate_trace};
+    use super::{
+        contains_test_assertion, extract_trace_entries, run_adversary_check, validate_issue_id,
+        validate_trace,
+    };
     use std::path::Path;
 
     #[test]
@@ -206,5 +276,21 @@ mod tests {
             .expect_err("path traversal is rejected");
 
         assert!(error.contains("must stay inside the repository"));
+    }
+
+    #[test]
+    fn assertion_markers_in_comments_or_strings_do_not_count() {
+        let text = r#"
+            #[test]
+            fn weak() {
+                // assert_eq!(1, 1);
+                let _message = "assert!(true)";
+            }
+        "#;
+
+        assert!(
+            !contains_test_assertion(text).expect("fixture should parse"),
+            "comments and string literals must not count as assertions"
+        );
     }
 }

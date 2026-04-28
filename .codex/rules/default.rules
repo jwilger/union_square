@@ -58,6 +58,10 @@ prefix_rule(
     ],
 )
 
+# Codex prefix rules do not support wildcard tokens or "contains" checks.
+# The pre-tool-use hook enforces arbitrary remote names, force flags in any
+# position, and --no-verify in any commit argument order.
+
 prefix_rule(
     pattern = ["git", "push", ["main", "master"]],
     decision = "forbidden",

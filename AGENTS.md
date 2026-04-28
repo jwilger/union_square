@@ -16,7 +16,7 @@ This file is the primary Codex instruction file for Union Square.
 
 1. Start from an assigned GitHub issue.
 2. Create or checkout an issue branch using `gh issue develop`.
-3. Write a behavior spec with `just spec ISSUE=<number>` before tests or production edits.
+3. Create `.codex/specs/issue-<number>.yaml`, then validate it with `just spec ISSUE=<number>` before tests or production edits.
 4. Create the `us-agent` ledger with `just agent start-issue <number>`.
 5. Record branch creation with `just agent record-branch <number>`.
 6. Record the valid spec with `just agent record-spec <number>`.

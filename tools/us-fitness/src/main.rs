@@ -66,17 +66,66 @@ fn domain_dependency_findings(file: &str, text: &str) -> Vec<String> {
 
 fn contains_forbidden_pattern(text: &str, pattern: &str) -> bool {
     text.lines().any(|line| {
-        let line = line.trim_start();
         if let Some(import) = pattern.strip_prefix("use ") {
-            line == format!("use {import};") || line.starts_with(&format!("use {import}::"))
+            normalized_use_path(line).is_some_and(|path| import_matches(&path, import))
         } else if let Some(module) = pattern.strip_prefix("crate::") {
-            line.contains(&format!("crate::{module};"))
-                || line.contains(&format!("crate::{module}::"))
-                || line.contains(&format!("crate::{module}("))
+            contains_crate_module(line, module)
         } else {
             line.contains(pattern)
         }
     })
+}
+
+fn normalized_use_path(line: &str) -> Option<String> {
+    let mut line = line.trim();
+    if let Some(rest) = line.strip_prefix("pub ") {
+        line = rest.trim_start();
+    } else if line.starts_with("pub(") {
+        let (_visibility, rest) = line.split_once(") ")?;
+        line = rest.trim_start();
+    }
+    let import = line
+        .strip_prefix("use ")?
+        .trim()
+        .trim_end_matches(';')
+        .trim();
+    let import = import
+        .split_once(" as ")
+        .map_or(import, |(path, _alias)| path)
+        .trim();
+    Some(import.to_string())
+}
+
+fn import_matches(path: &str, forbidden: &str) -> bool {
+    path == forbidden
+        || path.starts_with(&format!("{forbidden}::"))
+        || path == format!("{forbidden}::*")
+}
+
+fn contains_crate_module(line: &str, module: &str) -> bool {
+    if normalized_use_path(line)
+        .is_some_and(|path| import_matches(&path, &format!("crate::{module}")))
+    {
+        return true;
+    }
+
+    for marker in [
+        format!("crate::{module}::"),
+        format!("crate::{module}("),
+        format!("crate::{module};"),
+        format!("crate::{module},"),
+        format!("crate::{{{module}"),
+        format!("crate::{{{module},"),
+        format!("crate::{{{module} "),
+        format!("crate::{{{module}::"),
+        format!("crate::{{{module} as "),
+        format!("crate::{{{module}}}"),
+    ] {
+        if line.contains(&marker) {
+            return true;
+        }
+    }
+    false
 }
 
 fn changed_files(repo_path: &Path) -> Result<Vec<String>, String> {
@@ -161,5 +210,20 @@ mod tests {
         let text = "use http_body::Body;\nfn f() { crate::proxy_utils::x(); }";
 
         assert!(domain_dependency_findings("src/domain/clean.rs", text).is_empty());
+    }
+
+    #[test]
+    fn dependency_patterns_match_common_rust_use_forms() {
+        for text in [
+            "pub use axum::Router;",
+            "use axum as web;",
+            "use axum::prelude::*;",
+            "use crate::proxy as p;",
+        ] {
+            assert!(
+                !domain_dependency_findings("src/domain/violating.rs", text).is_empty(),
+                "expected `{text}` to be rejected"
+            );
+        }
     }
 }

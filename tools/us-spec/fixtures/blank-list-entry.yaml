@@ -8,7 +8,7 @@ examples:
     when:
       - the agent runs the spec validator
     then:
-      - the validator accepts the spec
+      - the validator rejects the spec due to blank required entries
 acceptance_criteria:
   - ""
 non_goals:

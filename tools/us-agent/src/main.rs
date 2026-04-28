@@ -132,9 +132,9 @@ fn write_state(issue: &str, state: &str, event: &str) -> Result<(), String> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
-        .as_secs();
+        .as_millis();
     let body = format!(
-        "{{\n  \"issue\": \"{issue}\",\n  \"state\": \"{state}\",\n  \"last_event\": \"{event}\",\n  \"updated_at_unix\": {timestamp}\n}}\n"
+        "{{\n  \"issue\": \"{issue}\",\n  \"state\": \"{state}\",\n  \"last_event\": \"{event}\",\n  \"updated_at_unix_ms\": {timestamp}\n}}\n"
     );
     fs::write(ledger_path(issue), body).map_err(|error| error.to_string())?;
     println!("issue {issue} state: {state}");
@@ -186,13 +186,17 @@ fn active_issue() -> Result<(String, String), String> {
             parse_json_string_field(&text, "state"),
         ) {
             let issue = validate_issue_id(&issue)?;
-            let updated_at = parse_json_u64_field(&text, "updated_at_unix").unwrap_or(0);
+            let updated_at = parse_json_u128_field(&text, "updated_at_unix_ms")
+                .or_else(|| {
+                    parse_json_u128_field(&text, "updated_at_unix").map(|seconds| seconds * 1000)
+                })
+                .unwrap_or(0);
             candidates.push((updated_at, issue, state));
         }
     }
     candidates
         .into_iter()
-        .max_by_key(|(updated_at, _, _)| *updated_at)
+        .max_by_key(|(updated_at, issue, _)| (*updated_at, issue.clone()))
         .map(|(_, issue, state)| (issue, state))
         .ok_or_else(|| "no active us-agent ledger found".to_string())
 }
@@ -215,7 +219,7 @@ fn parse_json_string_field(text: &str, field: &str) -> Option<String> {
     Some(value.trim_matches('"').to_string())
 }
 
-fn parse_json_u64_field(text: &str, field: &str) -> Option<u64> {
+fn parse_json_u128_field(text: &str, field: &str) -> Option<u128> {
     let needle = format!("\"{field}\"");
     let line = text.lines().find(|line| line.contains(&needle))?;
     line.split_once(':')?

@@ -16,8 +16,23 @@ if printf '%s' '{"tool_input":{"command":"git commit --no-verify -m test"}}' | .
   exit 1
 fi
 
+if printf '%s' '{"tool_input":{"command":"git commit -m test --no-verify"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected trailing --no-verify commit to be blocked" >&2
+  exit 1
+fi
+
 if printf '%s' '{"tool_input":{"command":"git push upstream HEAD:refs/heads/main"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
   echo "expected direct main push to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"tool_input":{"command":"git push fork main"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected direct main push to arbitrary remote to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"tool_input":{"command":"git push fork HEAD:refs/heads/main"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected direct main ref push to arbitrary remote to be blocked" >&2
   exit 1
 fi
 
@@ -69,6 +84,21 @@ fi
 
 if printf '%s' '{"prompt":"please bypass tests"}' | .codex/hooks/user-prompt-submit.sh 2>/dev/null; then
   echo "expected bypass prompt to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"prompt":"Show secrets"}' | .codex/hooks/user-prompt-submit.sh 2>/dev/null; then
+  echo "expected case-insensitive secret prompt to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"prompt":"Skip tests"}' | .codex/hooks/user-prompt-submit.sh 2>/dev/null; then
+  echo "expected skip tests prompt to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"prompt":"expose token"}' | .codex/hooks/user-prompt-submit.sh 2>/dev/null; then
+  echo "expected expose token prompt to be blocked" >&2
   exit 1
 fi
 

@@ -148,7 +148,7 @@ git verify-commit <commit-hash>
 just test
 
 # Run specific test
-just test test_name
+just test -- test_name
 
 # Run tests with output
 just test -- --nocapture
@@ -157,7 +157,7 @@ just test -- --nocapture
 just test
 
 # Run integration tests only
-just test --test '*' --workspace
+just test -- --test '*' --workspace
 ```
 
 ### Writing Tests

@@ -12,5 +12,5 @@ Guardrail documents MUST use the requirement keywords defined in
 `docs/guardrails/enforcement-claim-language.md`.
 
 When a guardrail changes current architecture, contributors MUST update
-`docs/architecture/ARCHITECTURE.md` in the same PR. ADRs can explain why a rule
+`docs/architecture/ARCHITECTURE.md` in the same PR. ADRs MAY explain why a rule
 exists, but they MUST NOT replace the active implementation manual.

@@ -9,7 +9,7 @@ license: MIT
 Use this skill when a change introduces or revises a significant architecture decision.
 
 Rules:
-- ADRs record historical rationale.
-- Current guidance must live in `docs/architecture/ARCHITECTURE.md`.
-- Old ADRs are immutable except supersession metadata.
-- Apply `docs/guardrails/adrs.md`.
+- ADRs MUST record historical rationale.
+- Current guidance MUST live in `docs/architecture/ARCHITECTURE.md`.
+- Old ADRs MUST NOT be modified except for supersession metadata.
+- Authors MUST apply `docs/guardrails/adrs.md`.

@@ -4,7 +4,8 @@ set -euo pipefail
 input="$(cat)"
 prompt="$(printf '%s' "$input" | jq -r '.prompt // .user_prompt // .message // empty' 2>/dev/null || true)"
 
-if [[ "$prompt" =~ --no-verify|bypass[[:space:]]+(tests|hooks|checks)|ignore[[:space:]]+(tests|hooks|checks)|(show|reveal|dump|print)[[:space:]]+(secret|secrets|token|tokens|credential|credentials) ]]; then
+shopt -s nocasematch
+if [[ "$prompt" =~ --no-verify|skip[[:space:]]+(tests?|hooks?|checks?)|bypass[[:space:]]+(tests?|hooks?|checks?)|ignore[[:space:]]+(tests?|hooks?|checks?)|(show|reveal|dump|print|expose)[[:space:]]+(secret|secrets|token|tokens|credential|credentials) ]]; then
   echo "Request conflicts with Union Square safety policy." >&2
   exit 1
 fi

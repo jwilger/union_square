@@ -35,7 +35,7 @@ active_issue() {
   newest="$(
     { find .codex/state -maxdepth 1 -name 'issue-*.json' -print0 2>/dev/null || true; } \
       | while IFS= read -r -d '' ledger; do
-          updated_at="$(jq -r '.updated_at_unix // 0' "$ledger" 2>/dev/null || printf '0')"
+          updated_at="$(jq -r '.updated_at_unix_ms // ((.updated_at_unix // 0) * 1000)' "$ledger" 2>/dev/null || printf '0')"
           printf '%s\t%s\n' "$updated_at" "$ledger"
         done \
       | sort -rn \

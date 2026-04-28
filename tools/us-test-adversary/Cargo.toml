@@ -7,3 +7,6 @@ publish = false
 [[bin]]
 name = "us-test-adversary"
 path = "src/main.rs"
+
+[dependencies]
+syn = { version = "2.0.117", features = ["full", "visit"] }

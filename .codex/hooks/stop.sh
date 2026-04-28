@@ -7,11 +7,12 @@ if [[ "$active" == "true" ]]; then
   exit 0
 fi
 
-if git diff --quiet --exit-code && git diff --cached --quiet --exit-code; then
-  exit 0
-fi
-
-files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)"
-if printf '%s\n' "$files" | grep -Eq '(^src/|^tests/|^benches/|Cargo\.(toml|lock)$)'; then
+files="$(
+  git diff --name-only --diff-filter=ACMRD HEAD
+  git diff --cached --name-only --diff-filter=ACMRD HEAD
+  git ls-files --others --exclude-standard
+)"
+files="$(printf '%s\n' "$files" | sort -u)"
+if printf '%s\n' "$files" | grep -Eq '(^|/)(src|tests|benches)/|(^|/)Cargo\.(toml|lock)$'; then
   just fitness
 fi
