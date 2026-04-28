@@ -53,13 +53,7 @@ fn run() -> Result<(), String> {
 
 fn transition(issue: &str, next: &str) -> Result<(), String> {
     let current = read_state(issue)?;
-    let current_index = state_index(&current)?;
-    let next_index = state_index(next)?;
-    if next_index != current_index + 1 {
-        return Err(format!(
-            "invalid transition for issue {issue}: {current} -> {next}"
-        ));
-    }
+    validate_transition(issue, &current, next)?;
     write_state(issue, next, "transition")
 }
 
@@ -87,7 +81,7 @@ fn require_state(required: &str) -> Result<(), String> {
 
 fn export_summary(issue: &str) -> Result<(), String> {
     let state = read_state(issue)?;
-    println!("## Codex Workflow Evidence\n\n- Issue: #{issue}\n- State: `{state}`\n- Spec: `.codex/specs/issue-{issue}.yaml`\n- Ledger: local `.codex/state/issue-{issue}.json`");
+    println!("{}", export_summary_text(issue, &state));
     Ok(())
 }
 
@@ -108,8 +102,29 @@ fn write_state(issue: &str, state: &str, event: &str) -> Result<(), String> {
 fn read_state(issue: &str) -> Result<String, String> {
     let text = fs::read_to_string(ledger_path(issue))
         .map_err(|error| format!("failed to read ledger for issue {issue}: {error}"))?;
-    parse_json_string_field(&text, "state")
+    read_state_from_text(issue, &text)
+}
+
+fn read_state_from_text(issue: &str, text: &str) -> Result<String, String> {
+    parse_json_string_field(text, "state")
         .ok_or_else(|| format!("ledger for issue {issue} has no state field"))
+}
+
+fn validate_transition(issue: &str, current: &str, next: &str) -> Result<(), String> {
+    let current_index = state_index(current)?;
+    let next_index = state_index(next)?;
+    if next_index != current_index + 1 {
+        return Err(format!(
+            "invalid transition for issue {issue}: {current} -> {next}"
+        ));
+    }
+    Ok(())
+}
+
+fn export_summary_text(issue: &str, state: &str) -> String {
+    format!(
+        "## Codex Workflow Evidence\n\n- Issue: #{issue}\n- State: `{state}`\n- Spec: `.codex/specs/issue-{issue}.yaml`\n- Ledger: local `.codex/state/issue-{issue}.json`"
+    )
 }
 
 fn active_issue() -> Result<(String, String), String> {
@@ -156,5 +171,39 @@ fn required_arg(args: &[String], index: usize) -> Result<&str, String> {
 }
 
 fn usage() -> String {
-    "usage: us-agent start-issue|record-spec|record-test-list|record-red|record-green|record-test-adversary|record-fitness|record-refactor|record-review|ready-to-commit|ready-to-pr|status|require|export-pr-summary <issue-or-state>".to_string()
+    "usage: us-agent start-issue|record-branch|record-spec|record-test-list|record-red|record-green|record-test-adversary|record-fitness|record-refactor|record-review|ready-to-commit|ready-to-pr|status|require|export-pr-summary <issue-or-state>".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{export_summary_text, read_state_from_text, validate_transition};
+
+    #[test]
+    fn fixture_ledger_allows_next_transition() {
+        let text = include_str!("../fixtures/ledger-red.json");
+        let state = read_state_from_text("216", text).expect("fixture should have state");
+
+        validate_transition("216", &state, "green_observed")
+            .expect("red should transition to green");
+    }
+
+    #[test]
+    fn fixture_ledger_rejects_skipped_transition() {
+        let text = include_str!("../fixtures/ledger-red.json");
+        let state = read_state_from_text("216", text).expect("fixture should have state");
+        let error =
+            validate_transition("216", &state, "fitness_passed").expect_err("cannot skip states");
+
+        assert!(error.contains("red_test_observed -> fitness_passed"));
+    }
+
+    #[test]
+    fn export_pr_summary_includes_issue_state_spec_and_ledger() {
+        let summary = export_summary_text("216", "pr_ready");
+
+        assert!(summary.contains("Issue: #216"));
+        assert!(summary.contains("State: `pr_ready`"));
+        assert!(summary.contains(".codex/specs/issue-216.yaml"));
+        assert!(summary.contains(".codex/state/issue-216.json"));
+    }
 }
