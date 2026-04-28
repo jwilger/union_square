@@ -1,0 +1,9 @@
+[package]
+name = "us-fitness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "us-fitness"
+path = "src/main.rs"

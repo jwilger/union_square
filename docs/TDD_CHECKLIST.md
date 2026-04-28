@@ -67,19 +67,19 @@ feat(auth): handle malformed tokens gracefully
 
 ```bash
 # Run specific test
-cargo test test_function_name
+just test -- test_function_name
 
 # Run tests in watch mode
 cargo watch -x test
 
 # Run tests with output
-cargo test -- --show-output
+just test -- --show-output
 
 # Run only unit tests (fast)
-cargo test --lib
+just test -- --lib
 
 # Run with coverage
-cargo tarpaulin
+just coverage
 ```
 
 Remember: The goal is not just to have tests, but to use tests to drive better design!

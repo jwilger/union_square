@@ -1,0 +1,19 @@
+issue: 215
+goal: Validate issue-scoped behavior specs before implementation starts.
+examples:
+  - id: validates-required-shape
+    name: required BDD fields are present
+    given:
+      - "   "
+    when:
+      - the agent runs the spec validator
+    then:
+      - the validator rejects the spec due to blank required entries
+acceptance_criteria:
+  - ""
+non_goals:
+  - executing the traced tests
+architecture_impacts:
+  - none
+test_trace_ids:
+  - validates-required-shape:tools/us-spec/src/main.rs::valid_spec_fixture_passes_schema_and_traceability

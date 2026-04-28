@@ -5,27 +5,32 @@ pre-commit:
   parallel: true
   commands:
     cargo-fmt:
-      run: cargo fmt --all --
+      run: just fmt-check
       glob: "*.rs"
 
     cargo-clippy:
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: just clippy
       glob: "*.rs"
 
     cargo-check:
-      run: cargo check --all-targets
+      run: just check
       glob: "*.rs"
 
     cargo-test:
-      run: cargo test --workspace
+      run: just test
       glob: "*.rs"
 
     ast-grep:
-      run: ast-grep scan
+      run: just ast-grep-branch
       glob: "*.rs"
 
     trailing-whitespace:
-      run: git diff --cached --name-only | xargs -I{} sh -c 'test -f {} && sed -i "s/[[:space:]]*$//" {}'
+      run: |
+        files="$(git diff --cached --name-only --diff-filter=ACMR)"
+        if [ -n "$files" ] && printf '%s\n' "$files" | xargs grep -n '[[:space:]]$'; then
+          echo "Trailing whitespace found."
+          exit 1
+        fi
 
     check-merge-conflict:
       run: git diff --cached --name-only | xargs grep -l "<<<<<<< HEAD" || true
@@ -46,17 +51,17 @@ pre-push:
   parallel: true
   commands:
     cargo-fmt-check:
-      run: cargo fmt --all -- --check
+      run: just fmt-check
       glob: "*.rs"
 
     cargo-clippy:
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: just clippy
       glob: "*.rs"
 
     cargo-test:
-      run: cargo test --workspace
+      run: just test
       glob: "*.rs"
 
     ast-grep:
-      run: ast-grep scan
+      run: just ast-grep-branch
       glob: "*.rs"

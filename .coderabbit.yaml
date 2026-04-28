@@ -2,7 +2,7 @@
 #
 # This file defines the AI review surface for this repository. Current
 # architectural guidance lives in docs/architecture/ARCHITECTURE.md and
-# .opencode/rules/*.md. ADRs are historical rationale only and MUST NOT be
+# docs/guardrails/*.md. ADRs are historical rationale only and MUST NOT be
 # used as the source of ongoing architecture guidance.
 
 language: "en-US"
@@ -36,12 +36,12 @@ reviews:
       instructions: |
         Architecture and Rust review. Authoritative sources:
           - docs/architecture/ARCHITECTURE.md
-          - .opencode/rules/*.md
+          - docs/guardrails/*.md
           - Cargo.toml and deny.toml
 
         ADRs under docs/adr/*.md are historical rationale only. Do NOT
         evaluate current implementation correctness against ADR text; evaluate
-        against ARCHITECTURE.md and .opencode/rules/. ADRs may explain why a
+        against ARCHITECTURE.md and docs/guardrails/. ADRs may explain why a
         rule exists, but the active rule is what the diff must satisfy.
 
         Focus areas:
@@ -49,40 +49,40 @@ reviews:
              proxy/provider DTOs, database clients, Tokio runtime APIs,
              clocks, randomness, tracing, metrics, environment access, raw
              JSON, raw bytes, URI strings, or header tuples. See
-             .opencode/rules/functional-core-boundaries.md.
+             docs/guardrails/functional-core-boundaries.md.
           2. IO boundary DTOs: raw strings, bytes, headers, URIs, JSON, and
              database rows belong in adapters or infrastructure. Domain-facing
              APIs MUST use semantic facts. See
-             .opencode/rules/io-boundary-dtos.md.
+             docs/guardrails/io-boundary-dtos.md.
           3. Type-driven design: domain concepts use semantic types, nutype,
              enums, or smart constructors. Parse at boundaries; do not pass raw
              primitives into domain behavior. See
-             .opencode/rules/type-driven-development.md.
+             docs/guardrails/type-driven-development.md.
           4. EventCore/CQRS: durable state changes use EventCore command
              patterns; command logic and read models stay separate. See
-             .opencode/rules/eventcore-command-pattern.md and
-             .opencode/rules/cqrs-model-separation.md.
+             docs/guardrails/eventcore-command-pattern.md and
+             docs/guardrails/cqrs-model-separation.md.
           5. Event schema phase policy: alignment-era schemas are not durable
              compatibility contracts unless explicitly accepted for ongoing
              historical replay. After acceptance, schema evolution is additive
-             or new-variant based. See .opencode/rules/incremental-event-fields.md
-             and .opencode/rules/event-model-readiness.md.
+             or new-variant based. See docs/guardrails/incremental-event-fields.md
+             and docs/guardrails/event-model-readiness.md.
           6. Effects/trampoline: non-hot-path orchestration SHOULD use explicit
              effects/steps when it improves sequencing, retries, or testability;
              do not put this pattern in hot-path forwarding without benchmark
-             evidence. See .opencode/rules/effect-step-trampoline.md.
+             evidence. See docs/guardrails/effect-step-trampoline.md.
           7. Performance islands: ring-buffer internals, hot-path forwarding,
              streaming body handling, and audit handoff may be imperative only
              when isolated, documented, and measured. See
-             .opencode/rules/performance-islands.md.
+             docs/guardrails/performance-islands.md.
           8. Error handling: use thiserror for typed errors. Production code
              MUST NOT use unwrap(), expect(), panic!(), todo!(),
              unimplemented!(), or unreachable! for recoverable cases. See
-             .opencode/rules/thiserror-for-errors.md and
-             .opencode/rules/no-panics-in-production.md.
+             docs/guardrails/thiserror-for-errors.md and
+             docs/guardrails/no-panics-in-production.md.
           9. Borrow discipline: prefer borrowing over ownership unless the
              function genuinely consumes the value. See
-             .opencode/rules/prefer-borrows.md.
+             docs/guardrails/prefer-borrows.md.
 
         Blocking policy: violations introduced by the PR are blocking.
         Pre-existing violations in untouched code are advisory unless the PR's
@@ -90,22 +90,22 @@ reviews:
 
     - path: "Cargo.toml"
       instructions: |
-        Cargo dependency review. Apply .opencode/rules/cargo-dependencies.md.
+        Cargo dependency review. Apply docs/guardrails/cargo-dependencies.md.
         New dependencies should be added with cargo add, justified by the diff,
         and consistent with EventCore version alignment. If the project becomes
-        a workspace, apply .opencode/rules/workspace-deps-consistency.md.
+        a workspace, apply docs/guardrails/workspace-deps-consistency.md.
 
     - path: ".github/workflows/**/*.{yml,yaml}"
       instructions: |
         GitHub Actions and CI review. Apply:
-          - .opencode/rules/github-actions-security.md
-          - .opencode/rules/ci-flake-defined-invocations.md
+          - docs/guardrails/github-actions-security.md
+          - docs/guardrails/ci-flake-defined-invocations.md
 
         Third-party actions SHOULD be pinned to immutable SHAs. CI commands
         SHOULD call version-controlled task-runner or flake entry points rather
         than duplicating raw command sequences inline.
 
-    - path: "{lefthook.yml,sgconfig.yml,.opencode/rules/ast-grep/**/*.yml}"
+    - path: "{lefthook.yml,sgconfig.yml,tools/ast-grep/rules/**/*.yml}"
       instructions: |
         Guardrail configuration review. Verify that local hooks and ast-grep
         rules match the architecture and rule files they enforce. Local hooks
@@ -116,13 +116,13 @@ reviews:
     - path: "docs/architecture/**"
       instructions: |
         ARCHITECTURE.md is the self-sufficient implementation source of truth.
-        Review for internal consistency, alignment with .opencode/rules/, and
+        Review for internal consistency, alignment with docs/guardrails/, and
         clear current-state guidance. Do not require readers to inspect ADRs to
         understand current architecture.
 
     - path: "docs/adr/**/*.md"
       instructions: |
-        ADR review. Apply .opencode/rules/adrs.md. ADRs record historical
+        ADR review. Apply docs/guardrails/adrs.md. ADRs record historical
         context, options, rationale, and consequences; they are not active
         implementation guidance. If an ADR changes current architecture, the
         PR must also update docs/architecture/ARCHITECTURE.md.
@@ -130,11 +130,11 @@ reviews:
         Accepted ADR bodies are immutable. Changing an accepted ADR beyond
         supersession metadata is blocking. Adding a new sequential ADR is OK.
 
-    - path: "{CLAUDE.md,.opencode/**/*.md,.claude/**/*.md}"
+    - path: "{AGENTS.md,.codex/**/*.md,.agents/**/*.md,docs/guardrails/**/*.md}"
       instructions: |
         Agent, skill, and rule review. Verify consistency with
-        docs/architecture/ARCHITECTURE.md and .opencode/rules/. Apply
-        .opencode/rules/enforcement-claim-language.md to any prose claiming how
+        docs/architecture/ARCHITECTURE.md and docs/guardrails/. Apply
+        docs/guardrails/enforcement-claim-language.md to any prose claiming how
         a check enforces behavior.
 
         PR review replies must not add automation signatures. Do not manually
@@ -147,7 +147,7 @@ reviews:
         review surface without making ADRs the source of current guidance.
         Path instructions, filters, tool configuration, and custom checks must
         remain consistent with docs/architecture/ARCHITECTURE.md and
-        .opencode/rules/.
+        docs/guardrails/.
 
   pre_merge_checks:
     docstrings:
@@ -162,7 +162,7 @@ reviews:
         mode: "error"
         instructions: |
           Current architectural guidance MUST live in
-          docs/architecture/ARCHITECTURE.md and .opencode/rules/. ADRs MUST be
+          docs/architecture/ARCHITECTURE.md and docs/guardrails/. ADRs MUST be
           historical rationale only.
 
           FAIL the PR if it adds active architecture guidance only to an ADR, or
@@ -174,7 +174,7 @@ reviews:
         instructions: |
           Production Rust code MUST NOT introduce unwrap(), expect(), panic!(),
           todo!(), unimplemented!(), or unreachable! for recoverable cases. See
-          .opencode/rules/no-panics-in-production.md.
+          docs/guardrails/no-panics-in-production.md.
 
           Acceptable uses include tests, benches, build.rs, and explicitly
           documented early experiments.
@@ -183,7 +183,7 @@ reviews:
         mode: "error"
         instructions: |
           Committed files MUST NOT contain user-specific or machine-specific
-          absolute paths. See .opencode/rules/no-hardcoded-paths.md.
+          absolute paths. See docs/guardrails/no-hardcoded-paths.md.
 
           Examples include /home/<username>/..., /Users/<username>/..., and
           Windows-style user profile paths.
@@ -216,7 +216,7 @@ reviews:
     ast-grep:
       essential_rules: true
       rule_dirs:
-        - ".opencode/rules/ast-grep"
+        - "tools/ast-grep/rules"
 
 knowledge_base:
   opt_out: true
@@ -225,9 +225,9 @@ knowledge_base:
   code_guidelines:
     enabled: true
     filePatterns:
-      - ".opencode/skills/**/SKILL.md"
-      - ".opencode/rules/*.md"
-      - "CLAUDE.md"
+      - ".agents/skills/**/SKILL.md"
+      - "docs/guardrails/*.md"
+      - "AGENTS.md"
       - "docs/architecture/ARCHITECTURE.md"
   learnings:
     scope: "local"

@@ -38,3 +38,7 @@ logs/
 # Log4brains build artifacts
 docs/adr/*
 !docs/adr/*.md
+
+# Codex local workflow state
+.codex/state/
+.codex/worktrees/

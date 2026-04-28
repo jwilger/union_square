@@ -39,7 +39,7 @@ fn test_new_feature() {
 
 **Run the test to see it fail:**
 ```bash
-cargo test test_new_feature
+just test -- test_new_feature
 ```
 
 **Verify it fails for the RIGHT reason:**
@@ -59,7 +59,7 @@ fn function_that_does_not_exist_yet() -> i32 {
 
 **Run the test again:**
 ```bash
-cargo test test_new_feature
+just test -- test_new_feature
 ```
 
 **Rules:**
@@ -80,7 +80,7 @@ fn function_that_does_not_exist_yet() -> i32 {
 
 **Run tests after EACH change:**
 ```bash
-cargo test
+just test
 ```
 
 **Safe refactoring includes:**
@@ -202,7 +202,7 @@ git add src/proxy/middleware_tests.rs
 git commit -m "test(middleware): add failing test for request ID generation"
 
 # 3. Run test to verify failure
-cargo test test_request_id_generation
+just test -- test_request_id_generation
 # Verify it fails as expected
 
 # 4. Implement minimal solution
