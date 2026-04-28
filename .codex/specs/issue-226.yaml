@@ -1,0 +1,38 @@
+issue: 226
+goal: Stabilize Codex workflow smoke tests and review guidance so active issue delivery does not require manual workarounds.
+examples:
+  - id: hooks-preserve-active-ledger
+    name: hook smoke tests preserve an active issue ledger
+    given:
+      - an active Codex issue ledger already exists under .codex/state
+      - hook smoke tests need their own temporary issue ledger
+    when:
+      - the hook smoke tests run
+    then:
+      - the smoke tests pass
+      - the original active issue ledger is restored
+      - temporary smoke-test state is removed
+  - id: review-agents-use-narrow-context
+    name: review guidance avoids stale context leakage
+    given:
+      - a contributor needs architecture, design, or test coverage review
+      - prior conversation context may contain unrelated tasks
+    when:
+      - the contributor invokes review agents
+    then:
+      - the guidance directs reviewers to use current repository diff context
+      - the guidance avoids inheriting unrelated full conversation history by default
+acceptance_criteria:
+  - .codex/hooks/test-hooks.sh can run while .codex/state contains an active issue ledger.
+  - The hook smoke test restores any pre-existing .codex/state and .codex/specs/issue-217.yaml content.
+  - just test-hooks passes during an active issue workflow.
+  - Review guidance documents narrow current-diff review invocation for expert agents.
+non_goals:
+  - Changing Codex runtime context management.
+  - Changing GitHub branch protection rules.
+  - Refactoring the whole local workflow harness.
+architecture_impacts:
+  - none
+test_trace_ids:
+  - hooks-preserve-active-ledger:.codex/hooks/test-hooks.sh
+  - review-agents-use-narrow-context:.agents/skills/feature-delivery/SKILL.md
