@@ -15,7 +15,7 @@ fmt-check:
     cargo fmt --manifest-path tools/us-test-adversary/Cargo.toml -- --check
 
 clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 check:
     cargo check --all-targets
@@ -71,6 +71,12 @@ ast-grep:
       && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/)' || true)" \
       && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
 
+ast-grep-branch:
+    base_ref="${US_AST_GREP_BASE_REF:-${US_FITNESS_BASE_REF:-origin/main}}" \
+      && if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then files="$(git diff --name-only --diff-filter=ACMR "$base_ref"...HEAD)"; else files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)"; fi \
+      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/)' || true)" \
+      && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
+
 bench-quick:
     cargo test --test benchmark_validation
     cargo bench --bench proxy_performance -- --quick --noplot
@@ -90,8 +96,8 @@ agent *ARGS:
 db-up:
     docker compose up -d postgres postgres-test
 
-ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep fitness
+ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep-branch fitness
 
-ci-harness: check-tools clippy-tools test-tools test-hooks legacy-harness-check fitness
+ci-harness: check-tools clippy-tools test-tools test-hooks legacy-harness-check ast-grep-branch fitness
 
 ci-full: ci-rust audit deny build build-release bench-quick

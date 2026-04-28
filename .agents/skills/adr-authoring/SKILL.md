@@ -4,6 +4,8 @@ description: Draft architecture decision records while keeping current guidance 
 license: MIT
 ---
 
+# ADR Authoring
+
 Use this skill when a change introduces or revises a significant architecture decision.
 
 Rules:

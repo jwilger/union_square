@@ -67,26 +67,26 @@ impl BehaviorSpec {
         }
         require_non_empty("goal", &self.goal, &mut errors);
         require_non_empty_list("examples", &self.examples, &mut errors);
-        require_non_empty_list(
+        require_non_blank_list(
             "acceptance_criteria",
             &self.acceptance_criteria,
             &mut errors,
         );
-        require_non_empty_list("non_goals", &self.non_goals, &mut errors);
-        require_non_empty_list(
+        require_non_blank_list("non_goals", &self.non_goals, &mut errors);
+        require_non_blank_list(
             "architecture_impacts",
             &self.architecture_impacts,
             &mut errors,
         );
-        require_non_empty_list("test_trace_ids", &self.test_trace_ids, &mut errors);
+        require_non_blank_list("test_trace_ids", &self.test_trace_ids, &mut errors);
 
         let mut example_ids = BTreeSet::new();
         for example in &self.examples {
             require_non_empty("examples[].id", &example.id, &mut errors);
             require_non_empty("examples[].name", &example.name, &mut errors);
-            require_non_empty_list("examples[].given", &example.given, &mut errors);
-            require_non_empty_list("examples[].when", &example.when, &mut errors);
-            require_non_empty_list("examples[].then", &example.then, &mut errors);
+            require_non_blank_list("examples[].given", &example.given, &mut errors);
+            require_non_blank_list("examples[].when", &example.when, &mut errors);
+            require_non_blank_list("examples[].then", &example.then, &mut errors);
             if !example.id.trim().is_empty() && !example_ids.insert(example.id.as_str()) {
                 errors.push(format!("duplicate example id `{}`", example.id));
             }
@@ -134,6 +134,18 @@ fn require_non_empty_list<T>(field: &str, value: &[T], errors: &mut Vec<String>)
     }
 }
 
+fn require_non_blank_list(field: &str, value: &[String], errors: &mut Vec<String>) {
+    if value.is_empty() {
+        errors.push(format!("{field} must not be empty"));
+        return;
+    }
+    for (index, entry) in value.iter().enumerate() {
+        if entry.trim().is_empty() {
+            errors.push(format!("{field}[{index}] must not be blank"));
+        }
+    }
+}
+
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
     args.windows(2)
         .find(|pair| pair[0] == flag)
@@ -159,5 +171,14 @@ mod tests {
         assert!(error.contains("goal must not be empty"));
         assert!(error.contains("examples[].then must not be empty"));
         assert!(error.contains("references unknown example id"));
+    }
+
+    #[test]
+    fn blank_list_entries_are_rejected() {
+        let fixture = include_str!("../fixtures/blank-list-entry.yaml");
+        let error = validate_spec_text(fixture, 215).expect_err("blank list entry should fail");
+
+        assert!(error.contains("acceptance_criteria[0] must not be blank"));
+        assert!(error.contains("examples[].given[0] must not be blank"));
     }
 }

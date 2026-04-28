@@ -31,6 +31,7 @@
             rustToolchain
             lefthook
             just
+            gh
             nodejs_22
             bun
             glow

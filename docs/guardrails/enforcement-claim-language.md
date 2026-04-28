@@ -35,4 +35,4 @@ Precise language makes rules actionable and reviewable. When a rule says "MUST N
 ## Enforcement
 
 - Self-enforcing through code review
-- Rules in `docs/guardrails/` must follow this convention
+- Rules in `docs/guardrails/` MUST follow this convention

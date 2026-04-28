@@ -18,7 +18,10 @@ The Codex-only migration is tracked under parent issue #210.
 | #220 | ci: integrate Codex harness checks and CodeRabbit loop | #221 |
 | #221 | cleanup: remove legacy OpenCode and Claude harness | none |
 
-Relationships were created with `gh issue-ext sub add` and `gh issue-ext blocking add`.
+Relationships were created with GitHub's parent/child and blocking issue
+relationships. Local issue branches should use the documented `gh issue develop`
+workflow from `CONTRIBUTING.md`; `gh issue-ext` was only used where available
+for relationship setup.
 
 ## Operating Model
 

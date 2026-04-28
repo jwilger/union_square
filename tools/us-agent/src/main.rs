@@ -30,36 +30,78 @@ fn main() {
 fn run() -> Result<(), String> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     match args.first().map(String::as_str) {
-        Some("start-issue") => write_state(required_arg(&args, 1)?, "issue_selected", "started"),
-        Some("record-branch") => transition(required_arg(&args, 1)?, "branch_created"),
-        Some("record-spec") => transition(required_arg(&args, 1)?, "behavior_spec_written"),
-        Some("record-test-list") => transition(required_arg(&args, 1)?, "test_list_written"),
-        Some("record-red") => transition(required_arg(&args, 1)?, "red_test_observed"),
-        Some("record-green") => transition(required_arg(&args, 1)?, "green_observed"),
-        Some("record-test-adversary") => {
-            transition(required_arg(&args, 1)?, "test_adversary_passed")
-        }
-        Some("record-fitness") => transition(required_arg(&args, 1)?, "fitness_passed"),
-        Some("record-refactor") => transition(required_arg(&args, 1)?, "refactor_reviewed"),
-        Some("record-review") => transition(required_arg(&args, 1)?, "expert_review_done"),
-        Some("ready-to-commit") => transition(required_arg(&args, 1)?, "commit_ready"),
-        Some("ready-to-pr") => transition(required_arg(&args, 1)?, "pr_ready"),
+        Some("start-issue") => write_state(
+            &required_issue_arg(&args, 1)?,
+            "issue_selected",
+            "IssueSelected",
+        ),
+        Some("record-branch") => transition(
+            &required_issue_arg(&args, 1)?,
+            "branch_created",
+            "BranchCreated",
+        ),
+        Some("record-spec") => transition(
+            &required_issue_arg(&args, 1)?,
+            "behavior_spec_written",
+            "BehaviorSpecWritten",
+        ),
+        Some("record-test-list") => transition(
+            &required_issue_arg(&args, 1)?,
+            "test_list_written",
+            "TestListWritten",
+        ),
+        Some("record-red") => transition(
+            &required_issue_arg(&args, 1)?,
+            "red_test_observed",
+            "RedTestObserved",
+        ),
+        Some("record-green") => transition(
+            &required_issue_arg(&args, 1)?,
+            "green_observed",
+            "GreenObserved",
+        ),
+        Some("record-test-adversary") => transition(
+            &required_issue_arg(&args, 1)?,
+            "test_adversary_passed",
+            "TestAdversaryPassed",
+        ),
+        Some("record-fitness") => transition(
+            &required_issue_arg(&args, 1)?,
+            "fitness_passed",
+            "FitnessPassed",
+        ),
+        Some("record-refactor") => transition(
+            &required_issue_arg(&args, 1)?,
+            "refactor_reviewed",
+            "RefactorReviewed",
+        ),
+        Some("record-review") => transition(
+            &required_issue_arg(&args, 1)?,
+            "expert_review_done",
+            "ExpertReviewCompleted",
+        ),
+        Some("ready-to-commit") => transition(
+            &required_issue_arg(&args, 1)?,
+            "commit_ready",
+            "CommitReady",
+        ),
+        Some("ready-to-pr") => transition(&required_issue_arg(&args, 1)?, "pr_ready", "PrReady"),
         Some("status") => status(args.get(1).map(String::as_str)),
         Some("require") => require_state(required_arg(&args, 1)?),
-        Some("export-pr-summary") => export_summary(required_arg(&args, 1)?),
+        Some("export-pr-summary") => export_summary(&required_issue_arg(&args, 1)?),
         _ => Err(usage()),
     }
 }
 
-fn transition(issue: &str, next: &str) -> Result<(), String> {
+fn transition(issue: &str, next: &str, event: &str) -> Result<(), String> {
     let current = read_state(issue)?;
     validate_transition(issue, &current, next)?;
-    write_state(issue, next, "transition")
+    write_state(issue, next, event)
 }
 
 fn status(issue: Option<&str>) -> Result<(), String> {
     let issue = match issue {
-        Some(issue) => issue.to_string(),
+        Some(issue) => validate_issue_id(issue)?,
         None => active_issue()?.0,
     };
     println!(
@@ -131,6 +173,7 @@ fn active_issue() -> Result<(String, String), String> {
     let dir = Path::new(".codex/state");
     let entries =
         fs::read_dir(dir).map_err(|error| format!("no active us-agent ledger: {error}"))?;
+    let mut candidates = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
@@ -142,10 +185,16 @@ fn active_issue() -> Result<(String, String), String> {
             parse_json_string_field(&text, "issue"),
             parse_json_string_field(&text, "state"),
         ) {
-            return Ok((issue, state));
+            let issue = validate_issue_id(&issue)?;
+            let updated_at = parse_json_u64_field(&text, "updated_at_unix").unwrap_or(0);
+            candidates.push((updated_at, issue, state));
         }
     }
-    Err("no active us-agent ledger found".to_string())
+    candidates
+        .into_iter()
+        .max_by_key(|(updated_at, _, _)| *updated_at)
+        .map(|(_, issue, state)| (issue, state))
+        .ok_or_else(|| "no active us-agent ledger found".to_string())
 }
 
 fn ledger_path(issue: &str) -> PathBuf {
@@ -166,8 +215,30 @@ fn parse_json_string_field(text: &str, field: &str) -> Option<String> {
     Some(value.trim_matches('"').to_string())
 }
 
+fn parse_json_u64_field(text: &str, field: &str) -> Option<u64> {
+    let needle = format!("\"{field}\"");
+    let line = text.lines().find(|line| line.contains(&needle))?;
+    line.split_once(':')?
+        .1
+        .trim()
+        .trim_end_matches(',')
+        .parse()
+        .ok()
+}
+
 fn required_arg(args: &[String], index: usize) -> Result<&str, String> {
     args.get(index).map(String::as_str).ok_or_else(usage)
+}
+
+fn required_issue_arg(args: &[String], index: usize) -> Result<String, String> {
+    validate_issue_id(required_arg(args, index)?)
+}
+
+fn validate_issue_id(issue: &str) -> Result<String, String> {
+    let parsed = issue
+        .parse::<u64>()
+        .map_err(|error| format!("invalid issue number `{issue}`: {error}"))?;
+    Ok(parsed.to_string())
 }
 
 fn usage() -> String {
@@ -176,7 +247,9 @@ fn usage() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{export_summary_text, read_state_from_text, validate_transition};
+    use super::{
+        export_summary_text, read_state_from_text, validate_issue_id, validate_transition,
+    };
 
     #[test]
     fn fixture_ledger_allows_next_transition() {
@@ -205,5 +278,12 @@ mod tests {
         assert!(summary.contains("State: `pr_ready`"));
         assert!(summary.contains(".codex/specs/issue-216.yaml"));
         assert!(summary.contains(".codex/state/issue-216.json"));
+    }
+
+    #[test]
+    fn issue_ids_must_be_numeric_before_paths_are_built() {
+        let error = validate_issue_id("../../tmp/x").expect_err("path traversal is rejected");
+
+        assert!(error.contains("invalid issue number"));
     }
 }

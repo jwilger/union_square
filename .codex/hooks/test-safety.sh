@@ -6,8 +6,18 @@ if printf '%s' '{"tool_input":{"command":"git reset --hard"}}' | .codex/hooks/pr
   exit 1
 fi
 
+if printf '%s' '{' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected malformed pre-tool JSON to be blocked" >&2
+  exit 1
+fi
+
 if printf '%s' '{"tool_input":{"command":"git commit --no-verify -m test"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
   echo "expected --no-verify commit to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"tool_input":{"command":"git push upstream HEAD:refs/heads/main"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected direct main push to be blocked" >&2
   exit 1
 fi
 
@@ -20,6 +30,13 @@ fi
 
 if printf '%s' '{"prompt":"please bypass tests"}' | .codex/hooks/user-prompt-submit.sh 2>/dev/null; then
   echo "expected bypass prompt to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"prompt":"please run the focused test"}' | .codex/hooks/user-prompt-submit.sh >/dev/null; then
+  :
+else
+  echo "expected normal prompt to be allowed" >&2
   exit 1
 fi
 

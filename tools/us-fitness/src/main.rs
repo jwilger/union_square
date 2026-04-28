@@ -28,7 +28,7 @@ fn run() -> Result<(), String> {
     let repo = flag_value(&args, "--repo").unwrap_or_else(|| ".".to_string());
     let repo_path = Path::new(&repo);
 
-    let changed = changed_files()?;
+    let changed = changed_files(repo_path)?;
     let mut findings = Vec::new();
     for file in changed {
         if !file.starts_with("src/domain/") || !file.ends_with(".rs") {
@@ -55,7 +55,7 @@ fn run() -> Result<(), String> {
 fn domain_dependency_findings(file: &str, text: &str) -> Vec<String> {
     let mut findings = Vec::new();
     for pattern in FORBIDDEN_DOMAIN_PATTERNS {
-        if text.contains(pattern) {
+        if contains_forbidden_pattern(text, pattern) {
             findings.push(format!(
                 "{file}: forbidden domain dependency pattern `{pattern}`"
             ));
@@ -64,27 +64,69 @@ fn domain_dependency_findings(file: &str, text: &str) -> Vec<String> {
     findings
 }
 
-fn changed_files() -> Result<Vec<String>, String> {
+fn contains_forbidden_pattern(text: &str, pattern: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim_start();
+        if let Some(import) = pattern.strip_prefix("use ") {
+            line == format!("use {import};") || line.starts_with(&format!("use {import}::"))
+        } else if let Some(module) = pattern.strip_prefix("crate::") {
+            line.contains(&format!("crate::{module};"))
+                || line.contains(&format!("crate::{module}::"))
+                || line.contains(&format!("crate::{module}("))
+        } else {
+            line.contains(pattern)
+        }
+    })
+}
+
+fn changed_files(repo_path: &Path) -> Result<Vec<String>, String> {
+    if let Ok(files) = env::var("US_FITNESS_CHANGED_FILES") {
+        return Ok(unique_non_empty_lines(&files));
+    }
+
+    if let Ok(base_ref) = env::var("US_FITNESS_BASE_REF")
+        .or_else(|_| env::var("GITHUB_BASE_REF").map(|base_ref| format!("origin/{base_ref}")))
+    {
+        let compare_ref = format!("{base_ref}...HEAD");
+        return git_changed_files(
+            repo_path,
+            &["diff", "--name-only", "--diff-filter=ACMR", &compare_ref],
+        );
+    }
+
     let mut files = Vec::new();
     for args in [
         &["diff", "--name-only", "--diff-filter=ACMR"][..],
         &["diff", "--cached", "--name-only", "--diff-filter=ACMR"][..],
     ] {
-        let output = Command::new("git")
-            .args(args)
-            .output()
-            .map_err(|error| format!("failed to run git diff: {error}"))?;
-        if !output.status.success() {
-            return Err("git diff failed while collecting changed files".to_string());
-        }
-        let stdout = String::from_utf8(output.stdout).map_err(|error| error.to_string())?;
-        for line in stdout.lines() {
-            if !line.trim().is_empty() && !files.iter().any(|file| file == line) {
-                files.push(line.to_string());
-            }
-        }
+        files.extend(git_changed_files(repo_path, args)?);
+        files.sort();
+        files.dedup();
     }
     Ok(files)
+}
+
+fn git_changed_files(repo_path: &Path, args: &[&str]) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| format!("failed to run git diff: {error}"))?;
+    if !output.status.success() {
+        return Err("git diff failed while collecting changed files".to_string());
+    }
+    let stdout = String::from_utf8(output.stdout).map_err(|error| error.to_string())?;
+    Ok(unique_non_empty_lines(&stdout))
+}
+
+fn unique_non_empty_lines(text: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if !files.iter().any(|file| file == line) {
+            files.push(line.to_string());
+        }
+    }
+    files
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -112,5 +154,12 @@ mod tests {
         assert!(findings
             .iter()
             .any(|finding| finding.contains("forbidden domain dependency pattern `use axum`")));
+    }
+
+    #[test]
+    fn dependency_patterns_do_not_match_prefix_collisions() {
+        let text = "use http_body::Body;\nfn f() { crate::proxy_utils::x(); }";
+
+        assert!(domain_dependency_findings("src/domain/clean.rs", text).is_empty());
     }
 }

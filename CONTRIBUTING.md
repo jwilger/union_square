@@ -20,8 +20,15 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 - Rust 1.75+ (check with `rustc --version`)
 - PostgreSQL 14+
 - Just command runner
+- GitHub CLI (`gh`) for issue branches and PR workflow
 - Docker and Docker Compose (for PostgreSQL databases)
 - Nix (optional, for development environment)
+
+Codex issue branches should use `gh issue develop <issue-number>` unless a
+documented repository-specific GitHub CLI extension is available. GitHub issue
+relationships created during planning may require GitHub's relationship UI or a
+local `gh issue-ext` extension; the standard branch workflow does not require
+that extension.
 
 ### Initial Setup
 

@@ -59,6 +59,32 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "push", ["main", "master"]],
+    decision = "forbidden",
+    justification = "Never push directly to main or master, even when Git infers the remote.",
+    match = [
+        "git push main",
+        "git push master",
+    ],
+    not_match = [
+        "git push codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "upstream", ["main", "master"]],
+    decision = "forbidden",
+    justification = "Never push directly to main or master on any remote. Use an issue branch and PR.",
+    match = [
+        "git push upstream main",
+        "git push upstream master",
+    ],
+    not_match = [
+        "git push upstream codex-issue-123",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push", ["-u", "--set-upstream"], "origin", ["main", "master"]],
     decision = "forbidden",
     justification = "Never create or update main or master directly. Use an issue branch and PR.",
@@ -86,6 +112,19 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "push", "origin", ["HEAD:refs/heads/main", "HEAD:refs/heads/master"]],
+    decision = "forbidden",
+    justification = "Never push HEAD directly to refs/heads/main or refs/heads/master. Use an issue branch and PR.",
+    match = [
+        "git push origin HEAD:refs/heads/main",
+        "git push origin HEAD:refs/heads/master",
+    ],
+    not_match = [
+        "git push origin HEAD:refs/heads/codex-issue-123",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push", "--force"],
     decision = "forbidden",
     justification = "Force pushes can overwrite remote work. Use a normal push or surface the blocker.",
@@ -98,11 +137,35 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "push", "origin", "*", "--force"],
+    decision = "forbidden",
+    justification = "Force pushes can overwrite remote work regardless of flag position.",
+    match = [
+        "git push origin feature --force",
+    ],
+    not_match = [
+        "git push origin feature",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push", "--force-with-lease"],
     decision = "forbidden",
     justification = "Force pushes rewrite remote history. Use a normal push or ask before rewriting history.",
     match = [
         "git push --force-with-lease origin feature",
+    ],
+    not_match = [
+        "git push origin feature",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "*", "--force-with-lease"],
+    decision = "forbidden",
+    justification = "Force pushes rewrite remote history regardless of flag position.",
+    match = [
+        "git push origin feature --force-with-lease",
     ],
     not_match = [
         "git push origin feature",

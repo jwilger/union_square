@@ -7,7 +7,7 @@ license: MIT
 Use this skill for behavior-changing implementation work.
 
 Workflow:
-- Read `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, and relevant `docs/guardrails/*.md`.
+- Read `AGENTS.md`, `docs/architecture/ARCHITECTURE.md`, and relevant docs under `docs/guardrails/`.
 - Create or validate `.codex/specs/issue-<number>.yaml`.
 - Use `just agent` to maintain the issue ledger.
 - Write one red outside-in test at a time.

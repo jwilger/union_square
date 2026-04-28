@@ -9,13 +9,13 @@ This file is the primary Codex instruction file for Union Square.
 3. Never use destructive git commands such as `git reset --hard`, `git clean`, or `git rebase` unless the user explicitly asks for that exact operation.
 4. Track all implementation work through GitHub issues.
 5. Use strict outside-in BDD/TDD for behavior changes.
-6. Follow `docs/architecture/ARCHITECTURE.md` and `docs/guardrails/*.md`.
+6. Follow `docs/architecture/ARCHITECTURE.md` and `docs/guardrails/`.
 7. Stop and surface the blocker instead of bypassing tests, hooks, architecture checks, or review feedback.
 
 ## Standard Workflow
 
 1. Start from an assigned GitHub issue.
-2. Create or checkout an issue branch using `gh issue develop` or `gh issue-ext branch create`.
+2. Create or checkout an issue branch using `gh issue develop`.
 3. Write a behavior spec with `just spec ISSUE=<number>` before tests or production edits.
 4. Create the `us-agent` ledger with `just agent start-issue <number>`.
 5. Record branch creation with `just agent record-branch <number>`.
@@ -36,8 +36,9 @@ This file is the primary Codex instruction file for Union Square.
 ## Architecture Source Of Truth
 
 - Current architecture: `docs/architecture/ARCHITECTURE.md`
-- Guardrails: `docs/guardrails/*.md`
-- Historical rationale: `docs/adr/*.md` and `adr/*.md`
+- Guardrails: `docs/guardrails/`
+- Historical rationale: active ADRs live in `adr/`. Use `docs/adr/template.md`
+  when creating new ADRs under `adr/`.
 
 ADRs explain why decisions were made. They are not the active implementation manual. If an ADR changes current architecture, update `docs/architecture/ARCHITECTURE.md` in the same PR.
 
@@ -52,10 +53,13 @@ Use `just` as the canonical local command surface:
 - `just test`
 - `just test-doc`
 - `just ast-grep`
+- `just ast-grep-branch`
 - `just spec ISSUE=<number>`
 - `just test-adversary ISSUE=<number>`
 - `just fitness`
+- `just ci-harness`
 - `just ci-rust`
+- `just ci-full`
 - `just db-up`
 
 Use `cargo add` for Rust dependencies. Keep EventCore crate versions aligned.

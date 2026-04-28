@@ -1,4 +1,8 @@
-use std::{env, fs, path::Path, process};
+use std::{
+    env, fs,
+    path::{Component, Path},
+    process,
+};
 
 const GREEN_OR_LATER_STATES: &[&str] = &[
     "green_observed",
@@ -25,7 +29,8 @@ fn run() -> Result<(), String> {
         return Err("usage: us-test-adversary check --issue <number>".to_string());
     }
     let issue = flag_value(&args, "--issue")
-        .ok_or_else(|| "missing required --issue <number>".to_string())?;
+        .ok_or_else(|| "missing required --issue <number>".to_string())
+        .and_then(|issue| validate_issue_id(&issue))?;
 
     run_adversary_check(Path::new("."), &issue)?;
     println!("targeted test adversary passed for issue {issue}");
@@ -72,6 +77,9 @@ fn extract_trace_entries(spec: &str) -> Result<Vec<String>, String> {
             in_trace_ids = true;
             continue;
         }
+        if in_trace_ids && trimmed.starts_with('#') {
+            continue;
+        }
         if in_trace_ids && !trimmed.starts_with('-') && !trimmed.is_empty() {
             break;
         }
@@ -94,6 +102,7 @@ fn validate_trace(root: &Path, trace: &str) -> Result<(), String> {
     let test_path = test_ref
         .split_once("::")
         .map_or(test_ref, |(path, _test_name)| path);
+    reject_escaping_path(test_path)?;
     let full_path = root.join(test_path);
     let test_text = fs::read_to_string(&full_path).map_err(|error| {
         format!(
@@ -118,11 +127,35 @@ fn validate_trace(root: &Path, trace: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn reject_escaping_path(test_path: &str) -> Result<(), String> {
+    let path = Path::new(test_path);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(format!(
+            "trace test path `{test_path}` must stay inside the repository"
+        ));
+    }
+    Ok(())
+}
+
 fn parse_json_string_field(text: &str, field: &str) -> Option<String> {
     let needle = format!("\"{field}\"");
     let line = text.lines().find(|line| line.contains(&needle))?;
     let value = line.split_once(':')?.1.trim().trim_end_matches(',').trim();
     Some(value.trim_matches('"').to_string())
+}
+
+fn validate_issue_id(issue: &str) -> Result<String, String> {
+    let parsed = issue
+        .parse::<u64>()
+        .map_err(|error| format!("invalid issue number `{issue}`: {error}"))?;
+    Ok(parsed.to_string())
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -133,7 +166,7 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::run_adversary_check;
+    use super::{extract_trace_entries, run_adversary_check, validate_issue_id, validate_trace};
     use std::path::Path;
 
     #[test]
@@ -148,5 +181,30 @@ mod tests {
             .expect_err("weak fixture should fail");
 
         assert!(error.contains("weak tests are not accepted"));
+    }
+
+    #[test]
+    fn issue_ids_must_be_numeric_before_paths_are_built() {
+        let error = validate_issue_id("../../tmp/x").expect_err("path traversal is rejected");
+
+        assert!(error.contains("invalid issue number"));
+    }
+
+    #[test]
+    fn trace_parser_ignores_comments_inside_trace_list() {
+        let spec =
+            "test_trace_ids:\n  # comment\n  - first:tests/a.rs::one\n  - second:tests/b.rs::two\n";
+
+        let traces = extract_trace_entries(spec).expect("comments should not stop parsing");
+
+        assert_eq!(traces.len(), 2);
+    }
+
+    #[test]
+    fn traced_test_paths_must_not_escape_repository() {
+        let error = validate_trace(Path::new("."), "example:../outside.rs::test")
+            .expect_err("path traversal is rejected");
+
+        assert!(error.contains("must stay inside the repository"));
     }
 }
