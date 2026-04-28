@@ -44,6 +44,12 @@ test *ARGS:
 test-doc:
     cargo test --doc
 
+test-tools:
+    cargo test --manifest-path tools/us-spec/Cargo.toml
+    cargo test --manifest-path tools/us-agent/Cargo.toml
+    cargo test --manifest-path tools/us-fitness/Cargo.toml
+    cargo test --manifest-path tools/us-test-adversary/Cargo.toml
+
 test-hooks:
     .codex/hooks/test-hooks.sh
 
@@ -80,6 +86,8 @@ agent *ARGS:
 db-up:
     docker compose up -d postgres postgres-test
 
-ci-rust: fmt-check clippy clippy-tools check check-tools test test-doc ast-grep fitness
+ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep fitness
+
+ci-harness: check-tools clippy-tools test-tools test-hooks fitness
 
 ci-full: ci-rust audit deny build build-release bench-quick

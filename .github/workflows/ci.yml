@@ -19,6 +19,7 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       deps: ${{ steps.filter.outputs.deps }}
+      harness: ${{ steps.filter.outputs.harness }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -42,6 +43,47 @@ jobs:
             - 'Cargo.toml'
             - 'Cargo.lock'
             - '.github/workflows/ci.yml'
+          harness:
+            - 'AGENTS.md'
+            - 'Justfile'
+            - '.agents/**'
+            - '.codex/**'
+            - 'docs/codex-migration.md'
+            - 'docs/guardrails/**'
+            - 'tools/**'
+            - '.coderabbit.yaml'
+            - 'sgconfig.yml'
+            - 'lefthook.yml'
+
+  codex-harness:
+    name: Codex Harness
+    needs: changes
+    if: needs.changes.outputs.harness == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-codex-harness-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-codex-harness-
+
+    - name: Run Codex harness checks
+      run: just ci-harness
 
   test:
     name: Test Suite
@@ -429,7 +471,7 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [changes, test, security, coverage, build, cross-platform, performance-check, performance-benchmarks]
+    needs: [changes, codex-harness, test, security, coverage, build, cross-platform, performance-check, performance-benchmarks]
     if: always()
     runs-on: ubuntu-latest
     steps:
