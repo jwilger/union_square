@@ -195,6 +195,9 @@ nix develop
 
 ### Common Commands
 
+The full Codex command surface is documented in
+[docs/codex-command-surface.md](docs/codex-command-surface.md).
+
 ```bash
 # Format code
 just fmt
