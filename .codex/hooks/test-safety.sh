@@ -36,6 +36,13 @@ if printf '%s' '{"tool_input":{"command":"git push fork HEAD:refs/heads/main"}}'
   exit 1
 fi
 
+if printf '%s' '{"tool_input":{"command":"git push origin feature/main"}}' | .codex/hooks/pre-tool-use.sh >/dev/null; then
+  :
+else
+  echo "expected feature/main branch push to be allowed" >&2
+  exit 1
+fi
+
 if printf '%s' '{"tool_input":{"command":"git push origin feature --force"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
   echo "expected force push to be blocked" >&2
   exit 1
@@ -106,6 +113,16 @@ if printf '%s' '{"prompt":"please run the focused test"}' | .codex/hooks/user-pr
   :
 else
   echo "expected normal prompt to be allowed" >&2
+  exit 1
+fi
+
+if printf '%s' '{"tool_input":{"path":".env.local"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected .env.local path to be blocked" >&2
+  exit 1
+fi
+
+if printf '%s' '{"tool_input":{"path":"config/.env.production"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
+  echo "expected .env.production path to be blocked" >&2
   exit 1
 fi
 

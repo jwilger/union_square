@@ -35,6 +35,14 @@ Workflow commands:
 - `just test-adversary ISSUE=<number>`
 - `just agent start-issue <number>`
 - `just agent record-branch <number>`
+- `just agent record-spec <number>`
+- `just agent record-test-list <number>`
+- `just agent record-red <number>`
+- `just agent record-green <number>`
+- `just agent record-test-adversary <number>`
+- `just agent record-fitness <number>`
+- `just agent record-refactor <number>`
+- `just agent record-review <number>`
 - `just agent ready-to-commit <number>`
 - `just agent ready-to-pr <number>`
 

@@ -10,7 +10,7 @@ fi
 command="$(printf '%s' "$input" | jq -r '.tool_input.command // .tool_input.cmd // .command // empty')"
 path="$(printf '%s' "$input" | jq -r '.tool_input.path // .tool_input.file_path // .tool_input.filePath // empty')"
 
-if [[ -n "$path" ]] && [[ "$path" =~ (^|/)(\\.env|.*credentials.*|.*secret.*|.*token.*|id_rsa|.*\\.pem|.*\\.key)$ ]]; then
+if [[ -n "$path" ]] && [[ "$path" =~ (^|/)(\.env(\..*)?|.*credentials.*|.*secret.*|.*token.*|id_rsa|.*\.pem|.*\.key)$ ]]; then
   echo "Access to potentially sensitive file is blocked: $path" >&2
   exit 1
 fi
@@ -83,12 +83,27 @@ docker\ ps*|docker\ compose\ ps*|docker\ logs*|docker\ compose\ logs*)
   fi
 }
 
+protected_branch_push() {
+  [[ "$policy_command" =~ ^[[:space:]]*git[[:space:]]+push[[:space:]]+ ]] || return 1
+  local word
+  for word in $policy_command; do
+    case "$word" in
+      main|master|refs/heads/main|refs/heads/master|\
+HEAD:main|HEAD:master|HEAD:refs/heads/main|HEAD:refs/heads/master|\
+*:main|*:master|*:refs/heads/main|*:refs/heads/master)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 if [[ "$policy_command" =~ git[[:space:]]+commit.*--no-verify ]]; then
   echo "The --no-verify flag is forbidden. Fix hooks or ask for help." >&2
   exit 1
 fi
 
-if [[ "$policy_command" =~ git[[:space:]]+push.*(^|[[:space:]:/])(main|master)($|[[:space:]]) ]]; then
+if protected_branch_push; then
   echo "Direct pushes to main/master are forbidden. Use a PR." >&2
   exit 1
 fi
