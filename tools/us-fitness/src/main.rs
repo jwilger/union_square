@@ -25,6 +25,8 @@ fn run() -> Result<(), String> {
     if args.first().map(String::as_str) != Some("check") {
         return Err("usage: us-fitness check --repo <path>".to_string());
     }
+    let repo = flag_value(&args, "--repo").unwrap_or_else(|| ".".to_string());
+    let repo_path = Path::new(&repo);
 
     let changed = changed_files()?;
     let mut findings = Vec::new();
@@ -32,16 +34,14 @@ fn run() -> Result<(), String> {
         if !file.starts_with("src/domain/") || !file.ends_with(".rs") {
             continue;
         }
-        let path = Path::new(&file);
-        let text = fs::read_to_string(path)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        for pattern in FORBIDDEN_DOMAIN_PATTERNS {
-            if text.contains(pattern) {
-                findings.push(format!(
-                    "{file}: forbidden domain dependency pattern `{pattern}`"
-                ));
-            }
-        }
+        let path = repo_path.join(&file);
+        let text = fs::read_to_string(path).map_err(|error| {
+            format!(
+                "failed to read {}: {error}",
+                repo_path.join(&file).display()
+            )
+        })?;
+        findings.extend(domain_dependency_findings(&file, &text));
     }
 
     if findings.is_empty() {
@@ -50,6 +50,18 @@ fn run() -> Result<(), String> {
     } else {
         Err(findings.join("\n"))
     }
+}
+
+fn domain_dependency_findings(file: &str, text: &str) -> Vec<String> {
+    let mut findings = Vec::new();
+    for pattern in FORBIDDEN_DOMAIN_PATTERNS {
+        if text.contains(pattern) {
+            findings.push(format!(
+                "{file}: forbidden domain dependency pattern `{pattern}`"
+            ));
+        }
+    }
+    findings
 }
 
 fn changed_files() -> Result<Vec<String>, String> {
@@ -73,4 +85,32 @@ fn changed_files() -> Result<Vec<String>, String> {
         }
     }
     Ok(files)
+}
+
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == flag)
+        .map(|pair| pair[1].clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::domain_dependency_findings;
+
+    #[test]
+    fn clean_domain_fixture_passes() {
+        let text = include_str!("../fixtures/clean-domain.rs");
+
+        assert!(domain_dependency_findings("src/domain/clean.rs", text).is_empty());
+    }
+
+    #[test]
+    fn violation_fixture_reports_forbidden_dependency() {
+        let text = include_str!("../fixtures/violating-domain.rs");
+        let findings = domain_dependency_findings("src/domain/violating.rs", text);
+
+        assert!(findings
+            .iter()
+            .any(|finding| finding.contains("forbidden domain dependency pattern `use axum`")));
+    }
 }
