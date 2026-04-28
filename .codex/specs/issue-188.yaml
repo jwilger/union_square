@@ -31,6 +31,14 @@ examples:
     then:
       - the workflow completes without changing workflow code
       - the substitute interpreter observes the same semantic effects
+  - id: event-count-boundary
+    name: session analysis event count rejects zero
+    given:
+      - session analysis reports a semantic count of loaded session events
+    when:
+      - the event count is constructed from zero
+    then:
+      - validation rejects the count before it enters workflow effects
 acceptance_criteria:
   - A minimal reusable effect, step, and trampoline abstraction exists under the application layer.
   - A representative non-hot-path session analysis workflow is expressed as pure steps and interpreted by a shell-provided interpreter.
@@ -48,4 +56,4 @@ test_trace_ids:
   - successful-session-analysis:tests/application_trampoline.rs::session_analysis_workflow_completes_through_interpreted_effects
   - interpreter-failure:tests/application_trampoline.rs::interpreter_failure_stops_the_trampoline
   - substitute-interpreter:tests/application_trampoline.rs::session_analysis_workflow_runs_with_substitute_interpreter
-  - successful-session-analysis:tests/application_trampoline.rs::session_event_count_enforces_positive_boundary
+  - event-count-boundary:tests/application_trampoline.rs::session_event_count_enforces_positive_boundary
