@@ -51,6 +51,7 @@ test-tools:
     cargo test --manifest-path tools/us-test-adversary/Cargo.toml
 
 test-hooks:
+    .codex/hooks/test-safety.sh
     .codex/hooks/test-hooks.sh
 
 coverage:
