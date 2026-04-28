@@ -1,7 +1,0 @@
-{
-  "name": "union-square-opencode-plugins",
-  "private": true,
-  "dependencies": {
-    "@opencode-ai/plugin": "latest"
-  }
-}

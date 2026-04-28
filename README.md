@@ -69,6 +69,7 @@ Union Square acts as a drop-in proxy between your applications and LLM providers
 
 - Rust 1.88+ (or use the Nix development shell which provides the exact version)
 - PostgreSQL 14+
+- Just command runner (or use the Nix development shell)
 - Docker (optional, for containerized deployment)
 - Nix (optional, but recommended for consistent development environment)
 
@@ -88,7 +89,7 @@ nix develop
 rustup update
 
 # Start PostgreSQL
-docker-compose up -d
+just db-up
 
 # Build the project
 cargo build --release
@@ -117,7 +118,7 @@ rustc --version  # Should show rustc 1.88.0
 
 # Run any cargo commands as usual
 cargo build
-cargo test
+just test
 cargo run
 ```
 
@@ -196,16 +197,16 @@ nix develop
 
 ```bash
 # Format code
-cargo fmt
+just fmt
 
 # Run lints
-cargo clippy --all-targets -- -D warnings
+just clippy
 
 # Run tests
-cargo test
+just test
 
 # Type check
-cargo check --all-targets
+just check
 ```
 
 ## License

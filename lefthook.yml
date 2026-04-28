@@ -5,23 +5,23 @@ pre-commit:
   parallel: true
   commands:
     cargo-fmt:
-      run: cargo fmt --all --
+      run: just fmt
       glob: "*.rs"
 
     cargo-clippy:
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: just clippy
       glob: "*.rs"
 
     cargo-check:
-      run: cargo check --all-targets
+      run: just check
       glob: "*.rs"
 
     cargo-test:
-      run: cargo test --workspace
+      run: just test
       glob: "*.rs"
 
     ast-grep:
-      run: ast-grep scan
+      run: just ast-grep
       glob: "*.rs"
 
     trailing-whitespace:
@@ -46,17 +46,17 @@ pre-push:
   parallel: true
   commands:
     cargo-fmt-check:
-      run: cargo fmt --all -- --check
+      run: just fmt-check
       glob: "*.rs"
 
     cargo-clippy:
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: just clippy
       glob: "*.rs"
 
     cargo-test:
-      run: cargo test --workspace
+      run: just test
       glob: "*.rs"
 
     ast-grep:
-      run: ast-grep scan
+      run: just ast-grep
       glob: "*.rs"

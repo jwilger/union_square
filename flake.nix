@@ -30,10 +30,12 @@
           buildInputs = with pkgs; [
             rustToolchain
             lefthook
+            just
             nodejs_22
             bun
             glow
             jq
+            ast-grep
             sqlx-cli
             postgresql
           ];

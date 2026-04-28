@@ -1,0 +1,252 @@
+# Union Square Codex execpolicy.
+#
+# This file is Starlark, not YAML. Codex loads `.rules` files from
+# `.codex/rules/` at startup and validates each rule's examples.
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Hard resets can discard user work. Inspect `git status` and ask before any destructive reset.",
+    match = [
+        "git reset --hard",
+        "git reset --hard HEAD~1",
+    ],
+    not_match = [
+        "git reset --soft HEAD~1",
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "forbidden",
+    justification = "`git clean` can delete untracked user work. Surface the cleanup need instead.",
+    match = [
+        "git clean -fd",
+        "git clean -xdf",
+    ],
+    not_match = [
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "rebase"],
+    decision = "forbidden",
+    justification = "Rebase rewrites history. Only run it when the user explicitly asks for that exact operation.",
+    match = [
+        "git rebase main",
+        "git rebase --interactive HEAD~3",
+    ],
+    not_match = [
+        "git merge main",
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", ["main", "master"]],
+    decision = "forbidden",
+    justification = "Never push directly to main or master. Push an issue branch and open a PR.",
+    match = [
+        "git push origin main",
+        "git push origin master",
+    ],
+    not_match = [
+        "git push origin codex-issue-123",
+        "git push origin HEAD:refs/heads/codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["-u", "--set-upstream"], "origin", ["main", "master"]],
+    decision = "forbidden",
+    justification = "Never create or update main or master directly. Use an issue branch and PR.",
+    match = [
+        "git push -u origin main",
+        "git push --set-upstream origin master",
+    ],
+    not_match = [
+        "git push -u origin codex-issue-123",
+        "git push --set-upstream origin codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", ["HEAD:main", "HEAD:master"]],
+    decision = "forbidden",
+    justification = "Never push HEAD directly to main or master. Use an issue branch and PR.",
+    match = [
+        "git push origin HEAD:main",
+        "git push origin HEAD:master",
+    ],
+    not_match = [
+        "git push origin HEAD:refs/heads/codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "Force pushes can overwrite remote work. Use a normal push or surface the blocker.",
+    match = [
+        "git push --force origin feature",
+    ],
+    not_match = [
+        "git push origin feature",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force-with-lease"],
+    decision = "forbidden",
+    justification = "Force pushes rewrite remote history. Use a normal push or ask before rewriting history.",
+    match = [
+        "git push --force-with-lease origin feature",
+    ],
+    not_match = [
+        "git push origin feature",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", "--no-verify"],
+    decision = "forbidden",
+    justification = "Never bypass commit hooks. Fix the hook failure or surface the blocker.",
+    match = [
+        "git commit --no-verify -m test",
+    ],
+    not_match = [
+        "git commit -m test",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "Do not merge PRs autonomously. Leave final merge control to a human after review and CI.",
+    match = [
+        "gh pr merge 210",
+        "gh pr merge --auto",
+    ],
+    not_match = [
+        "gh pr view 210",
+        "gh pr create --draft",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rm", "-rf", "/"],
+    decision = "forbidden",
+    justification = "Refuse broad filesystem deletion.",
+    match = [
+        "rm -rf /",
+    ],
+    not_match = [
+        "rm -rf target",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "`rg` is the preferred read-only code search tool.",
+    match = [
+        "rg EventCore",
+        "rg --files",
+    ],
+)
+
+prefix_rule(
+    pattern = ["ls"],
+    decision = "allow",
+    justification = "Directory listing is safe for local context gathering.",
+    match = [
+        "ls",
+        "ls .codex",
+    ],
+)
+
+prefix_rule(
+    pattern = ["pwd"],
+    decision = "allow",
+    justification = "Printing the working directory is safe for local context gathering.",
+    match = [
+        "pwd",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["status", "diff", "log", "show"]],
+    decision = "allow",
+    justification = "Read-only git inspection is safe for autonomous context gathering.",
+    match = [
+        "git status --short",
+        "git diff -- AGENTS.md",
+        "git log --oneline -5",
+        "git show HEAD --stat",
+    ],
+    not_match = [
+        "git reset --hard",
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue"],
+    decision = "allow",
+    justification = "Union Square tracks implementation work through GitHub issues.",
+    match = [
+        "gh issue view 210",
+        "gh issue edit 210 --body-file /tmp/body.md",
+        "gh issue develop 210 --checkout",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue-ext"],
+    decision = "allow",
+    justification = "The migration plan uses GitHub issue relationship metadata managed by gh issue-ext.",
+    match = [
+        "gh issue-ext show 210",
+        "gh issue-ext subissue add 210 211",
+        "gh issue-ext blocking add 212 211",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["view", "list", "status", "create", "edit", "comment", "ready", "diff", "checkout"]],
+    decision = "allow",
+    justification = "PR inspection and draft/update operations are needed for autonomous delivery; merging remains forbidden.",
+    match = [
+        "gh pr view 210",
+        "gh pr create --draft --fill",
+        "gh pr edit 210 --body-file /tmp/body.md",
+        "gh pr checkout 210",
+    ],
+    not_match = [
+        "gh pr merge 210",
+    ],
+)
+
+prefix_rule(
+    pattern = ["just"],
+    decision = "allow",
+    justification = "`just` is the canonical Union Square command surface and contains project gates.",
+    match = [
+        "just fmt-check",
+        "just fitness",
+        "just spec ISSUE=210",
+    ],
+)
+
+prefix_rule(
+    pattern = ["cargo"],
+    decision = "allow",
+    justification = "Cargo is required for Rust check, test, and dependency workflow.",
+    match = [
+        "cargo check",
+        "cargo test --workspace",
+        "cargo add serde",
+    ],
+)

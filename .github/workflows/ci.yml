@@ -72,6 +72,11 @@ jobs:
       with:
         components: rustfmt, clippy
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
@@ -83,23 +88,26 @@ jobs:
       run: cargo install cargo-nextest --locked
 
     - name: Check formatting
-      run: cargo fmt --all -- --check
+      run: just fmt-check
 
     - name: Run clippy
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: just clippy
 
     - name: Run tests with nextest
-      run: cargo nextest run --workspace
+      run: just test
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
     - name: Run doctests
-      run: cargo test --doc
+      run: just test-doc
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
     - name: Type check
-      run: cargo check --all-targets
+      run: just check
+
+    - name: Architecture fitness
+      run: just fitness
 
   security:
     name: Security Audit
@@ -114,6 +122,11 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
@@ -121,7 +134,7 @@ jobs:
       run: cargo install cargo-audit --locked
 
     - name: Run security audit
-      run: cargo audit
+      run: just audit
 
   coverage:
     name: Code Coverage
@@ -152,6 +165,11 @@ jobs:
       with:
         components: llvm-tools-preview
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
@@ -159,7 +177,7 @@ jobs:
       run: cargo install cargo-llvm-cov --locked
 
     - name: Generate code coverage
-      run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      run: just coverage
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
@@ -183,14 +201,19 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
     - name: Build debug
-      run: cargo build --workspace
+      run: just build
 
     - name: Build release
-      run: cargo build --workspace --release
+      run: just build-release
 
   cross-platform:
     name: Cross-platform Build
@@ -208,11 +231,16 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
     - name: Build
-      run: cargo build --workspace
+      run: just build
 
   performance-check:
     name: Performance Validation
@@ -227,14 +255,16 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
-    - name: Run performance validation tests
-      run: cargo test --test benchmark_validation
-
-    - name: Run quick benchmarks
-      run: cargo bench --bench proxy_performance -- --quick --noplot
+    - name: Run quick performance checks
+      run: just bench-quick
 
   performance-benchmarks:
     name: Performance Benchmarks

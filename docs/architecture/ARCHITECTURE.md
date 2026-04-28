@@ -142,7 +142,7 @@ Commands define consistency boundaries with explicit streams. Business rules are
 
 Read models and projections are separate from command logic. Queries read projections or read models; they must not mutate state. Command logic must not query read models to enforce invariants.
 
-During the architecture alignment initiative, existing event schemas may be replaced when that is the cleanest path. A schema is accepted as part of the aligned architecture only when it has a canonical acceptance record in `.opencode/accepted-replay/<schema-id>.yaml`. After acceptance, event evolution must be additive or use a new event variant so historical replay remains safe.
+During the architecture alignment initiative, existing event schemas may be replaced when that is the cleanest path. A schema is accepted as part of the aligned architecture only when it has a canonical acceptance record in `docs/accepted-replay/<schema-id>.yaml`. After acceptance, event evolution must be additive or use a new event variant so historical replay remains safe.
 
 ## Performance Islands
 

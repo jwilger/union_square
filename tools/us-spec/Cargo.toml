@@ -1,0 +1,9 @@
+[package]
+name = "us-spec"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "us-spec"
+path = "src/main.rs"
