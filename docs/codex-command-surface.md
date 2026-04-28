@@ -46,6 +46,17 @@ Local services:
 host port `55433` by default. Override with `POSTGRES_PORT` and
 `POSTGRES_TEST_PORT` when a local workflow needs different ports.
 
+Token-saving shell wrapper:
+
+- `rtk rewrite '<command>'`
+- `rtk <command>`
+- `rtk proxy <command>`
+
+Use RTK for high-output read-heavy commands such as `git diff`, `rg`,
+`cargo test`, and `docker compose logs`. Do not use RTK or `rtk proxy` to bypass
+project policies; hooks normalize RTK-wrapped commands before enforcing git and
+workflow guardrails.
+
 CI uses the same command surface where practical. Add new repeated commands here
 first, then call them from hooks, CI, or agent instructions. The `Justfile` is
 the executable source of truth, and `.github/workflows/ci.yml` must call these

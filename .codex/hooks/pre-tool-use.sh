@@ -23,6 +23,13 @@ if [[ -z "$command" ]]; then
   exit 1
 fi
 
+policy_command="$command"
+if [[ "$policy_command" =~ ^[[:space:]]*rtk[[:space:]]+proxy[[:space:]]+(.+) ]]; then
+  policy_command="${BASH_REMATCH[1]}"
+elif [[ "$policy_command" =~ ^[[:space:]]*rtk[[:space:]]+(.+) ]]; then
+  policy_command="${BASH_REMATCH[1]}"
+fi
+
 active_issue() {
   local newest
   newest="$(
@@ -51,22 +58,53 @@ require_valid_spec_for_active_issue() {
   fi
 }
 
-if [[ "$command" =~ git[[:space:]]+commit.*--no-verify ]]; then
+rtk_nudge() {
+  if ! command -v rtk >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ "$command" =~ ^[[:space:]]*rtk[[:space:]]+ ]]; then
+    return 0
+  fi
+
+  case "$policy_command" in
+    git\ status*|git\ diff*|git\ log*|git\ show*|git\ branch*|git\ grep*|git\ blame*|\
+ls*|tree*|find*|grep*|cargo\ test*|cargo\ nextest*|cargo\ check*|cargo\ clippy*|cargo\ build*|\
+docker\ ps*|docker\ compose\ ps*|docker\ logs*|docker\ compose\ logs*)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  rewritten="$(rtk rewrite "$command" 2>/dev/null || true)"
+  if [[ -n "$rewritten" ]] && [[ "$rewritten" != "$command" ]]; then
+    echo "Use RTK for token-optimized output: $rewritten" >&2
+    exit 2
+  fi
+}
+
+if [[ "$policy_command" =~ git[[:space:]]+commit.*--no-verify ]]; then
   echo "The --no-verify flag is forbidden. Fix hooks or ask for help." >&2
   exit 1
 fi
 
-if [[ "$command" =~ git[[:space:]]+push.*(^|[[:space:]:/])(main|master)($|[[:space:]]) ]]; then
+if [[ "$policy_command" =~ git[[:space:]]+push.*(^|[[:space:]:/])(main|master)($|[[:space:]]) ]]; then
   echo "Direct pushes to main/master are forbidden. Use a PR." >&2
   exit 1
 fi
 
-if [[ "$command" =~ git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean|git[[:space:]]+rebase ]]; then
+if [[ "$policy_command" =~ git[[:space:]]+push.*(^|[[:space:]])--force($|[[:space:]]) ]] \
+  || [[ "$policy_command" =~ git[[:space:]]+push.*(^|[[:space:]])--force-with-lease($|[[:space:]]) ]]; then
+  echo "Force pushes are forbidden. Use a normal push or surface the blocker." >&2
+  exit 1
+fi
+
+if [[ "$policy_command" =~ git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean|git[[:space:]]+rebase ]]; then
   echo "Destructive git command blocked by project policy." >&2
   exit 1
 fi
 
-if [[ "$command" =~ gh[[:space:]]+pr[[:space:]]+create|gh[[:space:]]+pr[[:space:]]+ready ]]; then
+if [[ "$policy_command" =~ gh[[:space:]]+pr[[:space:]]+create|gh[[:space:]]+pr[[:space:]]+ready ]]; then
   if ! cargo run --manifest-path tools/us-agent/Cargo.toml -- require pr_ready >/dev/null 2>&1; then
     echo "PR actions require us-agent state pr_ready." >&2
     exit 1
@@ -74,10 +112,12 @@ if [[ "$command" =~ gh[[:space:]]+pr[[:space:]]+create|gh[[:space:]]+pr[[:space:
   require_valid_spec_for_active_issue "PR actions"
 fi
 
-if [[ "$command" =~ git[[:space:]]+commit ]]; then
+if [[ "$policy_command" =~ git[[:space:]]+commit ]]; then
   if ! cargo run --manifest-path tools/us-agent/Cargo.toml -- require commit_ready >/dev/null 2>&1; then
     echo "Commits require us-agent state commit_ready." >&2
     exit 1
   fi
   require_valid_spec_for_active_issue "Commits"
 fi
+
+rtk_nudge

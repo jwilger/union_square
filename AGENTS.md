@@ -77,3 +77,11 @@ Red-green-refactor means:
 ## PR Hygiene
 
 PRs must be focused on one concern. Do not mix unrelated refactors with behavior changes. Use CodeRabbit feedback as part of the normal loop: deterministic local gates catch enforceable issues; CodeRabbit can catch qualitative review issues that are cheaper to fix after review.
+
+## RTK Token Savings
+
+Use `rtk` for high-output, read-heavy shell commands such as `git diff`, `git log`, `rg`, `find`, `cargo test`, `cargo check`, and `docker compose logs`. If the pre-tool hook rejects a raw read-heavy command with an RTK rewrite suggestion, rerun the suggested `rtk ...` command.
+
+RTK is not a policy bypass. Do not use `rtk` or `rtk proxy` to bypass git, hook, PR, or workflow guardrails. Use `rtk proxy <cmd>` only when complete unfiltered output is required for a specific diagnostic or review task.
+
+@RTK.md

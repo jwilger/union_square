@@ -137,18 +137,6 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "push", "origin", "*", "--force"],
-    decision = "forbidden",
-    justification = "Force pushes can overwrite remote work regardless of flag position.",
-    match = [
-        "git push origin feature --force",
-    ],
-    not_match = [
-        "git push origin feature",
-    ],
-)
-
-prefix_rule(
     pattern = ["git", "push", "--force-with-lease"],
     decision = "forbidden",
     justification = "Force pushes rewrite remote history. Use a normal push or ask before rewriting history.",
@@ -161,14 +149,108 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "push", "origin", "*", "--force-with-lease"],
+    pattern = ["rtk", "git", "reset", "--hard"],
     decision = "forbidden",
-    justification = "Force pushes rewrite remote history regardless of flag position.",
+    justification = "RTK must not bypass destructive git protections. Inspect `git status` and ask before any destructive reset.",
     match = [
-        "git push origin feature --force-with-lease",
+        "rtk git reset --hard",
+        "rtk git reset --hard HEAD~1",
     ],
     not_match = [
-        "git push origin feature",
+        "rtk git reset --soft HEAD~1",
+        "rtk git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", "clean"],
+    decision = "forbidden",
+    justification = "RTK must not bypass destructive git protections. Surface the cleanup need instead.",
+    match = [
+        "rtk git clean -fd",
+        "rtk git clean -xdf",
+    ],
+    not_match = [
+        "rtk git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", "rebase"],
+    decision = "forbidden",
+    justification = "RTK must not bypass history-rewriting protections. Only rebase when the user explicitly asks for that exact operation.",
+    match = [
+        "rtk git rebase main",
+        "rtk git rebase --interactive HEAD~3",
+    ],
+    not_match = [
+        "rtk git merge main",
+        "rtk git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", "commit", "--no-verify"],
+    decision = "forbidden",
+    justification = "RTK must not bypass commit hooks. Fix the hook failure or surface the blocker.",
+    match = [
+        "rtk git commit --no-verify -m test",
+    ],
+    not_match = [
+        "rtk git commit -m test",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", "push", "origin", ["main", "master"]],
+    decision = "forbidden",
+    justification = "RTK must not bypass branch protections. Push an issue branch and open a PR.",
+    match = [
+        "rtk git push origin main",
+        "rtk git push origin master",
+    ],
+    not_match = [
+        "rtk git push origin codex-issue-123",
+        "rtk git push origin HEAD:refs/heads/codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", "push", "origin", ["HEAD:refs/heads/main", "HEAD:refs/heads/master"]],
+    decision = "forbidden",
+    justification = "RTK must not bypass branch protections. Push an issue branch and open a PR.",
+    match = [
+        "rtk git push origin HEAD:refs/heads/main",
+        "rtk git push origin HEAD:refs/heads/master",
+    ],
+    not_match = [
+        "rtk git push origin HEAD:refs/heads/codex-issue-123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "proxy", "git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "RTK proxy must not bypass destructive git protections. Inspect `git status` and ask before any destructive reset.",
+    match = [
+        "rtk proxy git reset --hard",
+        "rtk proxy git reset --hard HEAD~1",
+    ],
+    not_match = [
+        "rtk proxy git reset --soft HEAD~1",
+        "rtk proxy git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "proxy", "git", "commit", "--no-verify"],
+    decision = "forbidden",
+    justification = "RTK proxy must not bypass commit hooks. Fix the hook failure or surface the blocker.",
+    match = [
+        "rtk proxy git commit --no-verify -m test",
+    ],
+    not_match = [
+        "rtk proxy git commit -m test",
     ],
 )
 
@@ -252,6 +334,37 @@ prefix_rule(
     not_match = [
         "git reset --hard",
         "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", ["ls", "tree", "find", "grep", "rg"]],
+    decision = "allow",
+    justification = "RTK-wrapped read-only inspection is preferred for high-output local context gathering.",
+    match = [
+        "rtk ls .codex",
+        "rtk rg EventCore",
+        "rtk find . -name Cargo.toml",
+    ],
+    not_match = [
+        "rtk git reset --hard",
+        "rtk git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rtk", "git", ["status", "diff", "log", "show", "branch", "grep", "blame"]],
+    decision = "allow",
+    justification = "RTK-wrapped read-only git inspection reduces token use during autonomous work.",
+    match = [
+        "rtk git status --short",
+        "rtk git diff -- AGENTS.md",
+        "rtk git log --oneline -5",
+        "rtk git show HEAD --stat",
+    ],
+    not_match = [
+        "rtk git reset --hard",
+        "rtk git push origin main",
     ],
 )
 
