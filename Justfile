@@ -54,6 +54,9 @@ test-hooks:
     .codex/hooks/test-safety.sh
     .codex/hooks/test-hooks.sh
 
+legacy-harness-check:
+    tools/check-legacy-harness.sh
+
 coverage:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
@@ -89,6 +92,6 @@ db-up:
 
 ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep fitness
 
-ci-harness: check-tools clippy-tools test-tools test-hooks fitness
+ci-harness: check-tools clippy-tools test-tools test-hooks legacy-harness-check fitness
 
 ci-full: ci-rust audit deny build build-release bench-quick
