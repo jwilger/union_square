@@ -115,12 +115,18 @@ fn validate_trace(root: &Path, trace: &str) -> Result<(), String> {
     let full_path = root.join(test_path);
 
     if !is_rust_test_path(test_path) {
-        fs::metadata(&full_path).map_err(|error| {
+        let metadata = fs::metadata(&full_path).map_err(|error| {
             format!(
                 "failed to read traced test {}: {error}",
                 full_path.display()
             )
         })?;
+        if !metadata.is_file() {
+            return Err(format!(
+                "traced target `{}` must be a file",
+                full_path.display()
+            ));
+        }
         return Ok(());
     }
 
@@ -313,6 +319,22 @@ mod tests {
         validate_trace(&root, "example:trace.bin")
             .expect("non-Rust binary trace should only require existence");
 
+        std::fs::remove_dir_all(root).expect("temp fixture directory should be removed");
+    }
+
+    #[test]
+    fn non_rust_trace_targets_must_be_files() {
+        let root = std::env::temp_dir().join(format!(
+            "us-test-adversary-directory-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(root.join("trace-directory"))
+            .expect("temp fixture directory should be created");
+
+        let error = validate_trace(&root, "example:trace-directory")
+            .expect_err("directory trace target should be rejected");
+
+        assert!(error.contains("must be a file"));
         std::fs::remove_dir_all(root).expect("temp fixture directory should be removed");
     }
 
