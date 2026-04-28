@@ -77,6 +77,11 @@ jobs:
       with:
         tool: just
 
+    - name: Install ast-grep
+      uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37
+      with:
+        tool: ast-grep
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
       with:
@@ -122,6 +127,11 @@ jobs:
       uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37
       with:
         tool: just
+
+    - name: Install ast-grep
+      uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37
+      with:
+        tool: ast-grep
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
