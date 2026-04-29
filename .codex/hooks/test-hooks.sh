@@ -1,16 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -e .codex/state || -e .codex/specs/issue-217.yaml ]]; then
-  echo "refusing to run hook smoke tests with existing issue 217 state/spec" >&2
-  exit 1
-fi
+backup_dir="$(mktemp -d)"
+had_state=0
+had_issue_217_spec=0
 
-cleanup() {
+restore_workflow_state() {
+  local exit_code=$?
+
   rm -rf .codex/state
   rm -f .codex/specs/issue-217.yaml
+
+  if [[ "$had_state" == "1" ]]; then
+    mkdir -p .codex
+    mv "$backup_dir/state" .codex/state
+  fi
+
+  if [[ "$had_issue_217_spec" == "1" ]]; then
+    mkdir -p .codex/specs
+    mv "$backup_dir/issue-217.yaml" .codex/specs/issue-217.yaml
+  fi
+
+  rm -rf "$backup_dir"
+  exit "$exit_code"
 }
-trap cleanup EXIT
+trap restore_workflow_state EXIT
+
+if [[ -e .codex/state ]]; then
+  mv .codex/state "$backup_dir/state"
+  had_state=1
+fi
+
+if [[ -e .codex/specs/issue-217.yaml ]]; then
+  mv .codex/specs/issue-217.yaml "$backup_dir/issue-217.yaml"
+  had_issue_217_spec=1
+fi
+
+mkdir -p .codex/specs
 
 cat > .codex/specs/issue-217.yaml <<'SPEC'
 issue: 217

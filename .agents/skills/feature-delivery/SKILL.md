@@ -12,4 +12,9 @@ Workflow:
 - Use `just agent` to maintain the issue ledger.
 - Write one red outside-in test at a time.
 - Run `just test-adversary ISSUE=<number>` and `just fitness` before commit readiness.
+- When running expert review agents, prefer narrow current-diff context: use
+  `fork_turns: "none"` and include the repository path, issue number, changed
+  files or `git diff` scope, and an instruction to ignore unrelated prior
+  conversation context. Avoid full-history forks for review-only tasks unless
+  the review explicitly depends on previous conversation decisions.
 - Export PR evidence with `just agent export-pr-summary <number>`.
