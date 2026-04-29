@@ -1,0 +1,47 @@
+issue: 183
+goal: Make the repository CI and hook command surface enforce architecture and workflow guardrails from shared task-runner targets.
+examples:
+  - id: shared-ci-contract
+    name: complete CI contract is exposed through just targets
+    given:
+      - contributors and GitHub Actions need the same canonical command surface
+      - architecture, dependency, and workflow-security checks are part of the documented CI contract
+    when:
+      - the complete CI command is inspected or run
+    then:
+      - the command includes formatting, clippy, type checks, tests, doctests, ast-grep, fitness, dependency audit, dependency policy, and GitHub Actions security linting
+      - GitHub Actions invokes the shared just targets for core checks instead of embedding raw cargo command sequences
+  - id: architecture-lint-validation
+    name: architecture lint rules have executable validation examples
+    given:
+      - ast-grep rules enforce architecture boundaries for production Rust code
+    when:
+      - the architecture lint validation command runs
+    then:
+      - rule tests verify forbidden production unwrap, expect, panic, and raw primitive domain state examples are rejected
+      - allowed test-only or non-domain examples remain accepted
+  - id: deterministic-hooks
+    name: hooks fail deterministically without mutating staged files
+    given:
+      - staged files may contain merge conflict markers
+      - pre-commit hooks must not rewrite staged content
+    when:
+      - lefthook runs its pre-commit checks
+    then:
+      - merge conflict markers cause a failing hook result
+      - hook commands report failures without modifying staged files
+acceptance_criteria:
+  - A shared just CI target includes Rust checks, architecture checks, dependency checks, and GitHub Actions security linting.
+  - The GitHub Actions CI workflow delegates core checks to just targets instead of duplicating cargo command sequences.
+  - Ast-grep architecture rules include executable validation examples.
+  - Lefthook merge-conflict detection fails when markers are staged and does not mutate files.
+non_goals:
+  - Refactoring existing product behavior.
+  - Fixing every historical architecture lint violation outside the targeted CI baseline.
+  - Adding architecture rules not already documented by the architecture source of truth or guardrails.
+architecture_impacts:
+  - Reinforces the documented architecture guardrails as executable CI and hook checks.
+test_trace_ids:
+  - shared-ci-contract:tests/ci_contract.rs::complete_ci_contract_includes_actions_security_linting
+  - architecture-lint-validation:tools/ast-grep/rule-tests/no-raw-primitive-domain-state-test.yml
+  - deterministic-hooks:tools/check-merge-conflict-markers.sh

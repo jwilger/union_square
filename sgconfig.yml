@@ -1,7 +1,7 @@
 ruleDirs:
   - tools/ast-grep/rules
 testConfigs:
-  - testDir: tools/ast-grep/rules/rule-tests
+  - testDir: tools/ast-grep/rule-tests
 ignores:
   - "**/*_tests.rs"
   - "**/*_test.rs"

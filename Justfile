@@ -64,18 +64,27 @@ audit:
     cargo audit
 
 deny:
-    cargo deny check
+    cargo deny check advisories bans licenses sources
+
+actions-security:
+    actionlint
+    zizmor --min-severity high .
+
+ci-security: audit deny actions-security
 
 ast-grep:
     files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)" \
-      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/)' || true)" \
+      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/|tools/ast-grep/rule-tests/)' || true)" \
       && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
 
 ast-grep-branch:
     base_ref="${US_AST_GREP_BASE_REF:-${US_FITNESS_BASE_REF:-origin/main}}" \
       && if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then files="$(git diff --name-only --diff-filter=ACMR "$base_ref"...HEAD)"; else files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)"; fi \
-      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/)' || true)" \
+      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/|tools/ast-grep/rule-tests/)' || true)" \
       && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
+
+ast-grep-test:
+    ast-grep test --skip-snapshot-tests
 
 bench-quick:
     cargo test --test benchmark_validation
@@ -96,8 +105,10 @@ agent *ARGS:
 db-up:
     docker compose up -d postgres postgres-test
 
-ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep-branch fitness
+ci-rust: fmt-check clippy clippy-tools check check-tools test-tools test-hooks test test-doc ast-grep-branch ast-grep-test fitness
 
-ci-harness: check-tools clippy-tools test-tools test-hooks legacy-harness-check ast-grep-branch fitness
+ci-harness: check-tools clippy-tools test-tools test-hooks legacy-harness-check ast-grep-branch ast-grep-test fitness
 
-ci-full: ci-rust audit deny build build-release bench-quick
+ci-full: ci-rust ci-security build build-release bench-quick
+
+ci: ci-full

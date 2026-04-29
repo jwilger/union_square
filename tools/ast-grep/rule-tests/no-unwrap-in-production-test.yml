@@ -1,0 +1,17 @@
+id: no-unwrap-in-production
+language: rust
+valid:
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn allows_unwrap_in_tests() {
+            let value = Some(42);
+            assert_eq!(value.unwrap(), 42);
+        }
+    }
+invalid:
+  - |
+    fn process(value: Option<i32>) -> i32 {
+        value.unwrap()
+    }

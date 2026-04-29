@@ -1,0 +1,21 @@
+id: no-raw-primitive-domain-state
+language: rust
+valid:
+  - |
+    struct SessionName(String);
+
+    struct SessionState {
+        name: SessionName,
+    }
+  - |
+    #[cfg(test)]
+    mod tests {
+        struct TestFixture {
+            name: String,
+        }
+    }
+invalid:
+  - |
+    struct SessionState {
+        name: String,
+    }

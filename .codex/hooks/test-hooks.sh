@@ -2,6 +2,7 @@
 set -euo pipefail
 
 backup_dir="$(mktemp -d)"
+repo_root="$(pwd)"
 had_state=0
 had_issue_217_spec=0
 
@@ -84,6 +85,30 @@ do
 done
 
 printf '%s' '{"tool_input":{"command":"gh pr create --fill"}}' | .codex/hooks/pre-tool-use.sh >/dev/null
+
+conflict_repo="$backup_dir/conflict-repo"
+mkdir "$conflict_repo"
+git -C "$conflict_repo" init -q
+git -C "$conflict_repo" config user.email codex@example.invalid
+git -C "$conflict_repo" config user.name Codex
+{
+  printf '%s\n' '<<<<<<< HEAD'
+  printf '%s\n' 'left'
+  printf '%s\n' '======='
+  printf '%s\n' 'right'
+  printf '%s\n' '>>>>>>> branch'
+} > "$conflict_repo/conflict.txt"
+git -C "$conflict_repo" add conflict.txt
+staged_conflict_blob_before="$(git -C "$conflict_repo" rev-parse :conflict.txt)"
+if (cd "$conflict_repo" && "$repo_root/tools/check-merge-conflict-markers.sh") 2>/dev/null; then
+  echo "expected merge conflict marker check to fail on staged markers" >&2
+  exit 1
+fi
+staged_conflict_blob_after="$(git -C "$conflict_repo" rev-parse :conflict.txt)"
+if [[ "$staged_conflict_blob_before" != "$staged_conflict_blob_after" ]]; then
+  echo "expected merge conflict marker check to leave the staged blob unchanged" >&2
+  exit 1
+fi
 
 rm -f .codex/specs/issue-217.yaml
 if printf '%s' '{"tool_input":{"command":"git commit -m test"}}' | .codex/hooks/pre-tool-use.sh 2>/dev/null; then
