@@ -42,6 +42,12 @@ jobs:
           deps:
             - 'Cargo.toml'
             - 'Cargo.lock'
+            - 'deny.toml'
+            - 'Justfile'
+            - '.github/dependabot.yml'
+            - '.github/zizmor.yml'
+            - '.github/workflows/**'
+            - 'tools/ast-grep/**'
             - '.github/workflows/ci.yml'
           harness:
             - 'AGENTS.md'
@@ -142,28 +148,10 @@ jobs:
     - name: Install cargo-nextest
       run: cargo install cargo-nextest --locked
 
-    - name: Check formatting
-      run: just fmt-check
-
-    - name: Run clippy
-      run: just clippy
-
-    - name: Run tests with nextest
-      run: just test
+    - name: Run Rust CI contract
+      run: just ci-rust
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
-
-    - name: Run doctests
-      run: just test-doc
-      env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
-
-    - name: Type check
-      run: just check
-
-    - name: Architecture fitness
-      run: just fitness
-      env:
         US_FITNESS_BASE_REF: origin/${{ github.base_ref || 'main' }}
 
   security:
@@ -190,8 +178,25 @@ jobs:
     - name: Install cargo-audit
       run: cargo install cargo-audit --locked
 
-    - name: Run security audit
-      run: just audit
+    - name: Install cargo-deny
+      run: cargo install cargo-deny --version 0.19.4 --locked
+
+    - name: Install actionlint
+      env:
+        ACTIONLINT_VERSION: 1.7.7
+      run: |
+        curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+        curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+        grep " actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz$" \
+          "actionlint_${ACTIONLINT_VERSION}_checksums.txt" | sha256sum -c -
+        tar -xzf "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+        sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+    - name: Install zizmor
+      run: pipx install 'zizmor==1.24.1'
+
+    - name: Run shared security checks
+      run: just ci-security
 
   coverage:
     name: Code Coverage
@@ -369,9 +374,11 @@ jobs:
 
     - name: Get baseline benchmark results
       if: github.event_name == 'pull_request'
+      env:
+        BASE_REF: ${{ github.base_ref }}
       run: |
-        git fetch origin ${{ github.base_ref }}
-        git checkout origin/${{ github.base_ref }}
+        git fetch origin "$BASE_REF"
+        git checkout "origin/$BASE_REF"
         cargo bench --bench proxy_performance -- --save-baseline base --sample-size 50
         git checkout -
 
@@ -399,10 +406,10 @@ jobs:
 
         if [ "$REGRESSION_FOUND" = true ]; then
           echo "Performance regression detected!"
-          echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+          echo "REGRESSION_DETECTED=true" >> "$GITHUB_OUTPUT"
         else
           echo "No significant regression detected"
-          echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+          echo "REGRESSION_DETECTED=false" >> "$GITHUB_OUTPUT"
         fi
 
         echo '```' > benchmark_report.md
