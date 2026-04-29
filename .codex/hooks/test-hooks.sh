@@ -100,8 +100,14 @@ git -C "$conflict_repo" config user.name Codex
 } > "$conflict_repo/conflict.txt"
 git -C "$conflict_repo" add conflict.txt
 staged_conflict_blob_before="$(git -C "$conflict_repo" rev-parse :conflict.txt)"
-if (cd "$conflict_repo" && "$repo_root/tools/check-merge-conflict-markers.sh") 2>/dev/null; then
+conflict_output="$(
+  cd "$conflict_repo" && "$repo_root/tools/check-merge-conflict-markers.sh" 2>&1
+)" && {
   echo "expected merge conflict marker check to fail on staged markers" >&2
+  exit 1
+}
+if ! grep -qi "merge conflict" <<<"$conflict_output"; then
+  echo "expected merge conflict marker check to report the failure" >&2
   exit 1
 fi
 staged_conflict_blob_after="$(git -C "$conflict_repo" rev-parse :conflict.txt)"

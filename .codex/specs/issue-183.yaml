@@ -33,6 +33,8 @@ examples:
 acceptance_criteria:
   - A shared just CI target includes Rust checks, architecture checks, dependency checks, and GitHub Actions security linting.
   - The GitHub Actions CI workflow delegates core checks to just targets instead of duplicating cargo command sequences.
+  - Third-party GitHub Actions are pinned to immutable SHAs, with documented exceptions only for GitHub-owned actions.
+  - Clippy guardrails explicitly deny unwrap, expect, panic, todo, unimplemented, unreachable, and debug-printing macros.
   - Ast-grep architecture rules include executable validation examples.
   - Lefthook merge-conflict detection fails when markers are staged and does not mutate files.
 non_goals:
