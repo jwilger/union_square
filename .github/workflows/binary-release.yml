@@ -134,7 +134,7 @@ jobs:
       - name: Generate checksums file
         run: |
           cd artifacts
-          cat *.sha256 > checksums.txt
+          cat ./*.sha256 > checksums.txt
           echo "Checksums:"
           cat checksums.txt
 
