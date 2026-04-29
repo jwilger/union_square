@@ -22,8 +22,8 @@ perf = { level = "deny", priority = -1 }
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
 # We explicitly enable all cargo lints EXCEPT multiple_crate_versions.
-# eventcore 0.7 → rand → getrandom pulls both wasip2 → wit-bindgen 0.57
-# and wasip3 → wit-bindgen 0.51 on their respective WASI preview targets.
+# eventcore 0.8.0 and test dependencies pull both wasip2 → wit-bindgen 0.57
+# and wasip3 → wit-bindgen 0.51 through getrandom on their WASI preview targets.
 # Neither actually links on x86_64-linux, but cargo still counts them for
 # the lint. Union Square binaries are native, not WASM.
 cargo_common_metadata = { level = "deny", priority = 0 }
