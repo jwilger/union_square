@@ -294,6 +294,11 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "tag_name input is required for workflow_dispatch"
+            exit 1
+          fi
+
           echo "Downloading release ${RELEASE_TAG}"
 
           # Download Linux x86_64 binary

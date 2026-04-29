@@ -179,15 +179,15 @@ jobs:
       run: cargo install cargo-audit --locked
 
     - name: Install cargo-deny
-      run: cargo install cargo-deny --locked
+      run: cargo install cargo-deny --version 0.19.4 --locked
 
     - name: Install actionlint
       uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37
       with:
-        tool: actionlint
+        tool: actionlint@1.7.7
 
     - name: Install zizmor
-      run: pipx install zizmor
+      run: pipx install 'zizmor==1.24.1'
 
     - name: Run shared security checks
       run: just ci-security

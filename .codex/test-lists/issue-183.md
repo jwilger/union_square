@@ -5,4 +5,5 @@
 - `just test-hooks`
 - `just test-adversary ISSUE=183`
 - `just fitness`
+- `just ci-security`
 - `just ci-rust`

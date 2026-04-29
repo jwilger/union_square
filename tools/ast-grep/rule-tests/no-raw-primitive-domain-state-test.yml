@@ -19,3 +19,8 @@ invalid:
     struct SessionState {
         name: String,
     }
+  - |
+    struct SessionState {
+        id: SessionId,
+        name: String,
+    }

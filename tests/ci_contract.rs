@@ -1,12 +1,13 @@
 use std::fs;
 
 #[test]
-fn complete_ci_contract_includes_actions_security_linting() {
-    let justfile = fs::read_to_string("Justfile").expect("Justfile should be readable");
-    let ci_workflow =
-        fs::read_to_string(".github/workflows/ci.yml").expect("CI workflow should be readable");
+fn complete_ci_contract_includes_actions_security_linting() -> Result<(), String> {
+    let justfile = fs::read_to_string("Justfile")
+        .map_err(|error| format!("Justfile should be readable: {error}"))?;
+    let ci_workflow = fs::read_to_string(".github/workflows/ci.yml")
+        .map_err(|error| format!("CI workflow should be readable: {error}"))?;
 
-    let ci_full = just_target_dependencies(&justfile, "ci-full");
+    let ci_full = just_target_dependencies(&justfile, "ci-full")?;
     for expected_target in [
         "ci-rust",
         "ci-security",
@@ -20,7 +21,7 @@ fn complete_ci_contract_includes_actions_security_linting() {
         );
     }
 
-    let ci_rust = just_target_dependencies(&justfile, "ci-rust");
+    let ci_rust = just_target_dependencies(&justfile, "ci-rust")?;
     for expected_target in [
         "fmt-check",
         "clippy",
@@ -41,7 +42,7 @@ fn complete_ci_contract_includes_actions_security_linting() {
         );
     }
 
-    let ci_security = just_target_dependencies(&justfile, "ci-security");
+    let ci_security = just_target_dependencies(&justfile, "ci-security")?;
     for expected_target in ["audit", "deny", "actions-security"] {
         assert!(
             ci_security.contains(&expected_target),
@@ -58,20 +59,28 @@ fn complete_ci_contract_includes_actions_security_linting() {
         "CI security job should invoke the shared ci-security target"
     );
     assert!(
+        ci_workflow.contains("run: just ci-rust"),
+        "CI test job should invoke the shared ci-rust target"
+    );
+    assert!(
         !ci_workflow.contains("run: just audit"),
         "CI security job should not call audit directly and skip the rest of the shared security contract"
     );
+
+    Ok(())
 }
 
-fn just_target_dependencies<'a>(justfile: &'a str, target: &str) -> Vec<&'a str> {
+fn just_target_dependencies<'a>(justfile: &'a str, target: &str) -> Result<Vec<&'a str>, String> {
     let prefix = format!("{target}:");
-    justfile
+    let target_line = justfile
         .lines()
         .find(|line| line.starts_with(&prefix))
-        .unwrap_or_else(|| panic!("Justfile should define {target}"))
+        .ok_or_else(|| format!("Justfile should define {target}"))?;
+
+    Ok(target_line
         .split_once(':')
-        .expect("target line should contain a colon")
+        .ok_or_else(|| format!("{target} line should contain a colon"))?
         .1
         .split_whitespace()
-        .collect()
+        .collect())
 }

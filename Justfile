@@ -74,13 +74,13 @@ ci-security: audit deny actions-security
 
 ast-grep:
     files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)" \
-      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/|tools/ast-grep/rule-tests/)' || true)" \
+      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rule-tests/)' || true)" \
       && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
 
 ast-grep-branch:
     base_ref="${US_AST_GREP_BASE_REF:-${US_FITNESS_BASE_REF:-origin/main}}" \
       && if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then files="$(git diff --name-only --diff-filter=ACMR "$base_ref"...HEAD)"; else files="$(git diff --name-only --diff-filter=ACMR; git diff --cached --name-only --diff-filter=ACMR)"; fi \
-      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rules/rule-tests/|tools/ast-grep/rule-tests/)' || true)" \
+      && files="$(printf '%s\n' "$files" | sort -u | grep -E '\.rs$' | grep -Ev '^(tests/|benches/|tools/ast-grep/rule-tests/)' || true)" \
       && if [ -n "$files" ]; then ast-grep scan $files; else echo "ast-grep skipped: no changed Rust source files"; fi
 
 ast-grep-test:

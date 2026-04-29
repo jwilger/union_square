@@ -6,15 +6,20 @@ files:
   - src/domain/**/*.rs
 rule:
   all:
-    - pattern: |
-        struct $NAME {
-          $FIELD: $TYPE,
-        }
+    - kind: field_declaration
+    - has:
+        field: type
+        any:
+          - kind: type_identifier
+            regex: "^String$"
+          - kind: primitive_type
+            regex: "^i32$|^i64$|^f32$|^f64$|^u32$|^u64$|^bool$"
+    - inside:
+        kind: field_declaration_list
+        inside:
+          kind: struct_item
     - not:
         inside:
           stopBy: end
           kind: mod_item
           regex: "mod (test.*|benchmarks|.*_test.*)"
-constraints:
-  TYPE:
-    regex: "^String$|^i32$|^i64$|^f32$|^f64$|^u32$|^u64$|^bool$"
