@@ -1,0 +1,59 @@
+issue: 188
+goal: Provide a reusable step-trampoline model for non-hot-path application orchestration without routing performance-sensitive proxy paths through it.
+examples:
+  - id: successful-session-analysis
+    name: session analysis workflow completes through interpreted effects
+    given:
+      - a session analysis workflow has semantic session and analysis identifiers
+      - the workflow interpreter can load session facts, record the analysis request, and emit telemetry
+    when:
+      - the trampoline runs the workflow
+    then:
+      - each requested effect is interpreted in order
+      - the workflow completes with an analysis-started result
+  - id: interpreter-failure
+    name: interpreter failures stop the trampoline
+    given:
+      - a session analysis workflow has already requested an effect
+      - the interpreter cannot complete that effect
+    when:
+      - the trampoline receives the interpreter failure
+    then:
+      - the trampoline returns an interpreter error
+      - no later workflow effects are interpreted
+  - id: substitute-interpreter
+    name: workflow can run with a substitute interpreter
+    given:
+      - the same session analysis workflow
+      - a different interpreter implementation that returns compatible observations
+    when:
+      - the trampoline runs the workflow with the substitute interpreter
+    then:
+      - the workflow completes without changing workflow code
+      - the substitute interpreter observes the same semantic effects
+  - id: event-count-boundary
+    name: session analysis event count rejects zero
+    given:
+      - session analysis reports a semantic count of loaded session events
+    when:
+      - the event count is constructed from zero
+    then:
+      - validation rejects the count before it enters workflow effects
+acceptance_criteria:
+  - A minimal reusable effect, step, and trampoline abstraction exists under the application layer.
+  - A representative non-hot-path session analysis workflow is expressed as pure steps and interpreted by a shell-provided interpreter.
+  - Tests cover successful execution, interpreter failure propagation, and interpreter substitution.
+  - Documentation explains default exclusion of hot-path forwarding, streaming loops, and ring-buffer internals.
+  - Existing proxy hot-path and ring-buffer code is not routed through the new trampoline.
+non_goals:
+  - Refactor the full audit persistence path.
+  - Add the trampoline to ring-buffer writes or streaming body loops.
+  - Replace Tokio, Axum, or EventCore.
+architecture_impacts:
+  - Adds an application-layer orchestration primitive that keeps effects as data and IO in interpreters.
+  - Documents when to use the trampoline and when performance islands should remain direct imperative code.
+test_trace_ids:
+  - successful-session-analysis:tests/application_trampoline.rs::session_analysis_workflow_completes_through_interpreted_effects
+  - interpreter-failure:tests/application_trampoline.rs::interpreter_failure_stops_the_trampoline
+  - substitute-interpreter:tests/application_trampoline.rs::session_analysis_workflow_runs_with_substitute_interpreter
+  - event-count-boundary:tests/application_trampoline.rs::session_event_count_enforces_positive_boundary
