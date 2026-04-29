@@ -1,0 +1,29 @@
+issue: 228
+goal: Consolidate dependency update PRs into one verified maintenance change.
+examples:
+  - id: consolidated-dependency-refresh
+    name: dependency manifests resolve together after refresh
+    given:
+      - open Dependabot PRs propose dependency updates across supported package ecosystems
+      - the repository has Cargo, npm, and GitHub Actions dependency surfaces
+    when:
+      - dependencies are refreshed in a single maintenance branch
+    then:
+      - dependency manifests and lockfiles agree with the refreshed versions
+      - workflow action references are updated where newer compatible versions are available
+      - standard local validation passes for the refreshed dependency set
+acceptance_criteria:
+  - Cargo manifests and lockfiles are updated together.
+  - npm manifests and lockfiles are updated together.
+  - GitHub Actions workflow versions are updated where applicable.
+  - just ci-rust passes after the dependency refresh.
+non_goals:
+  - Adding new product behavior.
+  - Refactoring application code unrelated to dependency compatibility.
+  - Changing release process or Dependabot scheduling.
+architecture_impacts:
+  - none
+test_trace_ids:
+  - consolidated-dependency-refresh:Cargo.lock
+  - consolidated-dependency-refresh:package-lock.json
+  - consolidated-dependency-refresh:.github/workflows/ci.yml
