@@ -1,0 +1,17 @@
+id: no-expect-in-production
+language: rust
+valid:
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn allows_expect_in_tests() {
+            let value = Some(42);
+            assert_eq!(value.expect("value"), 42);
+        }
+    }
+invalid:
+  - |
+    fn process(value: Option<i32>) -> i32 {
+        value.expect("value should exist")
+    }

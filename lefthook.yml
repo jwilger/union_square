@@ -33,7 +33,7 @@ pre-commit:
         fi
 
     check-merge-conflict:
-      run: git diff --cached --name-only | xargs grep -l "<<<<<<< HEAD" || true
+      run: tools/check-merge-conflict-markers.sh
 
 commit-msg:
   commands:

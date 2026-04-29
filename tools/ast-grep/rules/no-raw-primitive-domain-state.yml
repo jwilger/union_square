@@ -2,11 +2,24 @@ id: no-raw-primitive-domain-state
 language: rust
 severity: warning
 message: "Avoid using raw primitives for domain state. Consider newtypes with nutype."
+files:
+  - src/domain/**/*.rs
 rule:
-  pattern: |
-    struct $NAME {
-      $FIELD: $TYPE,
-    }
-constraints:
-  TYPE:
-    regex: "^String$|^i32$|^i64$|^f32$|^f64$|^u32$|^u64$|^bool$"
+  all:
+    - kind: field_declaration
+    - has:
+        field: type
+        any:
+          - kind: type_identifier
+            regex: "^String$"
+          - kind: primitive_type
+            regex: "^(i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64|bool|char)$"
+    - inside:
+        kind: field_declaration_list
+        inside:
+          kind: struct_item
+    - not:
+        inside:
+          stopBy: end
+          kind: mod_item
+          regex: "mod (test.*|benchmarks|.*_test.*)"

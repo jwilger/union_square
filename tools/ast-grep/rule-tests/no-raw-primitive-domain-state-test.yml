@@ -1,0 +1,38 @@
+id: no-raw-primitive-domain-state
+language: rust
+valid:
+  - |
+    struct SessionName(String);
+
+    struct SessionState {
+        name: SessionName,
+    }
+  - |
+    #[cfg(test)]
+    mod tests {
+        struct TestFixture {
+            name: String,
+        }
+    }
+invalid:
+  - |
+    struct SessionState {
+        name: String,
+    }
+  - |
+    struct SessionState {
+        id: SessionId,
+        name: String,
+    }
+  - |
+    struct SessionState {
+        signed_byte: i8,
+        signed_short: i16,
+        signed_large: i128,
+        signed_size: isize,
+        unsigned_byte: u8,
+        unsigned_short: u16,
+        unsigned_large: u128,
+        unsigned_size: usize,
+        marker: char,
+    }

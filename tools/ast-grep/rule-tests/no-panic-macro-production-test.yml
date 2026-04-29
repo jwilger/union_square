@@ -1,0 +1,19 @@
+id: no-panic-macro-production
+language: rust
+valid:
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        #[should_panic]
+        fn allows_panic_in_tests() {
+            panic!("expected panic in test");
+        }
+    }
+invalid:
+  - |
+    fn process(value: i32) {
+        if value < 0 {
+            panic!("value must be positive");
+        }
+    }
