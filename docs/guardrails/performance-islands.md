@@ -36,11 +36,13 @@ and accidental blocking work while avoiding flakes from shared CI hardware. Loca
 benchmark thresholds are tighter relative checks because Criterion results are
 more useful when compared on the same hardware and under similar load.
 
-The 5ms proxy budget is the user-visible latency guard. The ring-buffer write
-path remains a documented performance island and should stay comfortably
-sub-microsecond in local benchmarks. Any future refactor that routes hot-path or
-ring-buffer behavior through new abstractions must update the relevant baseline
-evidence before it is accepted.
+The 5ms proxy budget refers to the maximum critical-path latency enforced by CI
+deterministic validation (`benchmark_validation`: average <1ms, max <5ms) and
+serves as the user-visible latency guard. The ring-buffer write path remains a
+documented performance island and should stay comfortably sub-microsecond in
+local benchmarks. Any future refactor that routes hot-path or ring-buffer
+behavior through new abstractions must update the relevant baseline evidence
+before it is accepted.
 
 ## Requirements
 
