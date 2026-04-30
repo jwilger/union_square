@@ -1,0 +1,53 @@
+issue: 182
+goal: Establish deterministic performance baselines and regression gates for ring-buffer, proxy hot-path, and audit handoff behavior before architecture refactoring changes performance-sensitive code.
+examples:
+  - id: performance-surface-inventory
+    name: existing performance checks are inventoried against required hot paths
+    given:
+      - ring-buffer internals and proxy forwarding are documented performance islands
+      - existing benchmark and validation tests cover some performance-sensitive paths
+    when:
+      - contributors inspect the baseline documentation
+    then:
+      - the documentation identifies the CI validation tests and local benchmarks that cover ring-buffer write latency, read throughput, overflow behavior, hot-path forwarding overhead, and audit handoff cost
+      - any required scenario without reliable executable coverage is called out with the intended validation path
+  - id: ci-performance-validation
+    name: deterministic performance validation is available through the canonical command surface
+    given:
+      - CI performance gates must avoid frequent flakes
+      - the repository uses just as the canonical command surface
+    when:
+      - the CI-appropriate performance validation command runs on the current implementation
+    then:
+      - it executes deterministic validation for critical ring-buffer and proxy hot-path behavior
+      - it avoids relying on noisy wall-clock benchmark comparisons as the only correctness signal
+      - it passes on the current implementation
+  - id: local-benchmark-baseline
+    name: heavier local benchmarks have documented commands, baselines, and thresholds
+    given:
+      - deeper benchmark analysis is useful outside normal CI
+      - future architecture refactors need explicit regression thresholds
+    when:
+      - contributors inspect the benchmark documentation
+    then:
+      - local benchmark commands are documented separately from CI validation commands
+      - baseline numbers and acceptable regression thresholds are recorded for ring-buffer write latency, throughput, overflow behavior, hot-path proxy overhead, and representative audit handoff cost
+      - the thresholds explain why they are suitable for guarding later architecture work
+acceptance_criteria:
+  - Existing benchmark and performance validation tests are inventoried for ring buffer, hot path, and audit handoff coverage.
+  - A CI-appropriate performance validation command exists on the shared just command surface and is documented.
+  - A heavier local benchmark command exists on the shared just command surface or is otherwise documented with exact commands.
+  - Version-controlled documentation records baseline values and acceptable regression thresholds for ring-buffer write latency, read throughput, overflow behavior, hot-path proxy overhead, and representative audit handoff cost.
+  - The performance validation tests pass on the current implementation before architecture refactors proceed.
+non_goals:
+  - Refactoring hot-path implementation.
+  - Replacing or redesigning the ring buffer.
+  - Adding observability dashboards.
+  - Making persisted event schema or EventCore persistence changes.
+architecture_impacts:
+  - Strengthens the documented performance-island evidence required by the current architecture.
+  - Preserves the functional-core alignment initiative's performance guardrails before later refactors touch hot-path or ring-buffer code.
+test_trace_ids:
+  - performance-surface-inventory:docs/performance/baselines.md
+  - ci-performance-validation:tests/benchmark_validation.rs
+  - local-benchmark-baseline:benches/README.md

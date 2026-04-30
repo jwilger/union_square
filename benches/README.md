@@ -14,6 +14,12 @@ cargo bench --bench proxy_performance
 # Quick mode for development
 cargo bench --bench proxy_performance -- --quick
 
+# CI-appropriate validation and quick benchmark run
+just bench-quick
+
+# Heavier local benchmark suite
+just bench-local
+
 # Run memory profiling
 cargo bench --bench memory_profiling
 
@@ -25,6 +31,10 @@ cargo test --test load_testing test_500_rps_sustained_load --release -- --nocapt
 ```
 
 ## Benchmark Results Summary
+
+The version-controlled baseline contract is maintained in
+`docs/performance/baselines.md`. Update that document when changing hot-path,
+ring-buffer, streaming, or audit handoff performance behavior.
 
 **✅ ALL LATENCY REQUIREMENTS MET** - Based on comprehensive benchmarks:
 

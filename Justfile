@@ -90,6 +90,11 @@ bench-quick:
     cargo test --test benchmark_validation
     cargo bench --bench proxy_performance -- --quick --noplot
 
+bench-local:
+    cargo bench --bench proxy_performance -- --noplot
+    cargo bench --bench memory_profiling
+    cargo test --test load_testing --release -- --nocapture --test-threads=1
+
 spec ISSUE:
     issue="{{ISSUE}}"; issue="${issue#ISSUE=}"; cargo run --manifest-path tools/us-spec/Cargo.toml -- check --issue "$issue"
 

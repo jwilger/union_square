@@ -17,6 +17,7 @@ Core checks:
 - `just build`
 - `just build-release`
 - `just bench-quick`
+- `just bench-local`
 
 Harness checks:
 
