@@ -168,6 +168,9 @@ Allowed example: a ring-buffer module may use atomics, preallocated storage, and
 
 Forbidden example: a domain command must not accept `serde_json::Value`, raw request bytes, URI strings, or header tuples because parsing those values is adapter work, not domain work.
 
+Detailed performance-island guardrails, regression-threshold rationale, and
+documented exception constraints live in `docs/guardrails/performance-islands.md`.
+
 ## Data Flow
 
 ```text
