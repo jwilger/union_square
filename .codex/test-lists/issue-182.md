@@ -4,6 +4,7 @@
 - `cargo test --test benchmark_validation`
 - `cargo bench --bench proxy_performance -- --quick --noplot`
 - `just bench-quick`
+- `just bench-local`
 - `just test-adversary ISSUE=182`
 - `just fitness`
 - `just ci-rust`

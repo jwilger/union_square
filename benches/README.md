@@ -23,11 +23,10 @@ just bench-local
 # Run memory profiling
 cargo bench --bench memory_profiling
 
-# Run load tests (requires release build for accurate results)
-cargo test --test load_testing --release -- --nocapture --test-threads=1
-
-# Run specific load test
-cargo test --test load_testing test_500_rps_sustained_load --release -- --nocapture
+# Run ignored load tests without the database-pool test
+cargo test --test load_testing --release test_500_rps_sustained_load -- --ignored --nocapture --test-threads=1
+cargo test --test load_testing --release test_2000_rps_burst_load -- --ignored --nocapture --test-threads=1
+cargo test --test load_testing --release test_1000_concurrent_users -- --ignored --nocapture --test-threads=1
 ```
 
 ## Benchmark Results Summary
@@ -91,9 +90,9 @@ Per architect guidance, Union Square must handle:
 3. Consider using dedicated load testing services (e.g., k6 Cloud, BlazeMeter)
 4. Document baseline performance metrics from representative hardware
 
-Run load tests locally with:
+Run the resource-heavy load tests locally with:
 ```bash
-cargo test --test load_testing --release -- --nocapture --test-threads=1
+just bench-local
 ```
 
 ### 🔍 Memory Profiling
