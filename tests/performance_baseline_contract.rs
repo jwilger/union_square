@@ -19,13 +19,15 @@ fn performance_baseline_contract_documents_commands_thresholds_and_coverage() ->
     assert!(
         bench_local.contains("cargo bench --bench proxy_performance -- --noplot")
             && bench_local.contains("cargo bench --bench memory_profiling")
-            && bench_local.contains("cargo test --test load_testing --release")
-            && bench_local.contains("test_500_rps_sustained_load")
-            && bench_local.contains("test_2000_rps_burst_load")
-            && bench_local.contains("test_1000_concurrent_users")
-            && bench_local.contains("--ignored")
-            && bench_local.contains("--nocapture")
-            && bench_local.contains("--test-threads=1"),
+            && bench_local.contains(
+                "cargo test --test load_testing --release test_500_rps_sustained_load -- --ignored --nocapture --test-threads=1",
+            )
+            && bench_local.contains(
+                "cargo test --test load_testing --release test_2000_rps_burst_load -- --ignored --nocapture --test-threads=1",
+            )
+            && bench_local.contains(
+                "cargo test --test load_testing --release test_1000_concurrent_users -- --ignored --nocapture --test-threads=1",
+            ),
         "bench-local should run full proxy benchmark, memory profiling, and ignored release-mode load tests"
     );
 

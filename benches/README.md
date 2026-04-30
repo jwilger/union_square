@@ -91,6 +91,7 @@ Per architect guidance, Union Square must handle:
 4. Document baseline performance metrics from representative hardware
 
 Run the resource-heavy load tests locally with:
+
 ```bash
 just bench-local
 ```
