@@ -50,16 +50,6 @@ audit handoff behavior.
 | Hot-path proxy overhead | `tests/benchmark_validation.rs::test_critical_path_performance` | `benches/proxy_performance.rs::hot_path_simulation` and `complete_proxy_flow_simulation` | 717.68ns median for complete hot-path simulation, 740.03ns for hot-path latency distribution, and 1.7269us for simulated complete proxy request in the `just bench-quick` run for issue #182 | CI must stay below the 5ms hot-path budget; local Criterion median should not regress by more than 2x without documented architecture approval |
 | Representative audit handoff cost | `tests/benchmark_validation.rs::test_allocation_performance` | `benches/proxy_performance.rs::audit_event_serialization` and `memory_allocation` | request serialization 541.90ns median, response serialization 501.95ns median, and audit event allocation 1.0235us median in the `just bench-quick` run for issue #182 | Per-event deterministic validation must stay below 1ms; local Criterion median should not regress by more than 2x without documenting the added semantic work |
 
-## Threshold Rationale
-
-The CI validation thresholds are intentionally broad. They catch severe
-regressions and accidental blocking work while avoiding flakes from shared CI
-hardware. The local benchmark thresholds are tighter relative checks because
-Criterion results are more useful when compared on the same hardware and under
-similar load.
-
-The 5ms proxy budget is the user-visible latency guard. The ring-buffer write
-path remains a documented performance island and should stay comfortably
-sub-microsecond in local benchmarks. Any future refactor that routes hot-path or
-ring-buffer behavior through new abstractions must update this document with
-fresh baseline evidence before it is accepted.
+Threshold rationale and architectural rules for accepting performance-island
+changes live in `docs/guardrails/performance-islands.md`. This file records the
+issue #182 baseline evidence and command surface.

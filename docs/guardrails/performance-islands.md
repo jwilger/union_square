@@ -29,6 +29,19 @@ Constraints:
 - The public API (`write`, `read`, `stats`, `overflow_count`) is narrow: `write` accepts a semantic `RequestId` and borrows payload bytes (`&[u8]`) which it copies into pre-allocated slot storage; `read` returns `Option<(RequestId, Vec<u8>)>`; counters are primitive types.
 - Clock calls (e.g., `chrono::Utc::now()`) MUST be captured outside `unsafe` blocks to avoid hidden side effects inside the performance-critical path.
 
+## Regression Threshold Rationale
+
+CI validation thresholds are intentionally broad. They catch severe regressions
+and accidental blocking work while avoiding flakes from shared CI hardware. Local
+benchmark thresholds are tighter relative checks because Criterion results are
+more useful when compared on the same hardware and under similar load.
+
+The 5ms proxy budget is the user-visible latency guard. The ring-buffer write
+path remains a documented performance island and should stay comfortably
+sub-microsecond in local benchmarks. Any future refactor that routes hot-path or
+ring-buffer behavior through new abstractions must update the relevant baseline
+evidence before it is accepted.
+
 ## Requirements
 
 Performance islands MUST:
