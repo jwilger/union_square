@@ -47,6 +47,10 @@ Workflow commands:
 - `just agent ready-to-commit <number>`
 - `just agent ready-to-pr <number>`
 
+After `ready-to-pr`, publish normal ready-for-review PRs by default. Draft PRs
+are reserved for explicit user requests or documented blockers that prevent
+review readiness.
+
 Local services:
 
 - `just db-up`

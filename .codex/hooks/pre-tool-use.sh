@@ -125,6 +125,11 @@ if [[ "$policy_command" =~ gh[[:space:]]+pr[[:space:]]+create|gh[[:space:]]+pr[[
     exit 1
   fi
   require_valid_spec_for_active_issue "PR actions"
+  if [[ "$policy_command" =~ gh[[:space:]]+pr[[:space:]]+create ]] \
+    && [[ "$policy_command" =~ (^|[[:space:]])--draft($|[[:space:]]) ]]; then
+    echo "Draft PR creation is blocked after pr_ready. Open a ready-for-review PR by default, or surface the blocker before publishing." >&2
+    exit 1
+  fi
 fi
 
 if [[ "$policy_command" =~ git[[:space:]]+commit ]]; then

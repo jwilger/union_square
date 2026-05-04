@@ -18,7 +18,7 @@ Pull requests must be focused, atomic, and contain only changes related to a sin
 If a change is naturally large (e.g., introducing a new major feature):
 - Break it into stacked PRs
 - Each PR should be reviewable independently
-- Use draft PRs for intermediate steps
+- Use draft PRs only when the user explicitly requests a draft or a documented blocker prevents review readiness. Once the issue ledger reaches `pr_ready`, publish ready-for-review PRs by default.
 
 ## Commit Messages Within PRs
 

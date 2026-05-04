@@ -1,0 +1,35 @@
+issue: 233
+goal: PR publishing defaults to ready-for-review pull requests after the agent workflow reaches PR readiness.
+examples:
+  - id: rejects-draft-pr-after-pr-ready
+    name: draft PR creation is rejected after workflow PR readiness
+    given:
+      - an active issue ledger has reached pr_ready
+      - the behavior spec for that issue is valid
+    when:
+      - the agent attempts to create a draft pull request
+    then:
+      - the pre-tool hook rejects the command
+      - the rejection explains that PRs should be ready for review by default
+  - id: allows-ready-pr-after-pr-ready
+    name: ready PR creation is allowed after workflow PR readiness
+    given:
+      - an active issue ledger has reached pr_ready
+      - the behavior spec for that issue is valid
+    when:
+      - the agent attempts to create a pull request without draft flags
+    then:
+      - the pre-tool hook allows the command
+acceptance_criteria:
+  - Agent-facing PR publishing instructions say not to use draft PRs by default.
+  - Repo-local PR creation command, checklist, or skill guidance prefers ready-for-review PRs.
+  - A deterministic guard flags draft PR creation when the active issue ledger is already pr_ready.
+  - Workflow docs explain when a draft PR is acceptable.
+non_goals:
+  - Changing GitHub merge permissions.
+  - Blocking explicit draft PRs before the workflow reaches pr_ready.
+architecture_impacts:
+  - none
+test_trace_ids:
+  - rejects-draft-pr-after-pr-ready:.codex/hooks/test-hooks.sh
+  - allows-ready-pr-after-pr-ready:.codex/hooks/test-hooks.sh

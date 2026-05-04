@@ -31,7 +31,7 @@ This file is the primary Codex instruction file for Union Square.
 15. Run relevant expert review agents and record it with `just agent record-review <number>`.
 16. Run `just ci-rust`, then `just agent ready-to-commit <number>`.
 17. Commit with Conventional Commits. Do not bypass hooks.
-18. Push the branch, open or update the PR after `just agent ready-to-pr <number>`, and address CodeRabbit feedback normally.
+18. Push the branch, open or update a ready-for-review PR after `just agent ready-to-pr <number>`, and address CodeRabbit feedback normally.
 
 ## Architecture Source Of Truth
 
@@ -77,6 +77,11 @@ Red-green-refactor means:
 ## PR Hygiene
 
 PRs must be focused on one concern. Do not mix unrelated refactors with behavior changes. Use CodeRabbit feedback as part of the normal loop: deterministic local gates catch enforceable issues; CodeRabbit can catch qualitative review issues that are cheaper to fix after review.
+
+After `just agent ready-to-pr <number>`, open normal ready-for-review PRs by
+default. Use a draft PR only when the user explicitly asks for a draft or when a
+documented blocker prevents review readiness; in that case, surface the blocker
+before publishing.
 
 ## Local Cleanup
 
