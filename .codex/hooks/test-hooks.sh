@@ -87,6 +87,7 @@ done
 printf '%s' '{"tool_input":{"command":"gh pr create --fill"}}' | .codex/hooks/pre-tool-use.sh >/dev/null
 
 for draft_pr_command in \
+  "gh pr create --draft" \
   "gh pr create --draft --fill" \
   "gh pr create --fill --draft"
 do
