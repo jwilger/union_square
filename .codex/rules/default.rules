@@ -280,7 +280,20 @@ prefix_rule(
     ],
     not_match = [
         "gh pr view 210",
+        "gh pr create --fill",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create", "--draft"],
+    decision = "forbidden",
+    justification = "After the issue ledger reaches pr_ready, publish a ready-for-review PR by default. Surface a blocker instead of opening a draft.",
+    match = [
         "gh pr create --draft",
+        "gh pr create --draft --fill",
+    ],
+    not_match = [
+        "gh pr create --fill",
     ],
 )
 
@@ -397,10 +410,10 @@ prefix_rule(
 prefix_rule(
     pattern = ["gh", "pr", ["view", "list", "status", "create", "edit", "comment", "ready", "diff", "checkout"]],
     decision = "allow",
-    justification = "PR inspection and draft/update operations are needed for autonomous delivery; merging remains forbidden.",
+    justification = "PR inspection and ready-for-review create/update operations are needed for autonomous delivery; merging remains forbidden.",
     match = [
         "gh pr view 210",
-        "gh pr create --draft --fill",
+        "gh pr create --fill",
         "gh pr edit 210 --body-file /tmp/body.md",
         "gh pr checkout 210",
     ],
