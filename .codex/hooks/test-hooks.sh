@@ -86,17 +86,22 @@ done
 
 printf '%s' '{"tool_input":{"command":"gh pr create --fill"}}' | .codex/hooks/pre-tool-use.sh >/dev/null
 
-draft_pr_output="$(
-  printf '%s' '{"tool_input":{"command":"gh pr create --draft --fill"}}' \
-    | .codex/hooks/pre-tool-use.sh 2>&1
-)" && {
-  echo "expected PR hook to reject draft PR creation after pr_ready" >&2
-  exit 1
-}
-if ! grep -qi "ready-for-review" <<<"$draft_pr_output"; then
-  echo "expected draft PR rejection to explain ready-for-review default" >&2
-  exit 1
-fi
+for draft_pr_command in \
+  "gh pr create --draft --fill" \
+  "gh pr create --fill --draft"
+do
+  draft_pr_output="$(
+    printf '{"tool_input":{"command":"%s"}}' "$draft_pr_command" \
+      | .codex/hooks/pre-tool-use.sh 2>&1
+  )" && {
+    echo "expected PR hook to reject draft PR creation after pr_ready: $draft_pr_command" >&2
+    exit 1
+  }
+  if ! grep -qi "ready-for-review" <<<"$draft_pr_output"; then
+    echo "expected draft PR rejection to explain ready-for-review default: $draft_pr_command" >&2
+    exit 1
+  fi
+done
 
 conflict_repo="$backup_dir/conflict-repo"
 mkdir "$conflict_repo"

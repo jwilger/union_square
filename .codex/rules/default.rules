@@ -285,19 +285,6 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["gh", "pr", "create", "--draft"],
-    decision = "forbidden",
-    justification = "After the issue ledger reaches pr_ready, publish a ready-for-review PR by default. Surface a blocker instead of opening a draft.",
-    match = [
-        "gh pr create --draft",
-        "gh pr create --draft --fill",
-    ],
-    not_match = [
-        "gh pr create --fill",
-    ],
-)
-
-prefix_rule(
     pattern = ["rm", "-rf", "/"],
     decision = "forbidden",
     justification = "Refuse broad filesystem deletion.",
@@ -421,6 +408,9 @@ prefix_rule(
         "gh pr merge 210",
     ],
 )
+
+# Draft PR creation is enforced in `.codex/hooks/pre-tool-use.sh`, where the
+# `--draft` flag can be detected in any argument order after `gh pr create`.
 
 prefix_rule(
     pattern = ["just"],
