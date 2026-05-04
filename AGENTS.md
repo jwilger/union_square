@@ -78,6 +78,14 @@ Red-green-refactor means:
 
 PRs must be focused on one concern. Do not mix unrelated refactors with behavior changes. Use CodeRabbit feedback as part of the normal loop: deterministic local gates catch enforceable issues; CodeRabbit can catch qualitative review issues that are cheaper to fix after review.
 
+## Local Cleanup
+
+PRs are squash-merged into `main`. After a PR is merged, `git branch -d` may
+refuse to delete the local PR branch because the original branch commits are not
+ancestors of `main`. Before using `git branch -D` for cleanup, verify the branch
+content is already represented on current `main`, for example with
+`git diff main..branch-name` and relevant PR metadata.
+
 ## RTK Token Savings
 
 Use `rtk` for high-output, read-heavy shell commands such as `git diff`, `git log`, `rg`, `find`, `cargo test`, `cargo check`, and `docker compose logs`. If the pre-tool hook rejects a raw read-heavy command with an RTK rewrite suggestion, rerun the suggested `rtk ...` command.
