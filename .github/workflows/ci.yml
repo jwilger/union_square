@@ -67,7 +67,10 @@ jobs:
   codex-harness:
     name: Codex Harness
     needs: changes
-    if: needs.changes.outputs.harness == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.harness == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -104,7 +107,10 @@ jobs:
   test:
     name: Test Suite
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.rust == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
 
     services:
@@ -159,7 +165,10 @@ jobs:
   security:
     name: Security Audit
     needs: changes
-    if: needs.changes.outputs.deps == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.deps == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -203,6 +212,12 @@ jobs:
   coverage:
     name: Code Coverage
     needs: changes
+    # Unlike the other pure-validation jobs in this workflow, coverage is kept
+    # on push:main (in addition to pull_request/merge_group) because it
+    # uploads results to Codecov, an external service that tracks main's
+    # coverage history against the actual main branch ref/commit -- that is
+    # necessarily post-merge work, not something merge_group's ephemeral
+    # merge-queue ref can substitute for.
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
@@ -255,7 +270,10 @@ jobs:
   build:
     name: Build
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.rust == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -282,7 +300,10 @@ jobs:
   cross-platform:
     name: Cross-platform Build
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.rust == 'true' && github.event_name != 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -309,7 +330,10 @@ jobs:
   performance-check:
     name: Performance Validation
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    # merge_group already re-validates the exact commit that lands on main via
+    # the merge queue, so re-running this pure-validation check on the
+    # resulting push to main would be redundant runner time.
+    if: needs.changes.outputs.rust == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
