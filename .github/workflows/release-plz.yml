@@ -12,7 +12,7 @@ on:
 jobs:
   release-plz:
     name: Release-plz
-    uses: slipstream-code-new/gha-workflows/.github/workflows/rust-release-plz.yml@main
+    uses: slipstream-eng/gha-workflows/.github/workflows/rust-release-plz.yml@main
     with:
       runs-on: self-hosted-gregor
     secrets:
