@@ -245,20 +245,6 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
-    - name: Load Codecov token
-      id: load_secrets
-      uses: 1password/load-secrets-action@v4
-      env:
-        OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-        CODECOV_TOKEN: op://Github Secrets/CODECOV_TOKEN/credential
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
-      with:
-        file: lcov.info
-        token: ${{ steps.load_secrets.outputs.CODECOV_TOKEN }}
-        fail_ci_if_error: false
-
   build:
     name: Build
     needs: changes
