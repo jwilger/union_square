@@ -12,9 +12,8 @@ on:
 jobs:
   release-plz:
     name: Release-plz
-    uses: slipstream-eng/gha-workflows/.github/workflows/rust-release-plz.yml@main
+    uses: jwilger/gha-workflows/.github/workflows/rust-release-plz.yml@main
     with:
       runs-on: self-hosted-gregor
     secrets:
-      cargo-registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      release-signing-key: ${{ secrets.RELEASE_SIGNING_KEY }}
+      op-service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
