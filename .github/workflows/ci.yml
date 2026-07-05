@@ -245,13 +245,6 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/union_square
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
-      with:
-        file: lcov.info
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
-
   build:
     name: Build
     needs: changes

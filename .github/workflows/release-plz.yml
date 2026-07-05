@@ -14,7 +14,6 @@ jobs:
     name: Release-plz
     uses: jwilger/gha-workflows/.github/workflows/rust-release-plz.yml@4f29cb994188c20786a9fda85ebabd113c910d89
     with:
-      runs-on: self-hosted-gregor
+      runs-on: ubuntu-latest
     secrets:
-      cargo-registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      release-signing-key: ${{ secrets.RELEASE_SIGNING_KEY }}
+      op-service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
